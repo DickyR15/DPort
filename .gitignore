@@ -1,0 +1,8 @@
+.venv/
+build/
+dist/
+__pycache__/
+*.pyc
+moenv_api_key.txt
+*.update-backup
+version_info.generated.txt
