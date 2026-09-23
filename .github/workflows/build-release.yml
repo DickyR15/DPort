@@ -129,7 +129,7 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -r requirements-build.txt
           python -m pip install lzfse==0.4.2
-          $pm3 = python -c "from pymobiledevice3 import __version__; print(__version__)"
+          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
           if ($pm3 -ne '11.17.2') { throw "Expected pymobiledevice3 11.17.2, got $pm3" }
 
       - name: Validate source
