@@ -1,0 +1,2 @@
+# Put the real MOENV API key in the GitHub Actions secret MOENV_API_KEY.
+# Do not commit the real key to this public repository.
