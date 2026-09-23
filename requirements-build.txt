@@ -1,0 +1,11 @@
+pymobiledevice3==11.17.2
+flask
+requests
+pyuac
+psutil
+pycountry
+pyinstaller
+inquirer3
+readchar
+pyimg4
+pytun-pmd3
