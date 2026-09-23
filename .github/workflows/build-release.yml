@@ -199,14 +199,30 @@ jobs:
             dist/DPort-${{ steps.version.outputs.version }}.exe
             dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
 
-      - name: Create GitHub Release
-        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: DPort v${{ steps.version.outputs.version }}
-          generate_release_notes: true
-          make_latest: true
-          files: |
-            dist/DPort-${{ steps.version.outputs.version }}.exe
-            dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/main' || github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $tag = "v$v"
+          $exe = "dist/DPort-$v.exe"
+          $sha = "dist/DPort-$v.exe.sha256"
+
+          if (-not (Test-Path $exe)) { throw "Missing release asset: $exe" }
+          if (-not (Test-Path $sha)) { throw "Missing checksum: $sha" }
+
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag exists; replacing assets."
+            gh release upload $tag $exe $sha --repo "${{ github.repository }}" --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upload assets to $tag" }
+            gh release edit $tag --repo "${{ github.repository }}" --title "DPort v$v" --latest
+          } else {
+            Write-Host "Creating release $tag."
+            gh release create $tag $exe $sha --repo "${{ github.repository }}" --title "DPort v$v" --latest --generate-notes --target "${{ github.sha }}"
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag" }
+          }
+
+          Write-Host "Published DPort v$v to GitHub Releases."
