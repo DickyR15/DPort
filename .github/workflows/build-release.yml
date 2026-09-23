@@ -1,0 +1,174 @@
+name: DPort Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'DPort version, for example 6.9.0'
+        required: true
+        default: '6.9.0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dport-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'push' -and '${{ github.ref_type }}' -eq 'tag') {
+            $v = '${{ github.ref_name }}'.TrimStart('v')
+          } elseif ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $v = '${{ inputs.version }}'
+          } else {
+            $raw = Get-Content src/dport_version.py -Raw
+            if ($raw -match 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') {
+              $v = $Matches[1]
+            } else {
+              throw 'Cannot resolve DPort version from src/dport_version.py'
+            }
+          }
+
+          if ($v -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Invalid DPort version: $v"
+          }
+
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Set-Content src/dport_version.py ('DPORT_VERSION="{0}"' -f $v) -Encoding utf8
+
+          $vi = @"
+# UTF-8
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=($($v -replace '\.',','),0),
+    prodvers=($($v -replace '\.',','),0),
+    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)
+  ),
+  kids=[StringFileInfo([StringTable('040404B0',[
+    StringStruct('CompanyName','Dicky'),
+    StringStruct('FileDescription','DPort'),
+    StringStruct('FileVersion','$v'),
+    StringStruct('InternalName','DPort-$v'),
+    StringStruct('LegalCopyright','Dicky'),
+    StringStruct('OriginalFilename','DPort-$v.exe'),
+    StringStruct('ProductName','DPort'),
+    StringStruct('ProductVersion','$v'),
+    StringStruct('Comments','Dicky')])]),
+    VarFileInfo([VarStruct('Translation',[0x0404,1200])])]
+)
+"@
+          $vi | Set-Content version_info.generated.txt -Encoding utf8
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+          cache: pip
+
+      - name: Prepare MOENV API key
+        shell: pwsh
+        env:
+          MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:MOENV_API_KEY)) {
+            throw 'Missing GitHub Actions secret MOENV_API_KEY. Add it under Settings → Secrets and variables → Actions.'
+          }
+          [IO.File]::WriteAllText(
+            (Join-Path $PWD 'moenv_api_key.txt'),
+            $env:MOENV_API_KEY.Trim(),
+            (New-Object Text.UTF8Encoding($false))
+          )
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements-build.txt
+          python -m pip install lzfse==0.4.2
+          $pm3 = python -c "from pymobiledevice3 import __version__; print(__version__)"
+          if ($pm3 -ne '11.17.2') { throw "Expected pymobiledevice3 11.17.2, got $pm3" }
+
+      - name: Validate source
+        shell: pwsh
+        run: |
+          python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
+
+      - name: Build embedded updater
+        shell: pwsh
+        run: |
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          python -m PyInstaller --noconfirm --clean --onefile --name DPortUpdater --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
+          New-Item -ItemType Directory -Force -Path build/updater | Out-Null
+          Copy-Item dist/DPortUpdater.exe build/updater/DPortUpdater.exe -Force
+
+      - name: Build DPort EXE
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          python -m PyInstaller --noconfirm --clean --onefile `
+            --name "DPort-$v" `
+            --icon "DPort-6.9.0.ico" `
+            --collect-all pymobiledevice3 `
+            --collect-all pytun_pmd3 `
+            --collect-all pyimg4 `
+            --collect-all inquirer3 `
+            --copy-metadata pymobiledevice3 `
+            --copy-metadata pyimg4 `
+            --copy-metadata readchar `
+            --hidden-import pymobiledevice3.remote.userspace_tunnel `
+            --hidden-import pymobiledevice3.services.dvt.instruments.dvt_provider `
+            --hidden-import pymobiledevice3.services.dvt.instruments.location_simulation `
+            --hidden-import pymobiledevice3.usbmux `
+            --hidden-import dport_release_updater `
+            --hidden-import dport_version `
+            --add-data "src/templates;templates" `
+            --add-data "moenv_api_key.txt;." `
+            --add-binary "build/updater/DPortUpdater.exe;dport_updater" `
+            --version-file version_info.generated.txt `
+            src/main.py
+
+      - name: Generate SHA-256
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $exe = "dist/DPort-$v.exe"
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          $hash | Set-Content "dist/DPort-$v.exe.sha256" -Encoding ascii
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-${{ steps.version.outputs.version }}-windows
+          path: |
+            dist/DPort-${{ steps.version.outputs.version }}.exe
+            dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: DPort v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          make_latest: true
+          files: |
+            dist/DPort-${{ steps.version.outputs.version }}.exe
+            dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
