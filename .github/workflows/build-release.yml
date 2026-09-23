@@ -34,21 +34,37 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing.' }
-          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath . -Force
+          $tmp = Join-Path $env:RUNNER_TEMP 'dport-source'
+          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
+
+          $copy = @('DPort-6.9.0.ico','requirements-build.txt','build_final_live.bat','python_runtime.txt','DPort_CHANGELOG.txt','version_info.txt')
+          foreach ($item in $copy) {
+            Copy-Item -LiteralPath (Join-Path $tmp $item) -Destination . -Force
+          }
+          if (Test-Path (Join-Path $tmp 'src')) {
+            Copy-Item -Path (Join-Path $tmp 'src') -Destination . -Recurse -Force
+          }
           if (-not (Test-Path 'src/main.py')) { throw 'Source restore failed: src/main.py is missing.' }
 
       - name: Resolve version
         id: version
         shell: pwsh
         run: |
-          if ('${{ github.event_name }}' -eq 'push') {
+          if ('${{ github.ref_type }}' -eq 'tag') {
             $v = '${{ github.ref_name }}'.TrimStart('v')
           } else {
             $v = '${{ inputs.version }}'
+            if ([string]::IsNullOrWhiteSpace($v)) {
+              $raw = Get-Content src/dport_version.py -Raw
+              if ($raw -match 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') { $v = $Matches[1] }
+            }
           }
           if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid DPort version: $v" }
           "version=$v" >> $env:GITHUB_OUTPUT
           Set-Content src/dport_version.py ('DPORT_VERSION="{0}"' -f $v) -Encoding utf8
+
           $parts = $v.Split('.') | ForEach-Object { [int]$_ }
           $vi = @"
 # UTF-8
