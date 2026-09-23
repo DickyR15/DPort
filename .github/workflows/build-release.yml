@@ -2,13 +2,12 @@ name: DPort Build & Release
 
 on:
   push:
-    branches: [main]
     tags:
       - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'DPort version, for example 6.9.0'
+        description: 'DPort version (manual build, e.g. 6.9.0)'
         required: true
         default: '6.9.0'
 
@@ -29,36 +28,32 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Restore DPort source
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing.' }
+          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath . -Force
+          if (-not (Test-Path 'src/main.py')) { throw 'Source restore failed: src/main.py is missing.' }
+
       - name: Resolve version
         id: version
         shell: pwsh
         run: |
-          if ('${{ github.event_name }}' -eq 'push' -and '${{ github.ref_type }}' -eq 'tag') {
+          if ('${{ github.event_name }}' -eq 'push') {
             $v = '${{ github.ref_name }}'.TrimStart('v')
-          } elseif ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            $v = '${{ inputs.version }}'
           } else {
-            $raw = Get-Content src/dport_version.py -Raw
-            if ($raw -match 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') {
-              $v = $Matches[1]
-            } else {
-              throw 'Cannot resolve DPort version from src/dport_version.py'
-            }
+            $v = '${{ inputs.version }}'
           }
-
-          if ($v -notmatch '^\d+\.\d+\.\d+$') {
-            throw "Invalid DPort version: $v"
-          }
-
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid DPort version: $v" }
           "version=$v" >> $env:GITHUB_OUTPUT
           Set-Content src/dport_version.py ('DPORT_VERSION="{0}"' -f $v) -Encoding utf8
-
+          $parts = $v.Split('.') | ForEach-Object { [int]$_ }
           $vi = @"
 # UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=($($v -replace '\.',','),0),
-    prodvers=($($v -replace '\.',','),0),
+    filevers=($($parts[0]),$($parts[1]),$($parts[2]),0),
+    prodvers=($($parts[0]),$($parts[1]),$($parts[2]),0),
     mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)
   ),
   kids=[StringFileInfo([StringTable('040404B0',[
@@ -87,16 +82,10 @@ VSVersionInfo(
         env:
           MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:MOENV_API_KEY)) {
-            throw 'Missing GitHub Actions secret MOENV_API_KEY. Add it under Settings → Secrets and variables → Actions.'
-          }
-          [IO.File]::WriteAllText(
-            (Join-Path $PWD 'moenv_api_key.txt'),
-            $env:MOENV_API_KEY.Trim(),
-            (New-Object Text.UTF8Encoding($false))
-          )
+          if ([string]::IsNullOrWhiteSpace($env:MOENV_API_KEY)) { throw 'Missing GitHub Actions secret MOENV_API_KEY.' }
+          [IO.File]::WriteAllText((Join-Path $PWD 'moenv_api_key.txt'), $env:MOENV_API_KEY.Trim(), (New-Object Text.UTF8Encoding($false)))
 
-      - name: Install dependencies
+      - name: Install build dependencies
         shell: pwsh
         run: |
           python -m pip install --upgrade pip setuptools wheel
@@ -115,43 +104,54 @@ VSVersionInfo(
         run: |
           if (Test-Path dist) { Remove-Item dist -Recurse -Force }
           if (Test-Path build) { Remove-Item build -Recurse -Force }
-          python -m PyInstaller --noconfirm --clean --onefile --name DPortUpdater --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
+          $args = @('--noconfirm','--clean','--onefile','--name','DPortUpdater','--collect-all','certifi','--hidden-import','importlib.metadata','src/dport_updater_helper.py')
+          python -m PyInstaller @args
           New-Item -ItemType Directory -Force -Path build/updater | Out-Null
           Copy-Item dist/DPortUpdater.exe build/updater/DPortUpdater.exe -Force
 
-      - name: Build DPort EXE
+      - name: Build DPort
         shell: pwsh
         run: |
           $v = '${{ steps.version.outputs.version }}'
-          python -m PyInstaller --noconfirm --clean --onefile `
-            --name "DPort-$v" `
-            --icon "DPort-6.9.0.ico" `
-            --collect-all pymobiledevice3 `
-            --collect-all pytun_pmd3 `
-            --collect-all pyimg4 `
-            --collect-all inquirer3 `
-            --copy-metadata pymobiledevice3 `
-            --copy-metadata pyimg4 `
-            --copy-metadata readchar `
-            --hidden-import pymobiledevice3.remote.userspace_tunnel `
-            --hidden-import pymobiledevice3.services.dvt.instruments.dvt_provider `
-            --hidden-import pymobiledevice3.services.dvt.instruments.location_simulation `
-            --hidden-import pymobiledevice3.usbmux `
-            --hidden-import dport_release_updater `
-            --hidden-import dport_version `
-            --add-data "src/templates;templates" `
-            --add-data "moenv_api_key.txt;." `
-            --add-binary "build/updater/DPortUpdater.exe;dport_updater" `
-            --version-file version_info.generated.txt `
-            src/main.py
+          $pyargs = @(
+            '--noconfirm','--clean','--onefile',
+            '--name',("DPort-$v"),
+            '--icon','DPort-6.9.0.ico',
+            '--collect-all','pymobiledevice3',
+            '--collect-all','pytun_pmd3',
+            '--collect-all','pyimg4',
+            '--collect-all','inquirer3',
+            '--copy-metadata','pymobiledevice3',
+            '--copy-metadata','pyimg4',
+            '--copy-metadata','readchar',
+            '--hidden-import','pymobiledevice3.remote.userspace_tunnel',
+            '--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider',
+            '--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation',
+            '--hidden-import','pymobiledevice3.usbmux',
+            '--hidden-import','dport_release_updater',
+            '--hidden-import','dport_version',
+            '--add-data','src/templates;templates',
+            '--add-data','moenv_api_key.txt;.',
+            '--add-binary','build/updater/DPortUpdater.exe;dport_updater',
+            '--version-file','version_info.generated.txt',
+            'src/main.py'
+          )
+          python -m PyInstaller @pyargs
+
+      - name: Verify built EXE
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $exe = "dist/DPort-$v.exe"
+          if (-not (Test-Path $exe)) { throw "Build output missing: $exe" }
+          if ((Get-Item $exe).Length -lt 1000000) { throw 'Build output is unexpectedly small.' }
 
       - name: Generate SHA-256
         shell: pwsh
         run: |
           $v = '${{ steps.version.outputs.version }}'
           $exe = "dist/DPort-$v.exe"
-          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
-          $hash | Set-Content "dist/DPort-$v.exe.sha256" -Encoding ascii
+          (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() | Set-Content "dist/DPort-$v.exe.sha256" -Encoding ascii
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
