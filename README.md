@@ -21,18 +21,4 @@ DPort 6.9.0 — iPhone 定位與 GPX 模擬工具。
 
 一般使用者只需要 DPort EXE，不需要 Python、pip 或 PyInstaller。
 
-## MOENV API Key
-
-不要把真正的 API Key 提交到公開 Repository。
-
-請在 GitHub Repository：
-
-Settings → Secrets and variables → Actions → New repository secret
-
-建立：
-
-`MOENV_API_KEY`
-
-GitHub Actions 會在建置時把它暫時寫入 `moenv_api_key.txt` 並打包進 EXE。
-
 Wi-Fi 功能目前不在這個主版基底中。
