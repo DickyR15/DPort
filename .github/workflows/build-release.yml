@@ -48,17 +48,26 @@ jobs:
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
           Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
 
+          $sourceRoot = Join-Path $tmp 'DPort-6.9.0'
+          if (-not (Test-Path $sourceRoot)) {
+            throw "Unexpected source ZIP layout. Expected $sourceRoot"
+          }
+
           $copy = @('DPort-6.9.0.ico','requirements-build.txt','build_final_live.bat','python_runtime.txt','DPort_CHANGELOG.txt','version_info.txt')
           foreach ($item in $copy) {
-            $p = Join-Path $tmp $item
+            $p = Join-Path $sourceRoot $item
             if (Test-Path $p) { Copy-Item -LiteralPath $p -Destination . -Force }
           }
-          if (Test-Path (Join-Path $tmp 'src')) {
-            Copy-Item -Path (Join-Path $tmp 'src') -Destination . -Recurse -Force
+
+          if (Test-Path (Join-Path $sourceRoot 'src')) {
+            if (Test-Path 'src') { Remove-Item 'src' -Recurse -Force }
+            New-Item -ItemType Directory -Force -Path 'src' | Out-Null
+            Copy-Item -Path (Join-Path $sourceRoot 'src*') -Destination 'src' -Recurse -Force
           }
+
           if (-not (Test-Path 'src/main.py')) {
             Write-Host 'Restored source tree:'
-            Get-ChildItem -Recurse -Depth 3 $tmp | Select-Object FullName
+            Get-ChildItem -Recurse -Depth 3 $sourceRoot | Select-Object FullName
             throw 'Source restore failed: src/main.py is missing.'
           }
       - name: Resolve version
