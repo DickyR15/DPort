@@ -1,0 +1,243 @@
+name: DPort pymobiledevice3 Auto Update
+
+on:
+  schedule:
+    - cron: '17 16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dport-pm3-auto-update
+  cancel-in-progress: false
+
+jobs:
+  check-test-bump:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Check PyPI for newer stable pymobiledevice3
+        id: check
+        shell: pwsh
+        run: |
+          @'
+          import json
+          import os
+          import re
+          import urllib.request
+          import zipfile
+          from pathlib import Path
+          from packaging.version import Version
+
+          zip_path = Path('DPort-source-6.9.0.zip')
+          if not zip_path.exists():
+              raise SystemExit('DPort-source-6.9.0.zip not found')
+
+          current = None
+          with zipfile.ZipFile(zip_path) as z:
+              for name in z.namelist():
+                  if name.endswith('/requirements-build.txt') or name == 'requirements-build.txt':
+                      text = z.read(name).decode('utf-8', 'replace')
+                      m = re.search(r'(?mi)^\s*pymobiledevice3\s*==\s*([^\s#]+)', text)
+                      if m:
+                          current = m.group(1)
+                          break
+
+          if not current:
+              raise SystemExit('Could not read current pymobiledevice3 pin')
+
+          with urllib.request.urlopen('https://pypi.org/pypi/pymobiledevice3/json', timeout=30) as response:
+              latest = json.load(response)['info']['version']
+
+          update = Version(latest) > Version(current)
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write(f'current={current}\n')
+              out.write(f'latest={latest}\n')
+              out.write(f'update={"true" if update else "false"}\n')
+
+          print(f'Current: {current}')
+          print(f'Latest:  {latest}')
+          print(f'Update:  {update}')
+          '@ | Set-Content check_pm3.py -Encoding utf8
+          python check_pm3.py
+
+      - name: No update required
+        if: steps.check.outputs.update != 'true'
+        shell: pwsh
+        run: Write-Host 'No newer pymobiledevice3 release is available.'
+
+      - name: Prepare candidate source
+        if: steps.check.outputs.update == 'true'
+        shell: pwsh
+        run: |
+          $candidate = '${{ steps.check.outputs.latest }}'
+          $work = Join-Path $env:RUNNER_TEMP 'dport-pm3-candidate'
+          if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $work -Force
+
+          $root = Join-Path $work 'DPort-6.9.0'
+          if (-not (Test-Path (Join-Path $root 'src\main.py'))) { throw 'Candidate source is missing src\main.py' }
+
+          $req = Join-Path $root 'requirements-build.txt'
+          $text = Get-Content $req -Raw
+          $text = [regex]::Replace($text, '(?m)^\s*pymobiledevice3\s*==\s*[^\r\n#]+', "pymobiledevice3==$candidate")
+          [IO.File]::WriteAllText($req, $text, (New-Object Text.UTF8Encoding($false)))
+          "DPORT_CANDIDATE_ROOT=$root" >> $env:GITHUB_ENV
+
+      - name: Install candidate dependencies
+        if: steps.check.outputs.update == 'true'
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r "$env:DPORT_CANDIDATE_ROOT\requirements-build.txt"
+          python -m pip install lzfse==0.4.2
+          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
+          if ($pm3 -ne '${{ steps.check.outputs.latest }}') { throw "Expected pymobiledevice3 ${{ steps.check.outputs.latest }}, got $pm3" }
+
+      - name: Validate candidate source
+        if: steps.check.outputs.update == 'true'
+        shell: pwsh
+        run: |
+          Push-Location $env:DPORT_CANDIDATE_ROOT
+          try {
+            python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
+          } finally {
+            Pop-Location
+          }
+
+      - name: Build candidate EXE
+        if: steps.check.outputs.update == 'true'
+        shell: pwsh
+        run: |
+          $root = $env:DPORT_CANDIDATE_ROOT
+          Push-Location $root
+          try {
+            if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+            if (Test-Path build) { Remove-Item build -Recurse -Force }
+            [IO.File]::WriteAllText((Join-Path $root 'moenv_api_key.txt'), 'AUTO_BUILD_TEST_KEY', (New-Object Text.UTF8Encoding($false)))
+
+            $vtext = Get-Content (Join-Path $root 'src\dport_version.py') -Raw
+            if ($vtext -notmatch 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') { throw 'DPORT_VERSION not found in candidate source' }
+            $v = $Matches[1]
+            $p = $v.Split('.') | ForEach-Object { [int]$_ }
+
+            $vi = @(
+              '# UTF-8',
+              'VSVersionInfo(',
+              '  ffi=FixedFileInfo(',
+              "    filevers=($($p[0]),$($p[1]),$($p[2]),0),",
+              "    prodvers=($($p[0]),$($p[1]),$($p[2]),0),",
+              '    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)',
+              '  ),',
+              "  kids=[StringFileInfo([StringTable('040404B0',[",
+              "    StringStruct('CompanyName','Dicky'),",
+              "    StringStruct('FileDescription','DPort'),",
+              "    StringStruct('FileVersion','$v'),",
+              "    StringStruct('InternalName','DPort-$v'),",
+              "    StringStruct('LegalCopyright','Dicky'),",
+              "    StringStruct('OriginalFilename','DPort-$v.exe'),",
+              "    StringStruct('ProductName','DPort'),",
+              "    StringStruct('ProductVersion','$v'),",
+              "    StringStruct('Comments','Dicky')])]),",
+              '    VarFileInfo([VarStruct(''Translation'',[0x0404,1200])])]',
+              ')'
+            ) -join [Environment]::NewLine
+            $vi | Set-Content version_info.auto-test.txt -Encoding utf8
+
+            python -m PyInstaller --noconfirm --clean --onefile --name DPortUpdater --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
+            New-Item -ItemType Directory -Force -Path build\updater | Out-Null
+            Copy-Item dist\DPortUpdater.exe build\updater\DPortUpdater.exe -Force
+
+            $pyargs = @(
+              '--noconfirm','--clean','--onefile',
+              '--name',("DPort-$v"),
+              '--icon',(Join-Path $root 'DPort-6.9.0.ico'),
+              '--collect-all','pymobiledevice3',
+              '--collect-all','pytun_pmd3',
+              '--collect-all','pyimg4',
+              '--collect-all','inquirer3',
+              '--copy-metadata','pymobiledevice3',
+              '--copy-metadata','pyimg4',
+              '--copy-metadata','readchar',
+              '--hidden-import','pymobiledevice3.remote.userspace_tunnel',
+              '--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider',
+              '--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation',
+              '--hidden-import','pymobiledevice3.usbmux',
+              '--hidden-import','dport_release_updater',
+              '--hidden-import','dport_version',
+              '--add-data','src/templates;templates',
+              '--add-data','moenv_api_key.txt;.',
+              '--add-binary',((Join-Path $root 'build\updater\DPortUpdater.exe') + ';dport_updater'),
+              '--version-file',(Join-Path $root 'version_info.auto-test.txt'),
+              'src/main.py'
+            )
+            python -m PyInstaller @pyargs
+
+            $exe = Join-Path $root ("dist\DPort-$v.exe")
+            if (-not (Test-Path $exe)) { throw "Candidate EXE missing: $exe" }
+            if ((Get-Item $exe).Length -lt 1000000) { throw 'Candidate EXE is unexpectedly small.' }
+            Write-Host "Compatibility build succeeded with pymobiledevice3 ${{ steps.check.outputs.latest }}"
+          } finally {
+            Pop-Location
+          }
+
+      - name: Calculate next DPort patch version
+        if: steps.check.outputs.update == 'true'
+        id: bump
+        shell: pwsh
+        run: |
+          @'
+          import os
+          import re
+          import zipfile
+          with zipfile.ZipFile('DPort-source-6.9.0.zip') as z:
+              data = z.read('DPort-6.9.0/src/dport_version.py').decode('utf-8', 'replace')
+          m = re.search(r'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']', data)
+          if not m: raise SystemExit('DPORT_VERSION not found')
+          parts = m.group(1).split('.')
+          if len(parts) != 3 or not all(x.isdigit() for x in parts): raise SystemExit('Invalid DPort version')
+          parts[2] = str(int(parts[2]) + 1)
+          v = '.'.join(parts)
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out: out.write(f'version={v}\n')
+          print(f'Next DPort version: {v}')
+          '@ | Set-Content bump_version.py -Encoding utf8
+          python bump_version.py
+
+      - name: Update source package
+        if: steps.check.outputs.update == 'true'
+        shell: pwsh
+        run: |
+          python scripts/finalize_pm3_update.py --zip DPort-source-6.9.0.zip --latest-pm3 '${{ steps.check.outputs.latest }}' --output-version '${{ steps.bump.outputs.version }}'
+
+      - name: Confirm final package
+        if: steps.check.outputs.update == 'true'
+        shell: pwsh
+        run: |
+          $req = Get-Content requirements-build.txt -Raw
+          if ($req -notmatch '(?m)^\s*pymobiledevice3\s*==\s*${{ steps.check.outputs.latest }}\s*$') { throw 'Repository requirement pin was not updated.' }
+          $v = Get-Content src\dport_version.py -Raw
+          if ($v -notmatch '(?m)^\s*DPORT_VERSION\s*=\s*["'']${{ steps.bump.outputs.version }}["'']\s*$') { throw 'Repository DPort version was not updated.' }
+
+      - name: Commit and push automatic update
+        if: steps.check.outputs.update == 'true'
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add DPort-source-6.9.0.zip requirements-build.txt src/dport_version.py scripts/finalize_pm3_update.py
+          if (git diff --cached --quiet) { Write-Host 'No changes to commit.'; exit 0 }
+          git commit -m "chore: update pymobiledevice3 to ${{ steps.check.outputs.latest }} and bump DPort to ${{ steps.bump.outputs.version }}"
+          git push origin HEAD:main
