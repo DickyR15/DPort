@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: dport-pm3-auto-update
@@ -236,13 +237,41 @@ jobs:
           $v = Get-Content src\dport_version.py -Raw
           if ($v -notmatch '(?m)^\s*DPORT_VERSION\s*=\s*["'']${{ steps.bump.outputs.version }}["'']\s*$') { throw 'Repository DPort version was not updated.' }
 
-      - name: Commit and push automatic update
+      - name: Create update branch and pull request
         if: steps.check.outputs.update == 'true'
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          $latest = '${{ steps.check.outputs.latest }}'
+          $version = '${{ steps.bump.outputs.version }}'
+          $branch = "automation/pymobiledevice3-$latest"
+
+          $existing = gh pr list --repo "${{ github.repository }}" --state open --head $branch --json number,url --jq '.[0]'
+          if (-not [string]::IsNullOrWhiteSpace($existing)) {
+            Write-Host "An open update PR already exists for $branch:"
+            Write-Host $existing
+            exit 0
+          }
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          $remoteBranch = git ls-remote --heads origin "refs/heads/$branch"
+          if ($remoteBranch) {
+            git fetch origin "$branch`:$branch"
+            git checkout $branch
+          } else {
+            git checkout -b $branch
+          }
+
           git add DPort-source-6.9.0.zip requirements-build.txt src/dport_version.py scripts/finalize_pm3_update.py
-          if (git diff --cached --quiet) { Write-Host 'No changes to commit.'; exit 0 }
-          git commit -m "chore: update pymobiledevice3 to ${{ steps.check.outputs.latest }} and bump DPort to ${{ steps.bump.outputs.version }}"
-          git push origin HEAD:main
+          if (git diff --cached --quiet) {
+            Write-Host 'No changes to commit.'
+            exit 0
+          }
+
+          git commit -m "chore: update pymobiledevice3 to $latest and bump DPort to $version"
+          git push --set-upstream origin $branch
+
+          gh pr create --repo "${{ github.repository }}" --base main --head $branch --title "chore: update pymobiledevice3 to $latest / DPort $version" --body "## Automated pymobiledevice3 update`n`nThis PR was created automatically after the candidate update passed the compatibility checks and DPort EXE build.`n`n- pymobiledevice3: $latest`n- DPort: $version`n- Candidate source validation: passed`n- Candidate EXE build: passed`n`n**No changes are merged to main automatically. Please review and merge this PR manually.**`n`nAfter merge, the normal DPort build workflow will create the formal GitHub Release."
