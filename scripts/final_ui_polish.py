@@ -15,7 +15,48 @@ html = re.sub(
     flags=re.S,
 )
 html = re.sub(
-    r'\s*<script id="dport-final-favorites-render-v2">.*?</script>\s*',
+    r'\s*<script id="dport-final-favorites-render-v2">.*?
+    
+    // Move the actual existing DPort status/notification card into the map
+    // center. We move the original element (not a clone) so its existing
+    // update logic continues to work.
+    function mountStatusOverlay(){
+        if(document.getElementById('dport-map-status-overlay')) return true;
+        var map=document.querySelector('.leaflet-container, #map, .map-container');
+        if(!map) return false;
+
+        var candidates=Array.from(document.querySelectorAll('body *')).filter(function(el){
+            if(!el || el.id==='dport-map-status-overlay') return false;
+            var t=(el.innerText||'').replace(/\s+/g,' ').trim();
+            return t.indexOf('準備就緒')>=0 && t.indexOf('DPort')>=0;
+        });
+
+        // Prefer the smallest element that contains the status text.
+        candidates.sort(function(a,b){
+            return (a.getBoundingClientRect().width*a.getBoundingClientRect().height)
+                 - (b.getBoundingClientRect().width*b.getBoundingClientRect().height);
+        });
+
+        var source=candidates[0];
+        if(!source) return false;
+
+        var overlay=document.createElement('div');
+        overlay.id='dport-map-status-overlay';
+        source.parentNode.insertBefore(overlay,source);
+        overlay.appendChild(source);
+        return true;
+    }
+
+    function ensureStatusOverlay(){
+        if(mountStatusOverlay()) return;
+        setTimeout(mountStatusOverlay,250);
+        setTimeout(mountStatusOverlay,800);
+        setTimeout(mountStatusOverlay,1600);
+    }
+    document.addEventListener('DOMContentLoaded',ensureStatusOverlay,{once:true});
+    window.addEventListener('load',ensureStatusOverlay);
+    setTimeout(ensureStatusOverlay,1200);
+</script>\s*',
     '\n',
     html,
     flags=re.S,
@@ -408,6 +449,121 @@ html body .geoport-fav-clear-all:hover{
     .geoport-fav-name{font-size:14px !important}
     .geoport-fav-name.long{font-size:13px !important}
     .geoport-fav-name.xlong{font-size:12px !important}
+}
+
+/* =========================================================
+   Map-center status notification
+   Move the existing DPort status card to the center of the map so
+   important messages remain visible on wide/short screens.
+   ========================================================= */
+#dport-map-status-overlay{
+    position:absolute !important;
+    left:50% !important;
+    top:50% !important;
+    transform:translate(-50%,-50%) !important;
+    z-index:900 !important;
+    width:min(420px,72%) !important;
+    max-width:420px !important;
+    pointer-events:none !important;
+    margin:0 !important;
+    padding:0 !important;
+    box-sizing:border-box !important;
+    display:block !important;
+}
+#dport-map-status-overlay > *{
+    width:100% !important;
+    box-sizing:border-box !important;
+}
+#dport-map-status-overlay .dport-status-card,
+#dport-map-status-overlay .dport-status{
+    background:rgba(31,38,50,.90) !important;
+    border:1px solid rgba(111,130,170,.78) !important;
+    border-radius:12px !important;
+    color:var(--dport-text) !important;
+    box-shadow:0 10px 26px rgba(0,0,0,.28) !important;
+    backdrop-filter:blur(8px) !important;
+}
+#dport-map-status-overlay .dport-status-title,
+#dport-map-status-overlay strong,
+#dport-map-status-overlay b{
+    color:#cbd4e4 !important;
+}
+#dport-map-status-overlay .dport-status-message,
+#dport-map-status-overlay p,
+#dport-map-status-overlay small{
+    color:#f3f6fb !important;
+}
+@media (max-width:900px){
+    #dport-map-status-overlay{
+        width:min(360px,78%) !important;
+    }
+}
+
+/* =========================================================
+   Favorite delete: larger click target, smaller visual chip.
+   The red chip is only ~18x18; the button itself is 32x32 for easy clicking.
+   ========================================================= */
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete{
+    position:absolute !important;
+    top:2px !important;
+    right:2px !important;
+    width:32px !important;
+    min-width:32px !important;
+    max-width:32px !important;
+    height:32px !important;
+    min-height:32px !important;
+    max-height:32px !important;
+    padding:0 !important;
+    margin:0 !important;
+    border:0 !important;
+    background:transparent !important;
+    color:transparent !important;
+    font-size:0 !important;
+    line-height:0 !important;
+    border-radius:8px !important;
+    box-shadow:none !important;
+    opacity:1 !important;
+    overflow:visible !important;
+    z-index:20 !important;
+    transform:none !important;
+}
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete::before{
+    content:'' !important;
+    position:absolute !important;
+    width:18px !important;
+    height:18px !important;
+    top:7px !important;
+    right:7px !important;
+    border-radius:5px !important;
+    background:rgba(154,68,68,.50) !important;
+    border:1px solid rgba(226,157,157,.62) !important;
+    box-sizing:border-box !important;
+    box-shadow:none !important;
+}
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete::after{
+    content:'×' !important;
+    position:absolute !important;
+    width:18px !important;
+    height:18px !important;
+    top:7px !important;
+    right:7px !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    color:#ffe9e9 !important;
+    font-size:12px !important;
+    line-height:18px !important;
+    font-weight:800 !important;
+}
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover::before{
+    background:rgba(174,78,78,.66) !important;
+    border-color:rgba(239,178,178,.80) !important;
+}
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover::after{
+    color:#ffffff !important;
+}
+html body .geoport-fav-list .geoport-fav-open{
+    padding-right:16px !important;
 }
 </style>
 '''
