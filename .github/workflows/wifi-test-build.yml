@@ -59,8 +59,8 @@ jobs:
         shell: pwsh
         run: |
           $main = Get-Content 'src/main.py' -Raw
-          $old = 'USB-ONLY: Wi-Fi / Network discovery intentionally disabled'
-          if ($main.Contains($old)) { throw 'Wi-Fi listing is still disabled in /list_devices.' }
+          if (-not $main.Contains('get_mobdev2_lockdowns(')) { throw 'mobdev2 Wi-Fi discovery is missing.' }
+          if (-not $main.Contains('Wi-Fi RSD tunnel was not established.')) { throw 'Wi-Fi tunnel failure handling is missing.' }
           if (-not $main.Contains('get_mobdev2_lockdowns(')) { throw 'mobdev2 Wi-Fi discovery is missing.' }
           if (-not ($main.Contains('info["ConnectionType"] = "Network"') -or $main.Contains('info["ConnectionType"] = ''Network'''))) {
             throw 'Network connection metadata is missing.'
