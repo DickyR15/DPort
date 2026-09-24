@@ -179,6 +179,59 @@ jobs:
         run: |
           python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
 
+      - name: Validate final header layout
+        shell: pwsh
+        run: |
+          $map = 'src/templates/map.html'
+          if (-not (Test-Path $map)) { throw "UI template not found: $map" }
+          $html = Get-Content -LiteralPath $map -Raw
+
+          $required = @(
+            'dport-hero',
+            'dport-brand',
+            'dport-ultra-gpx-slot',
+            'dport-ultra-device-slot',
+            'dport-hero-actions'
+          )
+          foreach ($name in $required) {
+            if ($html -notmatch [regex]::Escape($name)) {
+              throw "Required header selector missing: $name"
+            }
+          }
+
+          if (([regex]::Matches($html, 'id="dport-header-final-v1"')).Count -ne 1) {
+            throw 'Expected exactly one final DPort header style block.'
+          }
+
+          $legacyPatterns = @(
+            'dport-top-header-final-v[0-9]+',
+            'dport-top-header-layout-v[0-9]+',
+            'dport-ultra-header-layout-v[0-9]+',
+            'dport-ultra-header-notification-v[0-9]+',
+            'dport-persistent-notification'
+          )
+          foreach ($pattern in $legacyPatterns) {
+            if ($html -match $pattern) {
+              throw "Legacy header layer remains in map.html: $pattern"
+            }
+          }
+
+          if ($html -notmatch '.dport-hero-notifications{[^}]*display:none') {
+            throw 'Header notification area is not fully removed.'
+          }
+
+          if ($html -notmatch 'grid-template-columns:240px minmax\(460px,1fr\) 500px 70px') {
+            throw 'Final header does not contain the expected Brand / GPX / Device / Exit layout.'
+          }
+
+          if ($html -notmatch '#device{display:block!important[^}]*width:100%') {
+            throw 'Device selector width rule is missing.'
+          }
+
+          Write-Host 'Header structural validation passed.'
+          Write-Host 'Order: DPort -> GPX -> Device -> Refresh -> Connect -> Exit.'
+          Write-Host 'Header notification is removed; status reminders remain in the left green status area.'
+
       - name: Build embedded updater
         shell: pwsh
         run: |
