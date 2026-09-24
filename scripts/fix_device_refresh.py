@@ -779,7 +779,7 @@ print("- Added one-click clear-all.")
 # ==================== DPort 6.9.1 unified action color / Favorite polish ====================
 text += r'''
 <style>
-/* Use the same restrained danger color for all clear/delete actions. */
+/* All clear/delete actions use one DPort danger palette. */
 .dport-subtle-danger{
     background:#8f3b3b !important;
     border:1px solid #df9e9e !important;
@@ -792,40 +792,42 @@ text += r'''
     color:#ffffff !important;
 }
 
-/* Favorite delete X: compact, quiet, and never allowed to inherit button
-   min-width/padding from the global button rules. */
+/* Favorite delete X: much smaller, same danger palette, and kept outside the
+   text area so it never covers the place name. */
 .geoport-fav-delete{
     position:absolute !important;
     top:50% !important;
-    right:5px !important;
+    right:4px !important;
     transform:translateY(-50%) !important;
-    width:19px !important;
-    min-width:19px !important;
-    max-width:19px !important;
-    height:19px !important;
-    min-height:19px !important;
-    max-height:19px !important;
+    width:17px !important;
+    min-width:17px !important;
+    max-width:17px !important;
+    height:17px !important;
+    min-height:17px !important;
+    max-height:17px !important;
     padding:0 !important;
     margin:0 !important;
     border-radius:5px !important;
-    background:#555f72 !important;
-    border:1px solid #7f8ba3 !important;
-    color:#d8deea !important;
-    font-size:12px !important;
-    line-height:17px !important;
+    background:#8f3b3b !important;
+    border:1px solid #df9e9e !important;
+    color:#ffffff !important;
+    font-size:11px !important;
+    line-height:15px !important;
     font-weight:700 !important;
     box-shadow:none !important;
-    opacity:.9 !important;
+    opacity:.92 !important;
     z-index:3 !important;
 }
 .geoport-fav-delete:hover{
-    background:#626d82 !important;
-    border-color:#a5afc3 !important;
+    background:#9d4343 !important;
+    border-color:#efb2b2 !important;
     color:#ffffff !important;
     opacity:1 !important;
 }
+
+/* Reserve only a small amount of horizontal space for the tiny X. */
 .geoport-fav-open{
-    padding-right:29px !important;
+    padding-right:25px !important;
 }
 .geoport-fav-name.long{
     font-size:14px !important;
@@ -842,7 +844,7 @@ text += r'''
     line-height:1.1 !important;
 }
 
-/* Make the clear-all button visually belong to the same action family. */
+/* Clear-all is now simply「清除」and uses exactly the same palette. */
 .geoport-fav-clear-all{
     min-width:58px !important;
     min-height:34px !important;
@@ -851,6 +853,7 @@ text += r'''
     background:#8f3b3b !important;
     border:1px solid #df9e9e !important;
     color:#ffffff !important;
+    box-shadow:none !important;
 }
 .geoport-fav-clear-all:hover{
     background:#9d4343 !important;
@@ -862,16 +865,14 @@ text += r'''
 (function(){
     function applyDPortDangerStyle(){
         var labels = {'清除座標':1,'清除全部':1,'清除':1,'刪除':1};
-        var buttons = document.querySelectorAll('button');
-        buttons.forEach(function(btn){
+        document.querySelectorAll('button').forEach(function(btn){
             var text = (btn.textContent || '').trim();
             if(labels[text]){
                 btn.classList.add('dport-subtle-danger');
             }
         });
 
-        var clearAll=document.querySelectorAll('.geoport-fav-clear-all');
-        clearAll.forEach(function(btn){
+        document.querySelectorAll('.geoport-fav-clear-all').forEach(function(btn){
             btn.textContent='清除';
             btn.title='一鍵清除全部我的最愛';
         });
@@ -880,8 +881,6 @@ text += r'''
     document.addEventListener('DOMContentLoaded', applyDPortDangerStyle);
     window.addEventListener('load', applyDPortDangerStyle);
 
-    // The Favorite list is rerendered dynamically, so re-apply the visual
-    // class without changing the button behavior.
     if(typeof MutationObserver !== 'undefined'){
         var observer=new MutationObserver(function(){
             applyDPortDangerStyle();
