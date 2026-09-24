@@ -5,7 +5,7 @@ Repository：DickyR15/DPort
 主版基底：
 - DPort 6.9.0
 - USB 功能保留
-- pymobiledevice3 固定 11.17.2
+- pymobiledevice3 固定 11.19.1
 - Wi-Fi 不在主版開啟
 - 一般使用者只需要完整 DPort EXE，不需要 Python
 
@@ -21,10 +21,10 @@ MOENV_API_KEY
 
 ## 自動建置
 
-推送版本 Tag：
+目前正式版本固定為：
 v6.9.0
-v6.9.1
-v6.9.2
+
+建置流程會把其他 Tag / 手動輸入也正規化為 DPort 6.9.0，並更新同一個 v6.9.0 Release 的 EXE
 
 GitHub Actions 會在 Windows Runner：
 1. 安裝 Python 3.14
@@ -37,7 +37,7 @@ GitHub Actions 會在 Windows Runner：
 
 ## 使用者自動更新
 
-DPort 會檢查同一個 Repository 的最新正式 Release，下載新的完整 DPort EXE，驗證 SHA-256，關閉舊程序，替換 EXE，再自動重新啟動。
+DPort 會檢查同一個 Repository 的最新正式 Release，下載新的完整 DPort EXE，驗證 SHA-256，關閉舊程序，替換 EXE，再自動重新啟動。相同版本 6.9.0 若 Release EXE 的 SHA-256 發生變化，也會視為有新的修正版並執行更新。
 
 因此使用者不需要 Python、pip、PyInstaller 或另外安裝 pymobiledevice3。
 
