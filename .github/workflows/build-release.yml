@@ -71,6 +71,22 @@ jobs:
             Get-ChildItem -Recurse -Depth 3 $sourceRoot | Select-Object FullName
             throw 'Source restore failed: src/main.py is missing.'
           }
+      - name: Locate legacy 6.9.0 UI text
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path src -Recurse -File | Where-Object { $_.Extension -in '.py','.json','.txt','.html','.css','.xml','.ini' }
+          $found = $false
+          foreach ($file in $files) {
+            $lines = Get-Content -LiteralPath $file.FullName -ErrorAction SilentlyContinue
+            for ($n = 0; $n -lt $lines.Count; $n++) {
+              if ($lines[$n] -like '*6.9.0*') {
+                $found = $true
+                Write-Host ("FOUND {0}:{1}: {2}" -f $file.FullName, ($n + 1), $lines[$n])
+              }
+            }
+          }
+          if (-not $found) { Write-Host 'No text-source 6.9.0 matches under src.' }
+
       - name: Resolve version
         id: version
         shell: pwsh
