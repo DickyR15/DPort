@@ -579,3 +579,4 @@ print("FINAL UI polish applied.")
 print("Favorite grid: 2 columns × 3 visible rows.")
 print("Favorite delete: 16x16, top-right, translucent red.")
 print("Destructive buttons: unified translucent-red DPort style with hover.")
+
