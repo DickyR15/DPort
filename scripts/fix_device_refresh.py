@@ -890,3 +890,6 @@ text += r'''
 })();
 </script>
 '''
+
+# Final write: include the unified action/Favorite polish block above in the generated UI.
+path.write_text(text, encoding='utf-8')
