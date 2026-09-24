@@ -71,21 +71,17 @@ jobs:
             Get-ChildItem -Recurse -Depth 3 $sourceRoot | Select-Object FullName
             throw 'Source restore failed: src/main.py is missing.'
           }
-      - name: Locate legacy 6.9.0 UI text
+      - name: Remove legacy version badge
         shell: pwsh
         run: |
-          $files = Get-ChildItem -Path src -Recurse -File | Where-Object { $_.Extension -in '.py','.json','.txt','.html','.css','.xml','.ini' }
-          $found = $false
-          foreach ($file in $files) {
-            $lines = Get-Content -LiteralPath $file.FullName -ErrorAction SilentlyContinue
-            for ($n = 0; $n -lt $lines.Count; $n++) {
-              if ($lines[$n] -like '*6.9.0*') {
-                $found = $true
-                Write-Host ("FOUND {0}:{1}: {2}" -f $file.FullName, ($n + 1), $lines[$n])
-              }
-            }
-          }
-          if (-not $found) { Write-Host 'No text-source 6.9.0 matches under src.' }
+          $map = 'src/templates/map.html'
+          if (-not (Test-Path $map)) { throw "UI template not found: $map" }
+          $html = Get-Content -LiteralPath $map -Raw
+          $old = '<span class="dport-version-badge">6.9.0</span>'
+          if (-not $html.Contains($old)) { throw 'Legacy 6.9.0 version badge was not found.' }
+          $html = $html.Replace($old, '')
+          Set-Content -LiteralPath $map -Value $html -Encoding utf8
+          Write-Host 'Removed legacy 6.9.0 version badge from map.html.'
 
       - name: Resolve version
         id: version
