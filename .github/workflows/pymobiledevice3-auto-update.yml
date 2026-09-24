@@ -249,7 +249,7 @@ jobs:
 
           $existing = gh pr list --repo "${{ github.repository }}" --state open --head $branch --json number,url --jq '.[0]'
           if (-not [string]::IsNullOrWhiteSpace($existing)) {
-            Write-Host "An open update PR already exists for $branch:"
+            Write-Host "An open update PR already exists for $($branch):"
             Write-Host $existing
             exit 0
           }
