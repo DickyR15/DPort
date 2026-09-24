@@ -992,26 +992,20 @@ else:
 
 
 
-# DPort UI FINAL v8 — deterministic, responsive ultra-wide header.
-# Visual order:
-#   DPort logo/brand -> GPX playback -> transient notification -> device connection -> Exit
-# The notification is NOT persistent. The grid opens its notification column only
-# when a Bootstrap toast is actually visible.
-header_v8_css = """
-<style id="dport-ultra-header-layout-v8">
+
+# DPort UI FINAL v9 — balanced top bar only.
+# Order: DPort → GPX → transient notification → device → refresh → connect → exit.
+# No persistent notification card. Other application panels are untouched.
+header_v9_css = """
+<style id="dport-top-header-final-v9">
 @media (min-width:1400px){
   body.dport-layout-ultrawide .dport-hero{
     display:grid !important;
-    grid-template-columns:
-      195px
-      minmax(360px,1fr)
-      0px
-      minmax(390px,1fr)
-      66px !important;
-    align-items:center !important;
-    justify-content:space-between !important;
-    column-gap:10px !important;
+    grid-template-columns:260px 760px 0px 500px 66px !important;
+    column-gap:12px !important;
     row-gap:0 !important;
+    align-items:center !important;
+    justify-content:start !important;
     width:100% !important;
     min-width:0 !important;
     max-width:100% !important;
@@ -1020,52 +1014,44 @@ header_v8_css = """
     overflow:hidden !important;
   }
 
-  /* Open exactly one notification column only while a real toast is shown. */
+  /* A real visible toast opens one 220px notification column. */
   body.dport-layout-ultrawide .dport-hero:has(.dport-hero-notifications .toast.show){
-    grid-template-columns:
-      195px
-      minmax(360px,1fr)
-      200px
-      minmax(390px,1fr)
-      66px !important;
+    grid-template-columns:260px 600px 220px 500px 66px !important;
   }
 
   body.dport-layout-ultrawide .dport-brand{
     grid-column:1 !important;
     grid-row:1 !important;
-    width:195px !important;
-    min-width:195px !important;
-    max-width:195px !important;
-    min-height:58px !important;
+    width:260px !important;
+    min-width:260px !important;
+    max-width:260px !important;
+    height:64px !important;
+    min-height:64px !important;
+    max-height:64px !important;
     margin:0 !important;
     padding:0 !important;
-    overflow:hidden !important;
-    box-sizing:border-box !important;
     display:flex !important;
     align-items:center !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
   }
 
   body.dport-layout-ultrawide .dport-brand-icon{
     width:58px !important;
     height:58px !important;
     min-width:58px !important;
+    min-height:58px !important;
     flex:0 0 58px !important;
-    border-radius:13px !important;
   }
 
   body.dport-layout-ultrawide .dport-brand-text{
     min-width:0 !important;
-    max-width:calc(100% - 70px) !important;
+    max-width:190px !important;
     overflow:hidden !important;
   }
 
-  body.dport-layout-ultrawide .dport-name-row{
-    min-width:0 !important;
-    gap:0 !important;
-  }
-
   body.dport-layout-ultrawide .dport-title{
-    font-size:25px !important;
+    font-size:24px !important;
     line-height:1 !important;
     white-space:nowrap !important;
     overflow:hidden !important;
@@ -1074,7 +1060,7 @@ header_v8_css = """
 
   body.dport-layout-ultrawide .dport-subtitle{
     margin-top:4px !important;
-    font-size:12px !important;
+    font-size:11.5px !important;
     line-height:1.2 !important;
     white-space:nowrap !important;
     overflow:hidden !important;
@@ -1083,7 +1069,7 @@ header_v8_css = """
 
   body.dport-layout-ultrawide .dport-caption{
     margin-top:2px !important;
-    font-size:10px !important;
+    font-size:9.5px !important;
     line-height:1.15 !important;
     white-space:nowrap !important;
     overflow:hidden !important;
@@ -1109,25 +1095,41 @@ header_v8_css = """
     display:none !important;
   }
 
+  /* GPX is capped so it cannot cover the logo. The four info boxes are
+     deliberately on a separate second row inside the GPX card. */
   body.dport-layout-ultrawide .dport-ultra-gpx-slot{
     grid-column:2 !important;
     grid-row:1 !important;
     display:block !important;
-    width:100% !important;
+    width:760px !important;
     min-width:0 !important;
-    max-width:100% !important;
+    max-width:760px !important;
+    height:64px !important;
+    min-height:64px !important;
+    max-height:64px !important;
     margin:0 !important;
     padding:0 !important;
     overflow:hidden !important;
     box-sizing:border-box !important;
   }
 
+  body.dport-layout-ultrawide .dport-hero:has(.dport-hero-notifications .toast.show) .dport-ultra-gpx-slot{
+    width:600px !important;
+    max-width:600px !important;
+  }
+
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{
+    display:grid !important;
+    grid-template-rows:25px 33px !important;
+    row-gap:4px !important;
     width:100% !important;
-    max-width:100% !important;
     min-width:0 !important;
+    max-width:100% !important;
+    height:64px !important;
+    min-height:64px !important;
+    max-height:64px !important;
     margin:0 !important;
-    padding:6px 8px !important;
+    padding:5px 8px !important;
     box-sizing:border-box !important;
     overflow:hidden !important;
   }
@@ -1140,7 +1142,11 @@ header_v8_css = """
     width:100% !important;
     min-width:0 !important;
     max-width:100% !important;
-    margin:0 0 4px !important;
+    height:25px !important;
+    min-height:25px !important;
+    max-height:25px !important;
+    margin:0 !important;
+    padding:0 !important;
     overflow:hidden !important;
   }
 
@@ -1151,17 +1157,22 @@ header_v8_css = """
 
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-section-title{
     font-size:13px !important;
-    line-height:1.05 !important;
+    line-height:14px !important;
+    min-width:0 !important;
+    max-width:100% !important;
     white-space:nowrap !important;
     overflow:hidden !important;
     text-overflow:ellipsis !important;
+    position:relative !important;
+    z-index:3 !important;
   }
 
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-status-pill{
-    max-width:115px !important;
+    max-width:105px !important;
+    min-width:0 !important;
     padding:2px 6px !important;
-    font-size:9px !important;
-    line-height:14px !important;
+    font-size:8.5px !important;
+    line-height:13px !important;
     white-space:nowrap !important;
     overflow:hidden !important;
     text-overflow:ellipsis !important;
@@ -1170,24 +1181,23 @@ header_v8_css = """
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-wrap{
     display:flex !important;
     align-items:center !important;
-    min-width:0 !important;
     gap:4px !important;
+    min-width:0 !important;
   }
 
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-label{
     font-size:8px !important;
-    line-height:1 !important;
     white-space:nowrap !important;
   }
 
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-select{
-    width:108px !important;
-    min-width:108px !important;
-    max-width:108px !important;
-    height:27px !important;
-    padding:3px 24px 3px 7px !important;
-    font-size:10px !important;
-    line-height:1 !important;
+    width:100px !important;
+    min-width:100px !important;
+    max-width:100px !important;
+    height:25px !important;
+    min-height:25px !important;
+    padding:2px 20px 2px 6px !important;
+    font-size:9.5px !important;
     box-sizing:border-box !important;
   }
 
@@ -1198,15 +1208,23 @@ header_v8_css = """
     width:100% !important;
     min-width:0 !important;
     max-width:100% !important;
+    height:33px !important;
+    min-height:33px !important;
+    max-height:33px !important;
+    margin:0 !important;
+    padding:0 !important;
+    transform:none !important;
     overflow:hidden !important;
   }
 
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item{
+    width:100% !important;
     min-width:0 !important;
-    height:31px !important;
-    min-height:31px !important;
-    max-height:31px !important;
+    height:33px !important;
+    min-height:33px !important;
+    max-height:33px !important;
     padding:4px 6px !important;
+    margin:0 !important;
     box-sizing:border-box !important;
     overflow:hidden !important;
     border-radius:7px !important;
@@ -1214,6 +1232,7 @@ header_v8_css = """
 
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item span{
     display:block !important;
+    max-width:100% !important;
     font-size:8px !important;
     line-height:9px !important;
     white-space:nowrap !important;
@@ -1223,15 +1242,19 @@ header_v8_css = """
 
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item strong{
     display:block !important;
+    max-width:100% !important;
     margin-top:1px !important;
-    font-size:11.5px !important;
+    font-size:11px !important;
     line-height:13px !important;
     white-space:nowrap !important;
     overflow:hidden !important;
     text-overflow:ellipsis !important;
   }
 
-  /* Transient notification: zero footprint until an actual toast is shown. */
+  /*
+     Notification: transient Bootstrap toast only.
+     There is no always-on placeholder and no persistent card.
+  */
   body.dport-layout-ultrawide .dport-hero-notifications{
     grid-column:3 !important;
     grid-row:1 !important;
@@ -1247,21 +1270,20 @@ header_v8_css = """
     padding:0 !important;
     overflow:visible !important;
     box-sizing:border-box !important;
-    z-index:30 !important;
   }
 
   body.dport-layout-ultrawide .dport-hero:has(.dport-hero-notifications .toast.show) .dport-hero-notifications{
-    width:200px !important;
-    min-width:200px !important;
-    max-width:200px !important;
+    width:220px !important;
+    min-width:220px !important;
+    max-width:220px !important;
     height:58px !important;
     min-height:58px !important;
     max-height:58px !important;
+    overflow:hidden !important;
   }
 
   body.dport-layout-ultrawide .dport-hero-notifications .toast{
     display:none !important;
-    position:static !important;
     width:100% !important;
     min-width:0 !important;
     max-width:100% !important;
@@ -1270,37 +1292,33 @@ header_v8_css = """
     max-height:58px !important;
     margin:0 !important;
     padding:0 !important;
-    border-radius:9px !important;
     box-sizing:border-box !important;
     overflow:hidden !important;
+    border-radius:9px !important;
   }
 
   body.dport-layout-ultrawide .dport-hero-notifications .toast.show{
     display:block !important;
   }
 
-  body.dport-layout-ultrawide .dport-hero-notifications #liveToast:not(.show){
-    display:none !important;
-  }
-
   body.dport-layout-ultrawide .dport-hero-notifications .toast-header{
-    height:25px !important;
-    min-height:25px !important;
-    max-height:25px !important;
+    height:24px !important;
+    min-height:24px !important;
+    max-height:24px !important;
     padding:3px 7px !important;
     font-size:10px !important;
-    line-height:19px !important;
+    line-height:18px !important;
     box-sizing:border-box !important;
     overflow:hidden !important;
   }
 
   body.dport-layout-ultrawide .dport-hero-notifications .toast-body{
-    height:33px !important;
-    min-height:33px !important;
-    max-height:33px !important;
+    height:34px !important;
+    min-height:34px !important;
+    max-height:34px !important;
     padding:6px 8px !important;
-    font-size:11.5px !important;
-    line-height:21px !important;
+    font-size:11px !important;
+    line-height:22px !important;
     font-weight:700 !important;
     white-space:nowrap !important;
     overflow:hidden !important;
@@ -1315,13 +1333,17 @@ header_v8_css = """
     text-overflow:ellipsis !important;
   }
 
+  /* Device selector gets a full-width main slot; controls stay on its right. */
   body.dport-layout-ultrawide .dport-ultra-device-slot{
     grid-column:4 !important;
     grid-row:1 !important;
     display:block !important;
-    width:100% !important;
-    min-width:0 !important;
-    max-width:100% !important;
+    width:500px !important;
+    min-width:500px !important;
+    max-width:500px !important;
+    height:64px !important;
+    min-height:64px !important;
+    max-height:64px !important;
     margin:0 !important;
     padding:0 !important;
     overflow:hidden !important;
@@ -1331,6 +1353,9 @@ header_v8_css = """
   body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{
     display:block !important;
     width:100% !important;
+    height:64px !important;
+    min-height:64px !important;
+    max-height:64px !important;
     min-width:0 !important;
     max-width:100% !important;
     margin:0 !important;
@@ -1356,8 +1381,8 @@ header_v8_css = """
 
   body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body{
     display:flex !important;
-    flex-direction:row !important;
     align-items:center !important;
+    flex-direction:row !important;
     flex-wrap:nowrap !important;
     gap:7px !important;
     width:100% !important;
@@ -1378,7 +1403,8 @@ header_v8_css = """
     overflow:hidden !important;
   }
 
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3{
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3,
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row{
     width:100% !important;
     min-width:0 !important;
     margin:0 !important;
@@ -1390,51 +1416,36 @@ header_v8_css = """
     align-items:center !important;
     flex-wrap:nowrap !important;
     gap:7px !important;
-    width:100% !important;
-    min-width:0 !important;
-    margin:0 !important;
-    padding:0 !important;
   }
 
   body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row > .col{
     flex:1 1 auto !important;
-    width:auto !important;
     min-width:0 !important;
+    width:auto !important;
     max-width:none !important;
     margin:0 !important;
     padding:0 !important;
   }
 
   body.dport-layout-ultrawide .dport-ultra-device-slot #device{
-    display:block !important;
     width:100% !important;
     min-width:0 !important;
-    max-width:none !important;
+    max-width:100% !important;
     height:40px !important;
     min-height:40px !important;
     padding:6px 28px 6px 10px !important;
+    margin:0 !important;
+    box-sizing:border-box !important;
     font-size:12.5px !important;
     font-weight:800 !important;
     line-height:1.1 !important;
     white-space:nowrap !important;
     overflow:hidden !important;
     text-overflow:ellipsis !important;
-    box-sizing:border-box !important;
-  }
-
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row > .col-auto{
-    flex:0 0 92px !important;
-    width:92px !important;
-    min-width:92px !important;
-    max-width:92px !important;
-    margin:0 !important;
-    padding:0 !important;
   }
 
   body.dport-layout-ultrawide .dport-ultra-device-slot #refresh-device{
-    display:inline-flex !important;
-    align-items:center !important;
-    justify-content:center !important;
+    flex:0 0 92px !important;
     width:92px !important;
     min-width:92px !important;
     max-width:92px !important;
@@ -1445,7 +1456,6 @@ header_v8_css = """
     font-size:11.5px !important;
     line-height:1 !important;
     white-space:nowrap !important;
-    overflow:hidden !important;
     box-sizing:border-box !important;
   }
 
@@ -1462,6 +1472,7 @@ header_v8_css = """
     font-size:11.5px !important;
     line-height:1 !important;
     white-space:nowrap !important;
+    box-sizing:border-box !important;
   }
 
   body.dport-layout-ultrawide .dport-hero-actions{
@@ -1469,13 +1480,14 @@ header_v8_css = """
     grid-row:1 !important;
     display:flex !important;
     align-items:center !important;
-    justify-content:flex-end !important;
-    justify-self:end !important;
+    justify-content:flex-start !important;
     width:66px !important;
     min-width:66px !important;
     max-width:66px !important;
+    height:64px !important;
     margin:0 !important;
     padding:0 !important;
+    box-sizing:border-box !important;
   }
 
   body.dport-layout-ultrawide .dport-hero-actions #exit-btn{
@@ -1491,74 +1503,65 @@ header_v8_css = """
   }
 }
 
-@media (min-width:1800px){
+@media (min-width:1800px) and (max-width:2199px){
   body.dport-layout-ultrawide .dport-hero{
-    grid-template-columns:
-      220px
-      minmax(520px,1fr)
-      0px
-      minmax(500px,600px)
-      70px !important;
-    column-gap:12px !important;
-    padding:10px 14px !important;
+    grid-template-columns:240px 700px 0px 480px 66px !important;
+    column-gap:10px !important;
   }
-
   body.dport-layout-ultrawide .dport-hero:has(.dport-hero-notifications .toast.show){
-    grid-template-columns:
-      220px
-      minmax(520px,1fr)
-      220px
-      minmax(500px,600px)
-      70px !important;
+    grid-template-columns:240px 560px 210px 480px 66px !important;
   }
-
-  body.dport-layout-ultrawide .dport-brand{
-    width:220px !important;
-    min-width:220px !important;
-    max-width:220px !important;
-  }
-
-  body.dport-layout-ultrawide .dport-hero:has(.dport-hero-notifications .toast.show) .dport-hero-notifications{
-    width:220px !important;
-    min-width:220px !important;
-    max-width:220px !important;
-  }
-
-  body.dport-layout-ultrawide .dport-hero-actions,
-  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{
-    width:70px !important;
-    min-width:70px !important;
-    max-width:70px !important;
-  }
-}
-
-@media (min-width:2200px){
-  body.dport-layout-ultrawide .dport-hero{
-    grid-template-columns:
-      240px
-      minmax(600px,820px)
-      0px
-      600px
-      72px !important;
-    justify-content:space-between !important;
-    column-gap:14px !important;
-  }
-
-  body.dport-layout-ultrawide .dport-hero:has(.dport-hero-notifications .toast.show){
-    grid-template-columns:
-      240px
-      minmax(600px,820px)
-      240px
-      600px
-      72px !important;
-  }
-
   body.dport-layout-ultrawide .dport-brand{
     width:240px !important;
     min-width:240px !important;
     max-width:240px !important;
   }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot{
+    width:700px !important;
+    max-width:700px !important;
+  }
+  body.dport-layout-ultrawide .dport-hero:has(.dport-hero-notifications .toast.show) .dport-ultra-gpx-slot{
+    width:560px !important;
+    max-width:560px !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot{
+    width:480px !important;
+    min-width:480px !important;
+    max-width:480px !important;
+  }
+  body.dport-layout-ultrawide .dport-hero:has(.dport-hero-notifications .toast.show) .dport-hero-notifications{
+    width:210px !important;
+    min-width:210px !important;
+    max-width:210px !important;
+  }
+}
 
+@media (min-width:2200px){
+  body.dport-layout-ultrawide .dport-hero{
+    grid-template-columns:270px 840px 0px 560px 70px !important;
+    column-gap:14px !important;
+  }
+  body.dport-layout-ultrawide .dport-hero:has(.dport-hero-notifications .toast.show){
+    grid-template-columns:270px 680px 240px 560px 70px !important;
+  }
+  body.dport-layout-ultrawide .dport-brand{
+    width:270px !important;
+    min-width:270px !important;
+    max-width:270px !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot{
+    width:840px !important;
+    max-width:840px !important;
+  }
+  body.dport-layout-ultrawide .dport-hero:has(.dport-hero-notifications .toast.show) .dport-ultra-gpx-slot{
+    width:680px !important;
+    max-width:680px !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot{
+    width:560px !important;
+    min-width:560px !important;
+    max-width:560px !important;
+  }
   body.dport-layout-ultrawide .dport-hero:has(.dport-hero-notifications .toast.show) .dport-hero-notifications{
     width:240px !important;
     min-width:240px !important;
@@ -1574,14 +1577,12 @@ header_v8_css = """
     gap:10px !important;
     overflow:visible !important;
   }
-
   body.dport-layout-ultrawide .dport-brand{
     flex:1 1 100% !important;
     width:auto !important;
     min-width:0 !important;
     max-width:100% !important;
   }
-
   body.dport-layout-ultrawide .dport-ultra-gpx-slot,
   body.dport-layout-ultrawide .dport-ultra-device-slot,
   body.dport-layout-ultrawide .dport-hero-notifications{
@@ -1594,68 +1595,141 @@ header_v8_css = """
 </style>
 """
 
-header_v8_js = """
-<script id="dport-ultra-header-layout-v8-script">
+header_v9_js = """
+<script id="dport-top-header-final-v9-script">
 (function(){
   function ultra(){
     return !!(document.body &&
       document.body.classList.contains('dport-layout-ultrawide'));
   }
 
+  /*
+   * Queue transient notifications:
+   * first message shows immediately; subsequent displayToast() calls wait
+   * until the current toast is actually hidden.
+   */
+  function installToastQueue(){
+    if(!ultra() || typeof window.displayToast!=='function') return;
+    var original=window.displayToast;
+    if(original.__dportToastQueueV9) return;
 
-  function keepToastInHeader(toast){
-    if(!ultra() || !toast) return;
-    var target=document.querySelector('.dport-hero-notifications');
-    if(target && toast.parentElement!==target){
-      target.appendChild(toast);
+    var queue=[];
+    var busy=false;
+
+    function target(){
+      return document.querySelector('.dport-hero-notifications');
     }
+
+    function visibleToast(){
+      var t=target();
+      if(!t) return null;
+      var list=Array.prototype.slice.call(t.querySelectorAll('.toast'));
+      for(var i=list.length-1;i>=0;i--){
+        if(list[i].classList.contains('show')) return list[i];
+      }
+      return null;
+    }
+
+    function done(toast){
+      if(!busy) return;
+      busy=false;
+      if(toast && toast.__dportQueueObserver){
+        toast.__dportQueueObserver.disconnect();
+        toast.__dportQueueObserver=null;
+      }
+      pump();
+    }
+
+    function waitForHidden(toast){
+      if(!toast){
+        setTimeout(function(){done(null);},1000);
+        return;
+      }
+
+      var finished=false;
+      function complete(){
+        if(finished) return;
+        finished=true;
+        done(toast);
+      }
+
+      toast.addEventListener('hidden.bs.toast',complete,{once:true});
+
+      if(window.MutationObserver){
+        var observer=new MutationObserver(function(){
+          var hidden=!toast.classList.contains('show') &&
+            getComputedStyle(toast).display==='none';
+          if(hidden) complete();
+        });
+        observer.observe(toast,{attributes:true,attributeFilter:['class','style','aria-hidden']});
+        toast.__dportQueueObserver=observer;
+      }
+
+      setTimeout(function(){
+        if(!finished) complete();
+      },6000);
+    }
+
+    function show(item){
+      busy=true;
+      try{
+        original.apply(item.context,item.args);
+      }catch(err){
+        busy=false;
+        throw err;
+      }
+
+      var tries=0;
+      function bind(){
+        var toast=visibleToast();
+        if(toast){
+          waitForHidden(toast);
+          return;
+        }
+        tries++;
+        if(tries<12){
+          setTimeout(bind,50);
+        }else{
+          done(null);
+        }
+      }
+      setTimeout(bind,0);
+    }
+
+    function pump(){
+      if(busy || !queue.length) return;
+      var item=queue.shift();
+      show(item);
+    }
+
+    var wrapped=function(){
+      queue.push({context:this,args:Array.prototype.slice.call(arguments)});
+      pump();
+    };
+
+    wrapped.__dportToastQueueV9=true;
+    wrapped.__dportToastQueueOriginal=original;
+    window.displayToast=wrapped;
   }
 
-  function enforceNotificationMode(){
-    if(!ultra()) return;
-    var target=document.querySelector('.dport-hero-notifications');
-    if(!target) return;
+  function normalize(){
+    var el=document.getElementById('dport-pm3-status');
+    if(!el) return;
+    /* Do not write a startup value. The actual update-check state handler
+       controls this element. */
+  }
 
-    /* The application uses a transient Bootstrap toast. No persistent card. */
-    target.querySelectorAll('.dport-persistent-notification').forEach(function(el){
+  function cleanupPersistentCard(){
+    document.querySelectorAll('.dport-persistent-notification').forEach(function(el){
       el.remove();
-    });
-
-    target.querySelectorAll('.toast').forEach(function(toast){
-      toast.classList.toggle('dport-active-toast', toast.classList.contains('show'));
     });
   }
 
   function boot(){
-    enforceNotificationMode();
-
-    var target=document.querySelector('.dport-hero-notifications');
-    if(target && window.MutationObserver){
-      var observer=new MutationObserver(function(mutations){
-        mutations.forEach(function(m){
-          Array.prototype.slice.call(m.addedNodes || []).forEach(function(node){
-            if(node.nodeType!==1) return;
-
-            if(node.id==='dport-persistent-notification'){
-              node.remove();
-              return;
-            }
-
-            if(node.classList && node.classList.contains('toast')){
-              keepToastInHeader(node);
-            }
-
-            if(node.querySelectorAll){
-              node.querySelectorAll('.toast').forEach(keepToastInHeader);
-            }
-          });
-        });
-
-        enforceNotificationMode();
-      });
-      observer.observe(document.body,{childList:true,subtree:true});
-    }
-
+    if(!ultra()) return;
+    cleanupPersistentCard();
+    normalize();
+    installToastQueue();
   }
 
   if(document.readyState==='loading'){
@@ -1663,12 +1737,18 @@ header_v8_js = """
   }else{
     boot();
   }
+
+  [150,500,1000,2000].forEach(function(ms){
+    setTimeout(boot,ms);
+  });
 })();
 </script>
 """
 
-# Remove all previous generated ultra-wide header layers from the source template.
+# Remove all earlier generated desktop-header layers before inserting v9.
 for pattern in (
+    r'\s*<style id="dport-top-header-final-v[0-9]+">.*?</style>\s*',
+    r'\s*<script id="dport-top-header-final-v[0-9]+-script">.*?</script>\s*',
     r'\s*<style id="dport-ultra-header-layout-v[0-9]+">.*?</style>\s*',
     r'\s*<script id="dport-ultra-header-layout-v[0-9]+-script">.*?</script>\s*',
     r'\s*<style id="dport-top-header-layout-v[0-9]+">.*?</style>\s*',
@@ -1678,21 +1758,20 @@ for pattern in (
 ):
     html = re.sub(pattern, "\n", html, flags=re.S)
 
-# Keep the status label exactly as requested.
-html = html.replace("DPort：檢查 GitHub 最新正式版…", "")
+# Update-check status wording only:
+# startup stays controlled by the existing checker; latest state becomes
+# "DPort：v6.9.0（最新）" instead of "（GitHub 最新正式版）".
+html = html.replace("DPort：檢查 GitHub 最新正式版…", "DPort：檢查更新中…")
+html = html.replace("DPort：v6.9.0（最新）", "")
 html = html.replace(
-    "el.textContent='DPort：'+current+'（最新）';",
-    "el.textContent='DPort：v6.9.0（最新）';"
+    "el.textContent='DPort：'+current+'（GitHub 最新正式版）';",
+    "el.textContent='DPort：'+current+'（最新）';"
 )
-
 if "</body>" in html:
-    html = html.replace("</body>", header_v8_css + header_v8_js + "\n</body>", 1)
+    html = html.replace("</body>", header_v9_css + header_v9_js + "\n</body>", 1)
 else:
-    html += header_v8_css + header_v8_js
+    html += header_v9_css + header_v9_js
 
-# Version label is intentionally blank at startup. The normal updater check
-# populates it; when the check reaches the latest state it becomes:
-# DPort：v6.9.0（最新）
 path.write_text(html, encoding="utf-8")
 
 print("DPort final UI polish v8 applied successfully.")
