@@ -147,6 +147,78 @@ jobs:
           $expected = $line.Trim().Substring('pymobiledevice3=='.Length).Trim()
           if ($pm3 -ne $expected) { throw "Expected pymobiledevice3 $expected, got $pm3" }
 
+      - name: Fix device refresh state
+        shell: pwsh
+        run: |
+          $map = 'src/templates/map.html'
+          if (-not (Test-Path $map)) { throw "UI template not found: $map" }
+          $html = Get-Content -LiteralPath $map -Raw
+
+          $oldGuard = @'
+          async function dportRefreshDeviceList() {
+              if (typeof isDeviceConnected !== 'undefined' && isDeviceConnected) {
+                  displayToast("裝置已連接，無需重新整理裝置清單。");
+                  return;
+              }
+
+          '@
+          $newGuard = @'
+          async function dportRefreshDeviceList() {
+
+          '@
+          if ($html.Contains($oldGuard)) {
+            $html = $html.Replace($oldGuard, $newGuard)
+          }
+
+          $oldFinally = @'
+                  if (button) {
+                      button.textContent = button.dataset.originalText || '↻ 重新整理';
+                      button.disabled = (typeof isDeviceConnected !== 'undefined' && isDeviceConnected);
+                  }
+          '@
+          $newFinally = @'
+                  if (button) {
+                      button.textContent = button.dataset.originalText || '↻ 重新整理';
+                      button.disabled = false;
+                  }
+          '@
+          if ($html.Contains($oldFinally)) {
+            $html = $html.Replace($oldFinally, $newFinally)
+          }
+
+          $oldSync = @'
+            function syncDeviceRefreshButton(){
+                const button=document.getElementById('refresh-device');
+                if(!button)return;
+                const connected=(typeof isDeviceConnected!=='undefined' && isDeviceConnected===true);
+                if(connected){
+                    button.disabled=true;
+                    if(button.textContent!=='↻ 重新整理' && button.textContent!=='↻ 讀取中…'){
+                        button.textContent='↻ 重新整理';
+                    }
+                }
+            }
+          '@
+          $newSync = @'
+            function syncDeviceRefreshButton(){
+                const button=document.getElementById('refresh-device');
+                if(!button)return;
+                const refreshing=(typeof deviceListManualRefreshInFlight!=='undefined' && deviceListManualRefreshInFlight===true);
+                button.disabled=refreshing;
+                if(!refreshing && button.textContent!=='↻ 重新整理' && button.textContent!=='↻ 讀取中…'){
+                    button.textContent='↻ 重新整理';
+                }
+            }
+          '@
+          if ($html.Contains($oldSync)) {
+            $html = $html.Replace($oldSync, $newSync)
+          }
+
+          $html = $html.Replace('title="重新讀取 USB 裝置清單"', 'title="重新讀取 USB / Wi-Fi 裝置清單"')
+
+          Set-Content -LiteralPath $map -Value $html -Encoding utf8
+          Write-Host 'Device refresh button state fixed: no longer locked by isDeviceConnected.'
+
       - name: Validate source
         shell: pwsh
         run: |
