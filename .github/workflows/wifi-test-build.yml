@@ -38,6 +38,17 @@ jobs:
           New-Item -ItemType Directory -Force -Path src | Out-Null
           Copy-Item (Join-Path $root 'src\*') src -Recurse -Force
 
+      - name: Upload extracted Wi-Fi source for development
+        uses: actions/upload-artifact@v4
+        with:
+          name: dport-wifi-source-6.9.2
+          path: |
+            src/main.py
+            src/dport_release_updater.py
+            src/dport_version.py
+            src/templates/map.html
+          retention-days: 7
+
       - name: Verify Wi-Fi support in source
         shell: pwsh
         run: |
