@@ -76,6 +76,7 @@ src = src.replace(manual_old, manual_new)
 src = src.replace("pair_records=get_home_folder(),\n", "")
 
 # 6) Preserve the user's exact USB/Wi-Fi selection when the background
+# auto-refresh repopulates the list. The current selection is sticky by option key.
 # auto-refresh repopulates the list. Without this, the same iPhone's Network
 # option can become the selected option after a refresh.
 clear_old = """        deviceDropdown.innerHTML = '';
