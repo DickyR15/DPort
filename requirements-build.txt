@@ -1,4 +1,4 @@
-pymobiledevice3==11.18.0
+pymobiledevice3==11.19.1
 flask
 requests
 pyuac
