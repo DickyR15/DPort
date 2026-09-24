@@ -8,113 +8,79 @@ if not path.exists():
 text = path.read_text(encoding="utf-8")
 original = text
 
-# 1) Remove the connected-state guard from manual refresh. The physical USB
-# presence monitor is responsible for disabling the button while a connected
-# USB device is actually present.
-old_guard = '''async function dportRefreshDeviceList() {
-    if (typeof isDeviceConnected !== 'undefined' && isDeviceConnected) {
-        displayToast("裝置已連接，無需重新整理裝置清單。");
-        return;
-    }
+# Keep the intended rule inside dportRefreshDeviceList:
+# connected => the refresh action itself is not allowed.
+# The bug was that separate background code kept re-disabling the button
+# after USB had actually been unplugged.
+old_finally = "button.disabled = (typeof isDeviceConnected !== 'undefined' && isDeviceConnected);"
+text = text.replace(old_finally, "button.disabled = false;")
 
-    if (deviceListManualRefreshInFlight) return;'''
-new_guard = '''async function dportRefreshDeviceList() {
-    if (deviceListManualRefreshInFlight) return;'''
-if old_guard in text:
-    text = text.replace(old_guard, new_guard, 1)
-
-# 2) Never re-disable Refresh from the refresh routine based on stale
-# isDeviceConnected.
-text = text.replace(
-    "button.disabled = (typeof isDeviceConnected !== 'undefined' && isDeviceConnected);",
-    "button.disabled = false;",
-)
-
-# 3) Remove the historical 500ms sync script which blindly disables the button
-# whenever isDeviceConnected is true, even after the cable has been removed.
-legacy = re.compile(
+# Remove the stale 500ms background synchronizer which blindly disabled the
+# button whenever isDeviceConnected remained true.
+legacy_pattern = re.compile(
     r'''\s*<script>\s*\(function\(\)\{\s*
-    function\s+syncDeviceRefreshButton\(\)\{.*?
-    document\.addEventListener\('DOMContentLoaded',function\(\)\{\s*
+    function\s+syncDeviceRefreshButton\(\)\s*\{.*?
+    document\.addEventListener\(\s*['"]DOMContentLoaded['"]\s*,\s*function\(\)\{\s*
     syncDeviceRefreshButton\(\);\s*
-    setInterval\(syncDeviceRefreshButton,500\);\s*
+    setInterval\(syncDeviceRefreshButton\s*,\s*500\);\s*
     \}\);\s*
-    \}\)\(\);\s*</script>''',
+    \}\)\(\);\s*</script>\s*''',
     re.S | re.X,
 )
-text, legacy_removed = legacy.subn("\n", text)
+text, legacy_removed = legacy_pattern.subn("\n", text)
 
-# 4) Replace any prior authoritative synchronizer with one final synchronizer
-# that uses the actual /usb_presence endpoint. This makes the physical cable
-# the source of truth for the disabled state.
-text = re.sub(
-    r'''\s*<script id="dport-refresh-authoritative-state">.*?</script>\s*''',
-    "\n",
-    text,
-    flags=re.S,
-)
+# When the physical USB cable is detected as removed, explicitly enable Refresh.
+disconnect_anchor = "    if (spinnerElement) spinnerElement.style.display = 'none';"
+disconnect_insert = """    if (spinnerElement) spinnerElement.style.display = 'none';
 
-authoritative = r'''
-<script id="dport-refresh-authoritative-state">
-(function(){
-    var refreshStateBusy = false;
+    var refreshButton = document.getElementById('refresh-device');
+    if (refreshButton) {
+        refreshButton.disabled = false;
+        refreshButton.removeAttribute('aria-disabled');
+    }
+"""
+if disconnect_anchor in text and "refreshButton.disabled = false;" not in text:
+    text = text.replace(disconnect_anchor, disconnect_insert, 1)
 
-    async function syncRefreshButton(){
-        var button = document.getElementById('refresh-device');
-        if (!button || refreshStateBusy) return;
-
-        var manualBusy = (
-            typeof deviceListManualRefreshInFlight !== 'undefined' &&
-            deviceListManualRefreshInFlight === true
-        );
-        if (manualBusy) {
-            button.disabled = true;
-            return;
+# A successful connection should explicitly disable Refresh.
+connect_anchor = """        if (connectButton) {
+            connectButton.disabled = true;  // Disable the button
         }
+"""
+connect_insert = """        if (connectButton) {
+            connectButton.disabled = true;  // Disable the button
+        }
+        var refreshButtonConnected = document.getElementById('refresh-device');
+        if (refreshButtonConnected) {
+            refreshButtonConnected.disabled = true;
+            refreshButtonConnected.removeAttribute('aria-disabled');
+        }
+"""
+if connect_anchor in text and "refreshButtonConnected.disabled = true;" not in text:
+    text = text.replace(connect_anchor, connect_insert, 1)
 
-        refreshStateBusy = true;
-        try {
-            var response = await fetch('/usb_presence?_=' + Date.now(), {
-                cache: 'no-store'
-            });
-            var payload = response && response.ok ? await response.json() : null;
-            var devices = payload && Array.isArray(payload.devices) ? payload.devices : [];
-            var usbPresent = devices.some(function(device){
-                return String((device && device.ConnectionType) || 'USB').toUpperCase() === 'USB';
-            });
-            var connected = (
-                typeof isDeviceConnected !== 'undefined' &&
-                isDeviceConnected === true
-            );
-
-            button.disabled = usbPresent && connected;
-            button.removeAttribute('aria-disabled');
-        } catch (e) {
-            // Do not lock Refresh when the physical presence probe fails.
-            button.disabled = false;
-        } finally {
-            refreshStateBusy = false;
+# Manual/programmatic disconnect should also re-enable Refresh.
+manual_disc_anchor = """        if (connectButton) {
+            connectButton.disabled = false;
         }
     }
-
-    document.addEventListener('DOMContentLoaded', function(){
-        syncRefreshButton();
-        setInterval(syncRefreshButton, 800);
-    });
-    window.addEventListener('focus', syncRefreshButton);
-})();
-</script>
-'''
-text += "
-" + authoritative + "
-"
-
-text = text.replace(
-    'title="重新讀取 USB 裝置清單"',
-    'title="重新讀取 USB / Wi-Fi 裝置清單"',
-)
+"""
+manual_disc_insert = """        if (connectButton) {
+            connectButton.disabled = false;
+        }
+        var refreshButtonDisconnected = document.getElementById('refresh-device');
+        if (refreshButtonDisconnected) {
+            refreshButtonDisconnected.disabled = false;
+            refreshButtonDisconnected.removeAttribute('aria-disabled');
+        }
+    }
+"""
+if manual_disc_anchor in text and "refreshButtonDisconnected.disabled = false;" not in text:
+    text = text.replace(manual_disc_anchor, manual_disc_insert, 1)
 
 path.write_text(text, encoding="utf-8")
 
-print(f"legacy sync scripts removed: {legacy_removed}")
+print(f"legacy background sync removed: {legacy_removed}")
 print(f"changed: {text != original}")
+if legacy_removed == 0 and old_finally not in original:
+    raise SystemExit("Expected stale refresh logic was not found.")
