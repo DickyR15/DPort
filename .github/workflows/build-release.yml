@@ -131,7 +131,10 @@ jobs:
           python -m pip install lzfse==0.4.2
           $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
           $req = Get-Content requirements-build.txt -Raw
-          if ($req -notmatch '(?m)^\s*pymobiledevice3\s*==\s*([^\r\n#]+)\s*
+          if ($req -notmatch 'pymobiledevice3\s*==\s*([0-9]+(?:\.[0-9]+){2})') { throw 'Could not determine pymobiledevice3 pin from requirements-build.txt' }
+          $expected = $Matches[1]
+          if ($pm3 -ne $expected) { throw "Expected pymobiledevice3 $expected, got $pm3" }
+
       - name: Validate source
         shell: pwsh
         run: |
