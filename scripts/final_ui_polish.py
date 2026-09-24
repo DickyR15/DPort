@@ -1602,10 +1602,6 @@ header_v8_js = """
       document.body.classList.contains('dport-layout-ultrawide'));
   }
 
-  function normalizeVersionLabel(){
-    var el=document.getElementById('dport-pm3-status');
-    if(el) el.textContent='DPort：v6.9.0（最新）';
-  }
 
   function keepToastInHeader(toast){
     if(!ultra() || !toast) return;
@@ -1631,7 +1627,6 @@ header_v8_js = """
   }
 
   function boot(){
-    normalizeVersionLabel();
     enforceNotificationMode();
 
     var target=document.querySelector('.dport-hero-notifications');
@@ -1656,13 +1651,11 @@ header_v8_js = """
           });
         });
 
-        normalizeVersionLabel();
         enforceNotificationMode();
       });
       observer.observe(document.body,{childList:true,subtree:true});
     }
 
-    window.addEventListener('load',normalizeVersionLabel);
   }
 
   if(document.readyState==='loading'){
@@ -1686,9 +1679,9 @@ for pattern in (
     html = re.sub(pattern, "\n", html, flags=re.S)
 
 # Keep the status label exactly as requested.
-html = html.replace("DPort：檢查 GitHub 最新正式版…", "DPort：v6.9.0（最新）")
+html = html.replace("DPort：檢查 GitHub 最新正式版…", "")
 html = html.replace(
-    "el.textContent='DPort：'+current+'（GitHub 最新正式版）';",
+    "el.textContent='DPort：'+current+'（最新）';",
     "el.textContent='DPort：v6.9.0（最新）';"
 )
 
@@ -1697,6 +1690,9 @@ if "</body>" in html:
 else:
     html += header_v8_css + header_v8_js
 
+# Version label is intentionally blank at startup. The normal updater check
+# populates it; when the check reaches the latest state it becomes:
+# DPort：v6.9.0（最新）
 path.write_text(html, encoding="utf-8")
 
 print("DPort final UI polish v8 applied successfully.")
@@ -1704,3 +1700,4 @@ print("Header order: DPort logo -> GPX -> transient notification -> device conne
 print("Notification: Bootstrap toast only; no persistent notification card.")
 print("Device selector: widened to keep iPhone list readable.")
 print("GPX: compact typography and four readable information cells.")
+print("Version label: shown only after the update check reports the current release.")
