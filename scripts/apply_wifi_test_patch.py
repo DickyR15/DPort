@@ -82,7 +82,8 @@ clear_old = """        deviceDropdown.innerHTML = '';
         connectionDropdown.innerHTML = '';
 """
 clear_new = """        const previousOption = deviceDropdown.options[deviceDropdown.selectedIndex];
-        const previousKey = previousOption ? (previousOption.dataset.dportKey || '') : '';
+        const previousKey = deviceDropdown.dataset.dportPreferredKey ||
+            (previousOption ? (previousOption.dataset.dportKey || '') : '');
 
         deviceDropdown.innerHTML = '';
         connectionDropdown.innerHTML = '';
@@ -98,6 +99,11 @@ option_old = """                    option.value = JSON.stringify(deviceInfo);
 """
 option_new = """                    option.value = JSON.stringify(deviceInfo);
                     option.dataset.dportKey = optionKey;
+
+                    if (!deviceDropdown.dataset.dportPreferredKey &&
+                        connectionType === 'USB') {
+                        deviceDropdown.dataset.dportPreferredKey = optionKey;
+                    }
 
                     devicesInfo[udid] = devicesInfo[udid] || {};
 """
@@ -116,6 +122,7 @@ restore_new = """        if (requestSerial !== deviceListRequestSerial) return f
             });
             if (restoredIndex >= 0) {
                 deviceDropdown.selectedIndex = restoredIndex;
+                deviceDropdown.dataset.dportPreferredKey = previousKey;
             }
         }
 
