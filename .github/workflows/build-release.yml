@@ -1,4 +1,3 @@
-# DPort Build & Release workflow
 name: DPort Build & Release
 
 on:
@@ -133,7 +132,6 @@ jobs:
           $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
           $req = Get-Content requirements-build.txt -Raw
           if ($req -notmatch '(?m)^\s*pymobiledevice3\s*==\s*([^\r\n#]+)\s*
-
       - name: Validate source
         shell: pwsh
         run: |
@@ -229,7 +227,7 @@ jobs:
 
           Write-Host "Published DPort v$v to GitHub Releases."
 ) { throw 'Could not determine pymobiledevice3 pin from requirements-build.txt' }
-          $expected = $Matches[1]
+          $expected = $Matches[1].Trim()
           if ($pm3 -ne $expected) { throw "Expected pymobiledevice3 $expected, got $pm3" }
 
       - name: Validate source
