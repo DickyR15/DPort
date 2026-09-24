@@ -768,32 +768,33 @@ text=text.replace(
     'title="載入此最愛位置"',
 )
 
-path.write_text(text, encoding='utf-8')
-print("6.9.1 favorites/location polish applied.")
-print("- Reverse geocoding runs faster via parallel lookups.")
-print("- Favorite saving no longer waits for place-name recognition.")
-print("- Favorites show names only, six visible cards, with clearer DPort colors.")
-print("- Added one-click clear-all.")
 
-
-# ==================== DPort 6.9.1 unified action color / Favorite polish ====================
+# Final DPort 6.9.1 action styling. Scope everything to the intended controls so
+# no global button/theme rule can turn the interface white.
 text += r'''
 <style>
-/* All clear/delete actions use one DPort danger palette. */
-.dport-subtle-danger{
+/* All clear/delete actions: exactly the same DPort danger treatment. */
+#geoport-clear-coordinates,
+.geoport-recent-delete-selected,
+.geoport-recent-clear,
+.geoport-fav-clear-all,
+.geoport-fav-delete{
     background:#8f3b3b !important;
     border:1px solid #df9e9e !important;
     color:#ffffff !important;
     box-shadow:none !important;
 }
-.dport-subtle-danger:hover{
+#geoport-clear-coordinates:hover,
+.geoport-recent-delete-selected:hover,
+.geoport-recent-clear:hover,
+.geoport-fav-clear-all:hover,
+.geoport-fav-delete:hover{
     background:#9d4343 !important;
     border-color:#efb2b2 !important;
     color:#ffffff !important;
 }
 
-/* Favorite delete X: much smaller, same danger palette, and kept outside the
-   text area so it never covers the place name. */
+/* Favorite X: tiny and visually subordinate to the location name. */
 .geoport-fav-delete{
     position:absolute !important;
     top:50% !important;
@@ -808,26 +809,13 @@ text += r'''
     padding:0 !important;
     margin:0 !important;
     border-radius:5px !important;
-    background:#8f3b3b !important;
-    border:1px solid #df9e9e !important;
-    color:#ffffff !important;
     font-size:11px !important;
     line-height:15px !important;
     font-weight:700 !important;
-    box-shadow:none !important;
-    opacity:.92 !important;
     z-index:3 !important;
 }
-.geoport-fav-delete:hover{
-    background:#9d4343 !important;
-    border-color:#efb2b2 !important;
-    color:#ffffff !important;
-    opacity:1 !important;
-}
-
-/* Reserve only a small amount of horizontal space for the tiny X. */
 .geoport-fav-open{
-    padding-right:25px !important;
+    padding-right:24px !important;
 }
 .geoport-fav-name.long{
     font-size:14px !important;
@@ -844,52 +832,23 @@ text += r'''
     line-height:1.1 !important;
 }
 
-/* Clear-all is now simply「清除」and uses exactly the same palette. */
+/* The title action should read only「清除」. */
 .geoport-fav-clear-all{
     min-width:58px !important;
     min-height:34px !important;
     padding:5px 12px !important;
     border-radius:9px !important;
-    background:#8f3b3b !important;
-    border:1px solid #df9e9e !important;
-    color:#ffffff !important;
-    box-shadow:none !important;
 }
-.geoport-fav-clear-all:hover{
-    background:#9d4343 !important;
-    border-color:#efb2b2 !important;
-}
+
+/* Do not let the UI automation script mutate theme colors on unrelated
+   buttons. These four controls are styled directly above. */
 </style>
-
-<script>
-(function(){
-    function applyDPortDangerStyle(){
-        var labels = {'清除座標':1,'清除全部':1,'清除':1,'刪除':1};
-        document.querySelectorAll('button').forEach(function(btn){
-            var text = (btn.textContent || '').trim();
-            if(labels[text]){
-                btn.classList.add('dport-subtle-danger');
-            }
-        });
-
-        document.querySelectorAll('.geoport-fav-clear-all').forEach(function(btn){
-            btn.textContent='清除';
-            btn.title='一鍵清除全部我的最愛';
-        });
-    }
-
-    document.addEventListener('DOMContentLoaded', applyDPortDangerStyle);
-    window.addEventListener('load', applyDPortDangerStyle);
-
-    if(typeof MutationObserver !== 'undefined'){
-        var observer=new MutationObserver(function(){
-            applyDPortDangerStyle();
-        });
-        observer.observe(document.body,{childList:true,subtree:true});
-    }
-})();
-</script>
 '''
-
-# Final write: include the unified action/Favorite polish block above in the generated UI.
 path.write_text(text, encoding='utf-8')
+print("6.9.1 favorites/location polish applied.")
+print("- Reverse geocoding runs faster via parallel lookups.")
+print("- Favorite saving no longer waits for place-name recognition.")
+print("- Favorites show names only, six visible cards, with clearer DPort colors.")
+print("- Added one-click clear-all.")
+
+
