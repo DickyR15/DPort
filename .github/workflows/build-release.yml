@@ -59,6 +59,14 @@ jobs:
             if (Test-Path $p) { Copy-Item -LiteralPath $p -Destination . -Force }
           }
 
+          # Keep the known-good dependency baseline from 936fd96: build with pymobiledevice3 11.19.1.
+          $srcReq = Join-Path $sourceRoot 'requirements-build.txt'
+          if (-not (Test-Path $srcReq)) { throw "Source requirements file missing: $srcReq" }
+          $srcReqText = Get-Content -LiteralPath $srcReq -Raw
+          $srcReqText = $srcReqText -replace 'pymobiledevice3==11\.18\.0', 'pymobiledevice3==11.19.1'
+          if ($srcReqText -notmatch 'pymobiledevice3==11\.19\.1') { throw 'Failed to pin pymobiledevice3 11.19.1 in restored source.' }
+          Set-Content -LiteralPath $srcReq -Value $srcReqText -Encoding utf8
+
           $sourceSrc = Join-Path $sourceRoot 'src'
           if (Test-Path $sourceSrc) {
             if (Test-Path 'src') { Remove-Item 'src' -Recurse -Force }
