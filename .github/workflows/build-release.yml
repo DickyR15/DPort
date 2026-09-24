@@ -179,6 +179,14 @@ jobs:
         run: |
           python scripts/patch_sha_update_support.py
 
+      - name: Capture rendered source template for layout verification
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'src/templates/map.html')) { throw 'map.html missing after UI patching.' }
+          New-Item -ItemType Directory -Force -Path debug_layout | Out-Null
+          Copy-Item 'src/templates/map.html' 'debug_layout/map.html' -Force
+          Select-String -Path 'debug_layout/map.html' -Pattern '請先連接裝置|再進行模擬定位|geoport|dport-top-header|dport-map-status' -Context 2,3 | Out-File 'debug_layout/layout_matches.txt' -Encoding utf8
+
       - name: Validate source
         shell: pwsh
         run: |
