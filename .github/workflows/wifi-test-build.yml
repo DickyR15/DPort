@@ -49,6 +49,12 @@ jobs:
             src/templates/map.html
           retention-days: 7
 
+      - name: Apply Wi-Fi discovery patch
+        shell: pwsh
+        run: |
+          python scripts/apply_wifi_test_patch.py
+          python -m py_compile src/main.py
+
       - name: Verify Wi-Fi support in source
         shell: pwsh
         run: |
