@@ -14,6 +14,8 @@ for pattern in (
     r'\s*<script id="dport-map-status-overlay-script">.*?</script>\s*',
     r'\s*<style id="dport-top-header-layout-v[0-9]+">.*?</style>\s*',
     r'\s*<script id="dport-top-header-layout-script-v[0-9]+">.*?</script>\s*',
+    r'\s*<style id="dport-ultra-header-notification-v[0-9]+">.*?</style>\s*',
+    r'\s*<script id="dport-ultra-header-notification-v[0-9]+-script">.*?</script>\s*',
 ):
     html = re.sub(pattern, "\n", html, flags=re.S)
 
@@ -968,6 +970,341 @@ if "</body>" in html:
     html = html.replace("</body>", header_v4 + header_v4_js + "\n</body>", 1)
 else:
     html += header_v4 + header_v4_js
+
+
+# DPort UI FINAL v5 — sane ultra-wide header geometry.
+# Final order: Brand → GPX → compact Notification → wider Device Connection → Exit.
+header_v5_css = """
+<style id="dport-ultra-header-layout-v5">
+@media (min-width:1400px){
+  body.dport-layout-ultrawide .dport-hero{
+    display:grid !important;
+    grid-template-columns:
+      minmax(210px,260px)
+      minmax(320px,1fr)
+      minmax(260px,300px)
+      minmax(400px,440px)
+      max-content !important;
+    align-items:center !important;
+    column-gap:10px !important;
+    row-gap:0 !important;
+    padding:12px 18px !important;
+  }
+
+  body.dport-layout-ultrawide .dport-brand{
+    grid-column:1 !important;
+    grid-row:1 !important;
+    min-width:0 !important;
+    width:auto !important;
+    max-width:100% !important;
+  }
+
+  body.dport-layout-ultrawide .dport-header-center{
+    display:contents !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot{
+    display:block !important;
+    grid-column:2 !important;
+    grid-row:1 !important;
+    min-width:0 !important;
+    width:100% !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  /* Notification occupies its own real grid column. It is no longer fixed,
+     so it can never overlap the device connection panel. */
+  body.dport-layout-ultrawide .dport-hero-notifications{
+    display:block !important;
+    grid-column:3 !important;
+    grid-row:1 !important;
+    align-self:center !important;
+    justify-self:stretch !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+    order:initial !important;
+    z-index:20 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-notifications .toast{
+    display:block !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    margin:0 !important;
+    border-radius:9px !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  /* Keep the notification compact: one header line + one message line. */
+  body.dport-layout-ultrawide .dport-hero-notifications .toast-header{
+    min-height:28px !important;
+    height:28px !important;
+    padding:3px 8px !important;
+    font-size:11px !important;
+    line-height:1 !important;
+    box-sizing:border-box !important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-notifications .toast-body{
+    height:31px !important;
+    min-height:31px !important;
+    max-height:31px !important;
+    padding:6px 9px !important;
+    font-size:12px !important;
+    line-height:19px !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+    box-sizing:border-box !important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-notifications .toast-body *{
+    display:block !important;
+    max-width:100% !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+  }
+
+  /* Give the actual device selector enough width to show the device name. */
+  body.dport-layout-ultrawide .dport-ultra-device-slot{
+    display:block !important;
+    grid-column:4 !important;
+    grid-row:1 !important;
+    min-width:0 !important;
+    width:100% !important;
+    margin:0 !important;
+    padding:0 !important;
+    box-sizing:border-box !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    margin:0 !important;
+    padding:8px 9px !important;
+    box-sizing:border-box !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-title{
+    margin-bottom:5px !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-mini-title{
+    font-size:12px !important;
+    line-height:1 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body{
+    display:flex !important;
+    align-items:center !important;
+    gap:7px !important;
+    width:100% !important;
+    min-width:0 !important;
+    margin:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body > form{
+    flex:1 1 auto !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3,
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row{
+    width:100% !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row{
+    display:flex !important;
+    align-items:center !important;
+    flex-wrap:nowrap !important;
+    gap:7px !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row > .col{
+    flex:1 1 auto !important;
+    min-width:0 !important;
+    width:auto !important;
+    padding:0 !important;
+    margin:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot #device{
+    display:block !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    height:40px !important;
+    min-height:40px !important;
+    margin:0 !important;
+    padding:6px 27px 6px 10px !important;
+    box-sizing:border-box !important;
+    font-size:13px !important;
+    font-weight:800 !important;
+    line-height:1.1 !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row > .col-auto{
+    flex:0 0 88px !important;
+    width:88px !important;
+    min-width:88px !important;
+    max-width:88px !important;
+    padding:0 !important;
+    margin:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot #refresh-device{
+    width:88px !important;
+    min-width:88px !important;
+    max-width:88px !important;
+    height:40px !important;
+    min-height:40px !important;
+    margin:0 !important;
+    padding:6px 4px !important;
+    box-sizing:border-box !important;
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    text-align:center !important;
+    font-size:12px !important;
+    font-weight:850 !important;
+    line-height:1 !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot #connect,
+  body.dport-layout-ultrawide .dport-ultra-device-slot #disconnect{
+    flex:0 0 84px !important;
+    width:84px !important;
+    min-width:84px !important;
+    max-width:84px !important;
+    height:40px !important;
+    min-height:40px !important;
+    margin:0 !important;
+    padding:6px 7px !important;
+    font-size:12px !important;
+    white-space:nowrap !important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-actions{
+    display:flex !important;
+    grid-column:5 !important;
+    grid-row:1 !important;
+    align-self:center !important;
+    justify-self:end !important;
+    width:auto !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    order:initial !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-notification-slot{
+    display:none !important;
+    width:0 !important;
+    height:0 !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+  }
+}
+
+@media (min-width:1800px){
+  body.dport-layout-ultrawide .dport-hero{
+    grid-template-columns:
+      minmax(230px,270px)
+      minmax(420px,1fr)
+      minmax(290px,320px)
+      minmax(450px,480px)
+      max-content !important;
+  }
+}
+
+@media (min-width:2400px){
+  body.dport-layout-ultrawide .dport-hero{
+    grid-template-columns:
+      minmax(250px,290px)
+      minmax(560px,1fr)
+      minmax(310px,340px)
+      minmax(480px,510px)
+      max-content !important;
+  }
+}
+</style>
+"""
+
+header_v5_js = """
+<script id="dport-ultra-header-layout-v5-script">
+(function(){
+  function isUltra(){
+    return !!(document.body &&
+      document.body.classList.contains('dport-layout-ultrawide'));
+  }
+
+  function target(){
+    return document.querySelector('.dport-hero-notifications');
+  }
+
+  function slot(){
+    return document.getElementById('dport-ultra-notification-slot');
+  }
+
+  function moveToast(toast){
+    if(!toast || !isUltra()) return;
+    var t=target();
+    if(!t) return;
+    if(toast.parentElement!==t) t.appendChild(toast);
+  }
+
+  function scan(){
+    if(!isUltra()) return;
+    var s=slot();
+    if(!s) return;
+    Array.prototype.slice.call(s.querySelectorAll('.toast')).forEach(moveToast);
+  }
+
+  function boot(){
+    scan();
+    if(window.MutationObserver){
+      var obs=new MutationObserver(scan);
+      obs.observe(document.body,{childList:true,subtree:true});
+    }
+    window.addEventListener('load',scan);
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',boot,{once:true});
+  }else{
+    boot();
+  }
+})();
+</script>
+"""
+
+if "</body>" in html:
+    html = html.replace("</body>", header_v5_css + header_v5_js + "\n</body>", 1)
+else:
+    html += header_v5_css + header_v5_js
 
 path.write_text(html, encoding="utf-8")
 
