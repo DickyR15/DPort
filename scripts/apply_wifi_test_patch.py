@@ -14,7 +14,7 @@ ui = map_file.read_text(encoding="utf-8")
 
 # ---------- Python backend: enable Wi-Fi and list Wi-Fi devices ----------
 state_pattern = re.compile(
-    r'''(?m)^(\s*)try:\s*\n\1    info\[\"wifiState\"\]\s*=\s*await client\.get_enable_wifi_connections\(\)\s*\n\1except Exception:\s*\n\1    info\[\"wifiState\"\]\s*=\s*False\s*$'''
+    r'''(?m)^(\s*)try:\s*\n\1    info\["wifiState"\]\s*=\s*await client\.get_enable_wifi_connections\(\)\s*\n\1except Exception:\s*\n\1    info\["wifiState"\]\s*=\s*False\s*$'''
 )
 state_repl = r'''\1try:
 \1    info["wifiState"] = await client.get_enable_wifi_connections()
@@ -31,13 +31,32 @@ src, state_hits = state_pattern.subn(state_repl, src, count=0)
 disabled_pattern = re.compile(
     r'''(?m)^(\s*)# USB-ONLY: Wi-Fi / Network discovery intentionally disabled\.\s*\n\1logger\.info\("USB-ONLY mode: Wi-Fi/Bonjour/mDNS/RemotePairing discovery skipped"\)\s*$'''
 )
-network_repl = r'''\1# Discover paired iPhones through Apple's normal mobdev2 Bonjour service.
-\1# pymobiledevice3 11.18.0 matches Windows pairing records to _apple-mobdev2._tcp.
+network_repl = r'''\1# Diagnostic + paired discovery for Apple's normal mobdev2 Wi-Fi path.
+\1# First browse raw Bonjour so we can distinguish "no mDNS advert" from
+\1# "advertisement received but no matching Windows pairing record".
+\1try:
+\1    adverts = asyncio.run(browse_mobdev2(timeout=min(float(timeout), 4.0)))
+\1    logger.info(f"RAW mobdev2 Bonjour adverts: {len(adverts)}")
+\1    for advert in adverts:
+\1        try:
+\1            addresses = [getattr(a, "full_ip", str(a)) for a in getattr(advert, "addresses", [])]
+\1            logger.info(
+\1                "mobdev2 advert: "
+\1                f"instance={getattr(advert, 'instance', None)!r}, "
+\1                f"port={getattr(advert, 'port', None)}, "
+\1                f"addresses={addresses}, "
+\1                f"properties={getattr(advert, 'properties', {})}"
+\1            )
+\1        except Exception as exc:
+\1            logger.warning(f"mobdev2 advert logging failed: {exc}")
+\1except Exception as exc:
+\1    logger.warning(f"RAW mobdev2 Bonjour browse failed: {exc}")
+\1
 \1try:
 \1    network_count = 0
 \1    async for ip, network_lockdown in get_mobdev2_lockdowns(
 \1        udid=None,
-\1        \1        only_paired=True,
+\1        only_paired=True,
 \1        timeout=min(float(timeout), 5.0),
 \1    ):
 \1        try:
@@ -54,13 +73,11 @@ network_repl = r'''\1# Discover paired iPhones through Apple's normal mobdev2 Bo
 \1            info["wifiAddress"] = str(ip)
 \1            info["wifiPort"] = 62078
 \1            info["wifiState"] = True
-\1            try:
-\1                info["userLocale"] = get_user_country()
-\1            except Exception:
-\1                info["userLocale"] = None
 \1            add_device(network_udid, "Network", info)
 \1            network_count += 1
-\1            logger.info(f"Wi-Fi mobdev2 device found: udid={network_udid}, ip={ip}")
+\1            logger.info(
+\1                f"Wi-Fi mobdev2 paired device found: udid={network_udid}, ip={ip}"
+\1            )
 \1        except Exception as exc:
 \1            logger.warning(f"Wi-Fi device metadata failed: {exc}")
 \1        finally:
@@ -68,14 +85,18 @@ network_repl = r'''\1# Discover paired iPhones through Apple's normal mobdev2 Bo
 \1                await network_lockdown.close()
 \1            except Exception:
 \1                pass
-\1    logger.info(f"Wi-Fi mobdev2 discovery completed: {network_count} paired device(s)")
+\1    logger.info(f"Wi-Fi mobdev2 paired discovery completed: {network_count} device(s)")
 \1except Exception as exc:
-\1    logger.warning(f"Wi-Fi mobdev2 discovery failed: {exc}")'''
+\1    logger.warning(f"Wi-Fi mobdev2 paired discovery failed: {exc}")'''
 src, network_hits = disabled_pattern.subn(network_repl, src, count=0)
 
 if network_hits == 0:
-    raise SystemExit("The /list_devices USB-only Wi-Fi block was not found in src/main.py")
+    raise SystemExit("The /list_devices Wi-Fi disabled block was not found in src/main.py")
 
+# Ensure all mobdev2 calls use pymobiledevice3's automatic host pair-record sources.
+src = src.replace("pair_records=get_home_folder(),\n", "")
+
+# ---------- UI ----------
 # ---------- UI: explicit connection-state refresh behavior ----------
 legacy_refresh = re.compile(
     r'''\s*<script>\s*\(function\(\)\{\s*
