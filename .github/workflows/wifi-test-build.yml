@@ -58,11 +58,11 @@ jobs:
       - name: Verify Wi-Fi listing patch
         shell: pwsh
         run: |
-          $main = Get-Content 'srcmain.py' -Raw
+          $main = Get-Content 'src/main.py' -Raw
           $old = 'USB-ONLY: Wi-Fi / Network discovery intentionally disabled'
           if ($main.Contains($old)) { throw 'Wi-Fi listing is still disabled in /list_devices.' }
           if (-not $main.Contains('get_mobdev2_lockdowns(')) { throw 'mobdev2 Wi-Fi discovery is missing.' }
-          if (-not $main.Contains('ConnectionType" = "Network') -and -not $main.Contains('ConnectionType"] = "Network')) {
+          if (-not ($main.Contains('info["ConnectionType"] = "Network"') -or $main.Contains('info["ConnectionType"] = ''Network'''))) {
             throw 'Network connection metadata is missing.'
           }
           Write-Host 'PASS: /list_devices includes mobdev2 Wi-Fi discovery.'
