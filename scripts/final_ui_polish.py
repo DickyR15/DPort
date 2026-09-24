@@ -1744,6 +1744,480 @@ if "</body>" in html:
 else:
     html += header_v6_css + header_v6_js
 
+
+# DPort UI FINAL v7 — deterministic desktop header.
+# Exact visual order:
+#   DPort logo/brand -> GPX playback -> notification -> device connection -> Exit
+#
+# This pass deliberately uses a single grid on the REAL .dport-hero DOM.
+# It does not depend on position:fixed or moving the notification to the map.
+header_v7_css = """
+<style id="dport-ultra-header-layout-v7">
+@media (min-width:1400px){
+  body.dport-layout-ultrawide .dport-hero{
+    display:grid !important;
+    grid-template-columns:
+      235px
+      minmax(480px,1fr)
+      270px
+      minmax(450px,500px)
+      70px !important;
+    align-items:center !important;
+    column-gap:12px !important;
+    row-gap:0 !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    padding:10px 14px !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+  }
+
+  body.dport-layout-ultrawide .dport-brand{
+    grid-column:1 !important;
+    grid-row:1 !important;
+    width:235px !important;
+    min-width:235px !important;
+    max-width:235px !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  body.dport-layout-ultrawide .dport-brand-icon{
+    flex:0 0 auto !important;
+  }
+
+  body.dport-layout-ultrawide .dport-brand-text{
+    min-width:0 !important;
+    max-width:100% !important;
+    overflow:hidden !important;
+  }
+
+  body.dport-layout-ultrawide .dport-title,
+  body.dport-layout-ultrawide .dport-subtitle,
+  body.dport-layout-ultrawide .dport-caption,
+  body.dport-layout-ultrawide #dport-pm3-status{
+    min-width:0 !important;
+    max-width:100% !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+  }
+
+  body.dport-layout-ultrawide .dport-header-center{
+    display:contents !important;
+    min-width:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-standard-device-slot{
+    display:none !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot{
+    grid-column:2 !important;
+    grid-row:1 !important;
+    display:block !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    margin:0 !important;
+    padding:7px 9px !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot,
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot *{
+    min-width:0 !important;
+  }
+
+  /* Persistent notification slot: always visible, always between GPX and device. */
+  body.dport-layout-ultrawide .dport-hero-notifications{
+    grid-column:3 !important;
+    grid-row:1 !important;
+    display:block !important;
+    position:static !important;
+    width:270px !important;
+    min-width:270px !important;
+    max-width:270px !important;
+    height:58px !important;
+    min-height:58px !important;
+    max-height:58px !important;
+    margin:0 !important;
+    padding:0 !important;
+    align-self:center !important;
+    justify-self:stretch !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+    z-index:20 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-persistent-notification{
+    display:grid !important;
+    grid-template-rows:24px 34px !important;
+    width:100% !important;
+    height:58px !important;
+    min-height:58px !important;
+    max-height:58px !important;
+    margin:0 !important;
+    padding:0 !important;
+    border:1px solid #596576 !important;
+    border-radius:9px !important;
+    overflow:hidden !important;
+    background:#252d37 !important;
+    color:#fff !important;
+    box-sizing:border-box !important;
+    box-shadow:0 7px 16px rgba(0,0,0,.22) !important;
+  }
+
+  body.dport-layout-ultrawide .dport-persistent-notification .dport-persistent-header{
+    display:flex !important;
+    align-items:center !important;
+    justify-content:space-between !important;
+    min-width:0 !important;
+    height:24px !important;
+    padding:3px 7px !important;
+    background:#3d4653 !important;
+    border-bottom:1px solid #566171 !important;
+    font-size:11px !important;
+    font-weight:800 !important;
+    line-height:18px !important;
+    box-sizing:border-box !important;
+  }
+
+  body.dport-layout-ultrawide .dport-persistent-notification .dport-persistent-body{
+    display:block !important;
+    width:100% !important;
+    height:34px !important;
+    min-height:34px !important;
+    max-height:34px !important;
+    padding:6px 8px !important;
+    margin:0 !important;
+    font-size:12px !important;
+    font-weight:700 !important;
+    line-height:22px !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+    box-sizing:border-box !important;
+  }
+
+  /* Hide transient Bootstrap toasts. Their text is copied into the persistent bar. */
+  body.dport-layout-ultrawide .dport-hero-notifications > .toast{
+    display:none !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot{
+    grid-column:4 !important;
+    grid-row:1 !important;
+    display:block !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{
+    display:block !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    margin:0 !important;
+    padding:7px 9px !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body{
+    display:flex !important;
+    flex-direction:row !important;
+    align-items:center !important;
+    flex-wrap:nowrap !important;
+    gap:7px !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form{
+    flex:1 1 auto !important;
+    min-width:0 !important;
+    max-width:none !important;
+    width:auto !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3{
+    width:100% !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row{
+    display:flex !important;
+    align-items:center !important;
+    flex-wrap:nowrap !important;
+    gap:7px !important;
+    width:100% !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row > .col{
+    flex:1 1 auto !important;
+    width:auto !important;
+    min-width:0 !important;
+    max-width:none !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot #device{
+    display:block !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    height:40px !important;
+    min-height:40px !important;
+    box-sizing:border-box !important;
+    padding:6px 30px 6px 10px !important;
+    font-size:13px !important;
+    font-weight:800 !important;
+    line-height:1.2 !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row > .col-auto{
+    flex:0 0 92px !important;
+    width:92px !important;
+    min-width:92px !important;
+    max-width:92px !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot #refresh-device{
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    width:92px !important;
+    min-width:92px !important;
+    max-width:92px !important;
+    height:40px !important;
+    min-height:40px !important;
+    padding:5px 4px !important;
+    margin:0 !important;
+    font-size:12px !important;
+    white-space:nowrap !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot #connect,
+  body.dport-layout-ultrawide .dport-ultra-device-slot #disconnect{
+    flex:0 0 88px !important;
+    width:88px !important;
+    min-width:88px !important;
+    max-width:88px !important;
+    height:40px !important;
+    min-height:40px !important;
+    margin:0 !important;
+    padding:5px 6px !important;
+    font-size:12px !important;
+    white-space:nowrap !important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-actions{
+    grid-column:5 !important;
+    grid-row:1 !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:flex-end !important;
+    justify-self:end !important;
+    width:70px !important;
+    min-width:70px !important;
+    max-width:70px !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+}
+
+@media (min-width:2400px){
+  body.dport-layout-ultrawide .dport-hero{
+    grid-template-columns:
+      250px
+      minmax(600px,1fr)
+      300px
+      minmax(500px,560px)
+      74px !important;
+    column-gap:14px !important;
+  }
+  body.dport-layout-ultrawide .dport-brand{
+    width:250px !important;
+    min-width:250px !important;
+    max-width:250px !important;
+  }
+  body.dport-layout-ultrawide .dport-hero-notifications{
+    width:300px !important;
+    min-width:300px !important;
+    max-width:300px !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot #refresh-device{
+    width:96px !important;
+    min-width:96px !important;
+    max-width:96px !important;
+  }
+}
+
+@media (max-width:1399px){
+  body.dport-layout-ultrawide .dport-hero{
+    display:flex !important;
+    align-items:center !important;
+    flex-wrap:wrap !important;
+    gap:10px !important;
+  }
+  body.dport-layout-ultrawide .dport-brand{
+    flex:0 0 100% !important;
+    width:auto !important;
+    min-width:0 !important;
+    max-width:100% !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot,
+  body.dport-layout-ultrawide .dport-ultra-device-slot,
+  body.dport-layout-ultrawide .dport-hero-notifications{
+    flex:1 1 100% !important;
+    min-width:0 !important;
+    width:100% !important;
+    max-width:100% !important;
+  }
+}
+</style>
+"""
+
+header_v7_js = """
+<script id="dport-ultra-header-layout-v7-script">
+(function(){
+  function isUltra(){
+    return !!(document.body &&
+      document.body.classList.contains('dport-layout-ultrawide'));
+  }
+
+  function ensureNotice(){
+    var hero=document.querySelector('.dport-hero');
+    var slot=document.querySelector('.dport-hero-notifications');
+    if(!hero || !slot || !isUltra()) return null;
+
+    var card=document.getElementById('dport-persistent-notification');
+    if(!card){
+      card=document.createElement('div');
+      card.id='dport-persistent-notification';
+      card.className='dport-persistent-notification';
+      card.innerHTML=
+        '<div class="dport-persistent-header">' +
+          '<strong>DPort</strong>' +
+          '<small>狀態</small>' +
+        '</div>' +
+        '<div class="dport-persistent-body">目前尚未連接裝置。請先連接裝置，再進行模擬定位。</div>';
+      slot.insertBefore(card,slot.firstChild);
+    }
+
+    return {
+      slot:slot,
+      card:card,
+      body:card.querySelector('.dport-persistent-body'),
+      small:card.querySelector('.dport-persistent-header small')
+    };
+  }
+
+  function setNotice(message){
+    var n=ensureNotice();
+    if(!n || !n.body) return;
+    var text=String(message==null ? '' : message)
+      .replace(/\\s+/g,' ')
+      .trim();
+    if(!text) return;
+    n.body.textContent=text;
+    if(n.small) n.small.textContent='剛剛';
+  }
+
+  function wrapDisplayToast(){
+    if(typeof window.displayToast!=='function') return;
+    var original=window.displayToast;
+    if(original.__dportPersistentV7) return;
+
+    var wrapped=function(message){
+      ensureNotice();
+      var result=original.apply(this,arguments);
+
+      /* Read the translated text from the real Bootstrap toast, then
+         immediately mirror it into the persistent header notification. */
+      setTimeout(function(){
+        var slot=document.querySelector('.dport-hero-notifications');
+        if(!slot) return;
+        var toasts=slot.querySelectorAll('.toast');
+        var latest=toasts[toasts.length-1];
+        if(latest){
+          var body=latest.querySelector('.toast-body');
+          if(body){
+            setNotice(body.textContent || message);
+          }
+        }else{
+          setNotice(message);
+        }
+      },0);
+
+      return result;
+    };
+
+    wrapped.__dportPersistentV7=true;
+    window.displayToast=wrapped;
+  }
+
+  function boot(){
+    if(!isUltra()) return;
+    ensureNotice();
+    wrapDisplayToast();
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',boot,{once:true});
+  }else{
+    boot();
+  }
+
+  [150,500,1000,2000].forEach(function(ms){
+    setTimeout(boot,ms);
+  });
+})();
+</script>
+"""
+
+if "</body>" in html:
+    html = html.replace("</body>", header_v7_css + header_v7_js + "\n</body>", 1)
+else:
+    html += header_v7_css + header_v7_js
+
 path.write_text(html, encoding="utf-8")
 
 print("DPort final UI polish v8 applied successfully.")
