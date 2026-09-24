@@ -22,6 +22,73 @@ html = re.sub(
 )
 
 block = r'''
+<style id="dport-favorite-x-final-position">
+/* Highest-specificity override: the delete chip is anchored INSIDE each
+   favorite card, in its upper-right corner. */
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete{
+    position:absolute !important;
+    inset:auto 6px auto auto !important;
+    top:6px !important;
+    right:6px !important;
+    bottom:auto !important;
+    left:auto !important;
+    width:10px !important;
+    min-width:10px !important;
+    max-width:10px !important;
+    height:10px !important;
+    min-height:10px !important;
+    max-height:10px !important;
+    padding:0 !important;
+    margin:0 !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    box-sizing:border-box !important;
+    border:1px solid rgba(226,157,157,.62) !important;
+    border-radius:3px !important;
+    background:rgba(154,68,68,.38) !important;
+    color:#ffe9e9 !important;
+    font-size:0 !important;
+    line-height:0 !important;
+    overflow:hidden !important;
+    z-index:50 !important;
+    transform:none !important;
+    opacity:.9 !important;
+    box-shadow:none !important;
+}
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete::after{
+    content:'×' !important;
+    display:block !important;
+    font-size:8px !important;
+    line-height:8px !important;
+    font-weight:800 !important;
+    color:#ffe9e9 !important;
+}
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover{
+    background:rgba(174,78,78,.56) !important;
+    border-color:rgba(239,178,178,.82) !important;
+    color:#ffffff !important;
+    transform:scale(1.08) !important;
+    opacity:1 !important;
+}
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover::after{
+    color:#ffffff !important;
+}
+
+/* The favorite title/clear button remains compact and uses the same visual
+   family as the other destructive controls. */
+html body .geoport-fav-clear-all{
+    background:rgba(154,68,68,.42) !important;
+    border:1px solid rgba(226,157,157,.70) !important;
+    color:#ffe9e9 !important;
+}
+html body .geoport-fav-clear-all:hover{
+    background:rgba(174,78,78,.58) !important;
+    border-color:rgba(239,178,178,.82) !important;
+    color:#ffffff !important;
+}
+</style>
+
 <style id="dport-final-ui-polish-v3">
 :root{
     --dport-bg:#1f2632;
