@@ -66,6 +66,10 @@ DPort 是一個以 Windows 為主要使用環境的 iPhone 裝置工具，提供
 
 [`requirements-build.txt`](requirements-build.txt)
 
+第三方授權與 GPL / LGPL 注意事項：
+
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
+
 自動建置說明：
 
 [`GITHUB_AUTO_BUILD.md`](GITHUB_AUTO_BUILD.md)
