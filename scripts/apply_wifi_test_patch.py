@@ -121,30 +121,103 @@ main.write_text(text, encoding="utf-8")
 map_file = Path("src/templates/map.html")
 map_text = map_file.read_text(encoding="utf-8")
 
-refresh_guard_pattern = r'(?s)(async function dportRefreshDeviceList\(\)\s*\{\s*)if\s*\(typeof isDeviceConnected[^}]+\}\s*'
-map_text = re.sub(refresh_guard_pattern, r'\1', map_text)
+# Remove stale connected-state guards from every copy of manual refresh.
+map_text = re.sub(
+    r'(?s)(async function dportRefreshDeviceList\(\)\s*\{\s*)'
+    r'if\s*\(typeof isDeviceConnected\s*!==\s*[\'"]undefined[\'"]\s*&&\s*isDeviceConnected\)\s*\{.*?\}\s*',
+    r'\1',
+    map_text,
+    count=0,
+)
 
-sync_pattern = r'''const connected=\(typeof isDeviceConnected!=='undefined' && isDeviceConnected===true\);\s*if\(connected\)\{\s*button\.disabled=true;\s*if\(button\.textContent!=='↻ 重新整理' && button\.textContent!=='↻ 讀取中…'\)\{\s*button\.textContent='↻ 重新整理';\s*\}\s*\}'''
-sync_replacement = """const refreshing=(typeof deviceListManualRefreshInFlight!=='undefined' && deviceListManualRefreshInFlight===true);
+# Normalize every historical refresh-button synchronizer.
+sync_pattern = re.compile(
+    r"""const\s+connected\s*=\s*\(typeof\s+isDeviceConnected\s*!==\s*'undefined'\s*&&\s*isDeviceConnected\s*===\s*true\)\s*;\s*
+if\s*\(\s*connected\s*\)\s*\{\s*
+button\.disabled\s*=\s*true\s*;\s*
+if\s*\(\s*button\.textContent\s*!==\s*'↻ 重新整理'\s*&&\s*button\.textContent\s*!==\s*'↻ 讀取中…'\s*\)\s*\{\s*
+button\.textContent\s*=\s*'↻ 重新整理'\s*;\s*
+\}\s*
+\}""",
+    re.S,
+)
+map_text = sync_pattern.sub(
+    """const refreshing=(typeof deviceListManualRefreshInFlight!=='undefined' && deviceListManualRefreshInFlight===true);
         button.disabled=refreshing;
         if(!refreshing && button.textContent!=='↻ 重新整理' && button.textContent!=='↻ 讀取中…'){
             button.textContent='↻ 重新整理';
-        }"""
-map_text = re.sub(sync_pattern, sync_replacement, map_text)
+        }""",
+    map_text,
+)
 
-# Fix the finally block of the manual refresh routine.
 map_text = re.sub(
-    r'button\.disabled\s*=\s*\(typeof isDeviceConnected[^;]+;',
+    r'button\.disabled\s*=\s*\(\s*typeof\s+isDeviceConnected[^;]+;',
     'button.disabled = false;',
     map_text,
 )
 
-# Keep the button usable after any connection state change; it is disabled only
-# while a manual refresh request is actively executing.
 map_text = map_text.replace(
     'title="重新讀取 USB 裝置清單"',
     'title="重新讀取 USB / Wi-Fi 裝置清單"',
 )
 
+# Authoritative final synchronizer: actual /usb_presence decides whether a
+# physically present USB-connected device should lock Refresh. If USB is gone,
+# Refresh is always enabled even if isDeviceConnected is stale.
+map_text = re.sub(
+    r'(?s)\s*<script id="dport-refresh-authoritative-state">.*?</script>\s*',
+    '\n',
+    map_text,
+)
+map_text += r'''
+<script id="dport-refresh-authoritative-state">
+(function(){
+    var refreshStateBusy = false;
+
+    async function syncRefreshFromPhysicalUsb(){
+        var button = document.getElementById('refresh-device');
+        if (!button || refreshStateBusy) return;
+
+        var manualBusy = (
+            typeof deviceListManualRefreshInFlight !== 'undefined' &&
+            deviceListManualRefreshInFlight === true
+        );
+        if (manualBusy) {
+            button.disabled = true;
+            return;
+        }
+
+        refreshStateBusy = true;
+        try {
+            var response = await fetch('/usb_presence?_=' + Date.now(), {
+                cache: 'no-store'
+            });
+            var payload = response && response.ok ? await response.json() : null;
+            var devices = payload && Array.isArray(payload.devices) ? payload.devices : [];
+            var usbPresent = devices.some(function(device){
+                return String(device && device.ConnectionType || 'USB').toUpperCase() === 'USB';
+            });
+
+            button.disabled = usbPresent &&
+                (typeof isDeviceConnected !== 'undefined' &&
+                 isDeviceConnected === true);
+        } catch (e) {
+            button.disabled = false;
+        } finally {
+            refreshStateBusy = false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function(){
+        syncRefreshFromPhysicalUsb();
+        setInterval(syncRefreshFromPhysicalUsb, 1200);
+    });
+
+    window.addEventListener('load', syncRefreshFromPhysicalUsb);
+})();
+</script>
+'''
 map_file.write_text(map_text, encoding="utf-8")
 
+# Keep the patch idempotent.
+print("Wi-Fi/USB refresh state normalized.")
