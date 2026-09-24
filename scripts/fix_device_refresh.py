@@ -8,53 +8,48 @@ if not path.exists():
 text = path.read_text(encoding="utf-8")
 original = text
 
-# Remove the old connected-state guard from the manual refresh function.
-text, guard_hits = re.subn(
-    r'(?s)(async function dportRefreshDeviceList\(\)\s*\{\s*)'
-    r'if\s*\(typeof isDeviceConnected\s*!==\s*[\'"]undefined[\'"]\s*&&\s*isDeviceConnected\)\s*\{.*?\}\s*',
-    r'\1',
-    text,
-    count=0,
+# Remove every historical sync script that blindly disables Refresh whenever
+# isDeviceConnected is stale.
+legacy_script_pattern = re.compile(
+    r'''\s*<script>\s*\(function\(\)\{\s*
+        function\s+syncDeviceRefreshButton\(\)\s*\{.*?
+        document\.addEventListener\(['"]DOMContentLoaded['"],function\(\)\{\s*
+        syncDeviceRefreshButton\(\);\s*
+        setInterval\(syncDeviceRefreshButton,500\);\s*
+        \}\);\s*
+        \}\)\(\);\s*</script>''',
+    re.S | re.X,
 )
+text, legacy_count = legacy_script_pattern.subn("\n", text)
 
-# Normalize every historical refresh-button synchronizer.
-sync_pattern = re.compile(
-    r"""const\s+connected\s*=\s*\(typeof\s+isDeviceConnected\s*!==\s*'undefined'\s*&&\s*isDeviceConnected\s*===\s*true\)\s*;\s*
-if\s*\(\s*connected\s*\)\s*\{\s*
-button\.disabled\s*=\s*true\s*;\s*
-if\s*\(\s*button\.textContent\s*!==\s*'↻ 重新整理'\s*&&\s*button\.textContent\s*!==\s*'↻ 讀取中…'\s*\)\s*\{\s*
-button\.textContent\s*=\s*'↻ 重新整理'\s*;\s*
-\}\s*
-\}""",
-    re.S,
+# Remove stale connection-state guards from every manual refresh function.
+guard_pattern = re.compile(
+    r'''(?s)(async function dportRefreshDeviceList\(\)\s*\{\s*)'''
+    r'''if\s*\(typeof\s+isDeviceConnected\s*!==\s*['"]undefined['"]\s*&&\s*isDeviceConnected\)\s*\{.*?\}\s*'''
 )
-sync_replacement = """const refreshing=(typeof deviceListManualRefreshInFlight!=='undefined' && deviceListManualRefreshInFlight===true);
-        button.disabled=refreshing;
-        if(!refreshing && button.textContent!=='↻ 重新整理' && button.textContent!=='↻ 讀取中…'){
-            button.textContent='↻ 重新整理';
-        }"""
-text, sync_hits = sync_pattern.subn(sync_replacement, text)
+text, guard_count = guard_pattern.subn(r'\1', text)
 
-# Never leave the button disabled in the manual-refresh finally block.
-text, final_hits = re.subn(
-    r'button\.disabled\s*=\s*\(\s*typeof\s+isDeviceConnected[^;]+;',
+# Never set Refresh.disabled from isDeviceConnected inside refresh cleanup.
+text, final_count = re.subn(
+    r'''button\.disabled\s*=\s*\(\s*typeof\s+isDeviceConnected.*?;''',
     'button.disabled = false;',
     text,
 )
 
-text = text.replace(
-    'title="重新讀取 USB 裝置清單"',
-    'title="重新讀取 USB / Wi-Fi 裝置清單"',
+# Add one authoritative synchronizer.
+text = re.sub(
+    r'''\s*<script id="dport-refresh-authoritative-state">.*?</script>\s*''',
+    "\n",
+    text,
+    flags=re.S,
 )
 
-# Authoritative final synchronizer: physical USB presence is the source of truth.
-# This defeats stale isDeviceConnected state after a cable removal.
-guard = r'''
+authoritative = r'''
 <script id="dport-refresh-authoritative-state">
 (function(){
     var refreshStateBusy = false;
 
-    async function syncRefreshFromPhysicalUsb(){
+    async function syncRefreshButton(){
         var button = document.getElementById('refresh-device');
         if (!button || refreshStateBusy) return;
 
@@ -74,17 +69,24 @@ guard = r'''
             });
             var payload = response && response.ok ? await response.json() : null;
             var devices = payload && Array.isArray(payload.devices) ? payload.devices : [];
+
             var usbPresent = devices.some(function(device){
-                return String(device && device.ConnectionType || 'USB').toUpperCase() === 'USB';
+                return String((device && device.ConnectionType) || 'USB').toUpperCase() === 'USB';
             });
 
-            // USB physically present + app connected => disable.
-            // USB absent (including Wi-Fi-only) => enable.
-            button.disabled = usbPresent &&
-                (typeof isDeviceConnected !== 'undefined' &&
-                 isDeviceConnected === true);
+            var connected = (
+                typeof isDeviceConnected !== 'undefined' &&
+                isDeviceConnected === true
+            );
+
+            // Connected through USB: disabled.
+            // USB removed or Wi-Fi-only: enabled, even if the old JS connection
+            // flag is stale.
+            button.disabled = usbPresent && connected;
+            button.removeAttribute('aria-disabled');
         } catch (e) {
-            // A failed lightweight probe must never permanently lock Refresh.
+            // A failed presence probe must never trap the button in a disabled
+            // state after USB has been removed.
             button.disabled = false;
         } finally {
             refreshStateBusy = false;
@@ -92,26 +94,29 @@ guard = r'''
     }
 
     document.addEventListener('DOMContentLoaded', function(){
-        syncRefreshFromPhysicalUsb();
-        setInterval(syncRefreshFromPhysicalUsb, 1200);
+        syncRefreshButton();
+        setInterval(syncRefreshButton, 800);
     });
-
-    window.addEventListener('load', syncRefreshFromPhysicalUsb);
+    window.addEventListener('focus', syncRefreshButton);
 })();
 </script>
 '''
+text += "
+" + authoritative + "
+"
 
-if 'id="dport-refresh-authoritative-state"' in text:
-    text = re.sub(
-        r'(?s)\s*<script id="dport-refresh-authoritative-state">.*?</script>\s*',
-        '\n',
-        text,
-    )
-text += '\n' + guard + '\n'
+# Make the tooltip accurately describe the scope.
+text = text.replace(
+    'title="重新讀取 USB 裝置清單"',
+    'title="重新讀取 USB / Wi-Fi 裝置清單"',
+)
 
-path.write_text(text, encoding='utf-8')
+path.write_text(text, encoding="utf-8")
 
-print(f"refresh guards removed: {guard_hits}")
-print(f"refresh sync blocks normalized: {sync_hits}")
-print(f"stale final-state assignments fixed: {final_hits}")
+print(f"legacy refresh sync scripts removed: {legacy_count}")
+print(f"stale refresh guards removed: {guard_count}")
+print(f"stale cleanup assignments fixed: {final_count}")
 print(f"changed: {text != original}")
+
+if legacy_count == 0 and guard_count == 0 and final_count == 0:
+    raise SystemExit("No known stale refresh logic was found; inspect source layout.")
