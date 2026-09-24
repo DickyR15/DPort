@@ -1306,6 +1306,17 @@ if "</body>" in html:
 else:
     html += header_v5_css + header_v5_js
 
+# Last-pass cleanup: the source ZIP may already contain older generated header
+# layers, and this script itself has accumulated legacy injections over time.
+# Remove them AFTER all UI injections so only the final v5 geometry remains.
+for pattern in (
+    r'\s*<style id="dport-top-header-layout-v[0-9]+">.*?</style>\s*',
+    r'\s*<script id="dport-top-header-layout-script-v[0-9]+">.*?</script>\s*',
+    r'\s*<style id="dport-ultra-header-notification-v[0-9]+">.*?</style>\s*',
+    r'\s*<script id="dport-ultra-header-notification-v[0-9]+-script">.*?</script>\s*',
+):
+    html = re.sub(pattern, "\n", html, flags=re.S)
+
 path.write_text(html, encoding="utf-8")
 
 print("DPort final UI polish v8 applied successfully.")
