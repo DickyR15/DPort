@@ -174,123 +174,123 @@ jobs:
           $html = Get-Content -LiteralPath $map -Raw
 
           $patch = @'
-<style id="dport-top-header-layout-v1">
-@media (min-width:1000px){
-  .dport-top-header-layout{
-    position:relative !important;
-    --dport-device-w:300px;
-    --dport-notice-w:360px;
-    --dport-top-gap:12px;
-  }
-  .dport-top-header-layout .dport-device-shell{
-    position:absolute !important;
-    top:8px !important;
-    right:8px !important;
-    width:var(--dport-device-w) !important;
-    max-width:var(--dport-device-w) !important;
-    min-width:var(--dport-device-w) !important;
-    flex:0 0 var(--dport-device-w) !important;
-    box-sizing:border-box !important;
-  }
-  .dport-top-header-layout .dport-notice-shell{
-    position:absolute !important;
-    top:8px !important;
-    right:calc(var(--dport-device-w) + var(--dport-top-gap)) !important;
-    width:var(--dport-notice-w) !important;
-    max-width:var(--dport-notice-w) !important;
-    min-width:0 !important;
-    box-sizing:border-box !important;
-  }
-  .dport-top-header-layout .dport-notice-shell > *{
-    width:100% !important;
-    max-width:100% !important;
-    box-sizing:border-box !important;
-  }
-  .dport-top-header-layout .dport-device-shell select,
-  .dport-top-header-layout .dport-device-shell [role="combobox"]{
-    width:100% !important;
-    max-width:100% !important;
-    box-sizing:border-box !important;
-  }
-}
-@media (min-width:1800px){
-  .dport-top-header-layout{
-    --dport-device-w:320px;
-    --dport-notice-w:380px;
-    --dport-top-gap:14px;
-  }
-}
-@media (max-width:1399px) and (min-width:1000px){
-  .dport-top-header-layout{
-    --dport-device-w:280px;
-    --dport-notice-w:320px;
-    --dport-top-gap:10px;
-  }
-}
-@media (max-width:999px){
-  .dport-top-header-layout .dport-device-shell,
-  .dport-top-header-layout .dport-notice-shell{
-    position:static !important;
-    width:auto !important;
-    max-width:none !important;
-    min-width:0 !important;
-  }
-}
-</style>
-<script id="dport-top-header-layout-script-v1">
-(function(){
-  function cleanText(el){
-    return String((el && (el.innerText || el.textContent)) || '')
-      .replace(/\s+/g,' ')
-      .trim();
-  }
-  function area(el){
-    var r=el.getBoundingClientRect();
-    return Math.max(0,r.width)*Math.max(0,r.height);
-  }
-  function findDeviceControl(){
-    var selects=Array.prototype.slice.call(document.querySelectorAll('select'));
-    var found=selects.filter(function(el){
-      var t=cleanText(el);
-      var options=Array.prototype.slice.call(el.options || []).map(function(o){return cleanText(o);}).join(' ');
-      return /USB\s*:/i.test(t+' '+options) && /iOS/i.test(t+' '+options);
-    });
-    if(found.length) return found.sort(function(a,b){return area(a)-area(b);})[0];
-    var all=Array.prototype.slice.call(document.querySelectorAll('body *'));
-    var matched=all.filter(function(el){
-      var t=cleanText(el);
-      var r=el.getBoundingClientRect();
-      return /USB\s*:/i.test(t) && /iOS/i.test(t) && r.width>100 && r.height>20;
-    });
-    return matched.sort(function(a,b){return area(a)-area(b);})[0] || null;
-  }
-  function findDeviceShell(control){
-    if(!control) return null;
-    var cur=control;
-    for(var i=0;i<7 && cur;i++,cur=cur.parentElement){
-      var t=cleanText(cur);
-      if(/USB\s*:/i.test(t) && /重新整理/i.test(t) && /離開/i.test(t)) return cur;
-    }
-    return control.parentElement || control;
-  }
-  function findNotification(){
-    var all=Array.prototype.slice.call(document.querySelectorAll('body *'));
-    var hits=all.filter(function(el){
-      var t=cleanText(el);
-      if(t.indexOf('請先連接裝置')<0) return false;
-      var r=el.getBoundingClientRect();
-      return r.width>160 && r.width<900 && r.height>35 && r.height<220;
-    });
-    return hits.sort(function(a,b){return area(a)-area(b);})[0] || null;
-  }
-  function findNotificationShell(note){
-    if(!note) return null;
-    var cur=note;
-    for(var i=0;i<5 && cur;i++,cur=cur.parentElement){
-      var t=cleanText(cur), r=cur.getBoundingClientRect();
-      if(t.indexOf('請先連接裝置')>=0 && r.width>220 && r.height>45) return cur;
-    }
-    return note;
+          <style id="dport-top-header-layout-v1">
+          @media (min-width:1000px){
+            .dport-top-header-layout{
+              position:relative !important;
+              --dport-device-w:300px;
+              --dport-notice-w:360px;
+              --dport-top-gap:12px;
+            }
+            .dport-top-header-layout .dport-device-shell{
+              position:absolute !important;
+              top:8px !important;
+              right:8px !important;
+              width:var(--dport-device-w) !important;
+              max-width:var(--dport-device-w) !important;
+              min-width:var(--dport-device-w) !important;
+              flex:0 0 var(--dport-device-w) !important;
+              box-sizing:border-box !important;
+            }
+            .dport-top-header-layout .dport-notice-shell{
+              position:absolute !important;
+              top:8px !important;
+              right:calc(var(--dport-device-w) + var(--dport-top-gap)) !important;
+              width:var(--dport-notice-w) !important;
+              max-width:var(--dport-notice-w) !important;
+              min-width:0 !important;
+              box-sizing:border-box !important;
+            }
+            .dport-top-header-layout .dport-notice-shell > *{
+              width:100% !important;
+              max-width:100% !important;
+              box-sizing:border-box !important;
+            }
+            .dport-top-header-layout .dport-device-shell select,
+            .dport-top-header-layout .dport-device-shell [role="combobox"]{
+              width:100% !important;
+              max-width:100% !important;
+              box-sizing:border-box !important;
+            }
+          }
+          @media (min-width:1800px){
+            .dport-top-header-layout{
+              --dport-device-w:320px;
+              --dport-notice-w:380px;
+              --dport-top-gap:14px;
+            }
+          }
+          @media (max-width:1399px) and (min-width:1000px){
+            .dport-top-header-layout{
+              --dport-device-w:280px;
+              --dport-notice-w:320px;
+              --dport-top-gap:10px;
+            }
+          }
+          @media (max-width:999px){
+            .dport-top-header-layout .dport-device-shell,
+            .dport-top-header-layout .dport-notice-shell{
+              position:static !important;
+              width:auto !important;
+              max-width:none !important;
+              min-width:0 !important;
+            }
+          }
+          </style>
+          <script id="dport-top-header-layout-script-v1">
+          (function(){
+            function cleanText(el){
+              return String((el && (el.innerText || el.textContent)) || '')
+                .replace(/\s+/g,' ')
+                .trim();
+            }
+            function area(el){
+              var r=el.getBoundingClientRect();
+              return Math.max(0,r.width)*Math.max(0,r.height);
+            }
+            function findDeviceControl(){
+              var selects=Array.prototype.slice.call(document.querySelectorAll('select'));
+              var found=selects.filter(function(el){
+                var t=cleanText(el);
+                var options=Array.prototype.slice.call(el.options || []).map(function(o){return cleanText(o);}).join(' ');
+                return /USB\s*:/i.test(t+' '+options) && /iOS/i.test(t+' '+options);
+              });
+              if(found.length) return found.sort(function(a,b){return area(a)-area(b);})[0];
+              var all=Array.prototype.slice.call(document.querySelectorAll('body *'));
+              var matched=all.filter(function(el){
+                var t=cleanText(el);
+                var r=el.getBoundingClientRect();
+                return /USB\s*:/i.test(t) && /iOS/i.test(t) && r.width>100 && r.height>20;
+              });
+              return matched.sort(function(a,b){return area(a)-area(b);})[0] || null;
+            }
+            function findDeviceShell(control){
+              if(!control) return null;
+              var cur=control;
+              for(var i=0;i<7 && cur;i++,cur=cur.parentElement){
+                var t=cleanText(cur);
+                if(/USB\s*:/i.test(t) && /重新整理/i.test(t) && /離開/i.test(t)) return cur;
+              }
+              return control.parentElement || control;
+            }
+            function findNotification(){
+              var all=Array.prototype.slice.call(document.querySelectorAll('body *'));
+              var hits=all.filter(function(el){
+                var t=cleanText(el);
+                if(t.indexOf('請先連接裝置')<0) return false;
+                var r=el.getBoundingClientRect();
+                return r.width>160 && r.width<900 && r.height>35 && r.height<220;
+              });
+              return hits.sort(function(a,b){return area(a)-area(b);})[0] || null;
+            }
+            function findNotificationShell(note){
+              if(!note) return null;
+              var cur=note;
+              for(var i=0;i<5 && cur;i++,cur=cur.parentElement){
+                var t=cleanText(cur), r=cur.getBoundingClientRect();
+                if(t.indexOf('請先連接裝置')>=0 && r.width>220 && r.height>45) return cur;
+              }
+              return note;
   }
   function lowestCommonHeader(a,b){
     if(!a || !b) return null;
