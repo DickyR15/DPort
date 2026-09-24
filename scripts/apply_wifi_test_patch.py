@@ -37,8 +37,7 @@ network_repl = r'''\1# Discover paired iPhones through Apple's normal mobdev2 Bo
 \1    network_count = 0
 \1    async for ip, network_lockdown in get_mobdev2_lockdowns(
 \1        udid=None,
-\1        pair_records=get_home_folder(),
-\1        only_paired=True,
+\1        \1        only_paired=True,
 \1        timeout=min(float(timeout), 5.0),
 \1    ):
 \1        try:
