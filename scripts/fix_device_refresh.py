@@ -755,7 +755,7 @@ old_title = '<div class="geoport-favorites-title">我的最愛位置 <span id="g
 new_title = '''<div class="geoport-favorites-title">
     <span>我的最愛位置 <span id="geoport-fav-count" class="geoport-fav-count">0/20</span></span>
     <div class="geoport-favorites-actions">
-        <button type="button" class="geoport-fav-clear-all" onclick="geoportClearFavorites()" title="一鍵刪除全部我的最愛">清除全部</button>
+        <button type="button" class="geoport-fav-clear-all" onclick="geoportClearFavorites()" title="一鍵清除全部我的最愛">清除</button>
     </div>
 </div>'''
 if old_title in text:
@@ -774,3 +774,120 @@ print("- Reverse geocoding runs faster via parallel lookups.")
 print("- Favorite saving no longer waits for place-name recognition.")
 print("- Favorites show names only, six visible cards, with clearer DPort colors.")
 print("- Added one-click clear-all.")
+
+
+# ==================== DPort 6.9.1 unified action color / Favorite polish ====================
+text += r'''
+<style>
+/* Use the same restrained danger color for all clear/delete actions. */
+.dport-subtle-danger{
+    background:#8f3b3b !important;
+    border:1px solid #df9e9e !important;
+    color:#ffffff !important;
+    box-shadow:none !important;
+}
+.dport-subtle-danger:hover{
+    background:#9d4343 !important;
+    border-color:#efb2b2 !important;
+    color:#ffffff !important;
+}
+
+/* Favorite delete X: compact, quiet, and never allowed to inherit button
+   min-width/padding from the global button rules. */
+.geoport-fav-delete{
+    position:absolute !important;
+    top:50% !important;
+    right:5px !important;
+    transform:translateY(-50%) !important;
+    width:19px !important;
+    min-width:19px !important;
+    max-width:19px !important;
+    height:19px !important;
+    min-height:19px !important;
+    max-height:19px !important;
+    padding:0 !important;
+    margin:0 !important;
+    border-radius:5px !important;
+    background:#555f72 !important;
+    border:1px solid #7f8ba3 !important;
+    color:#d8deea !important;
+    font-size:12px !important;
+    line-height:17px !important;
+    font-weight:700 !important;
+    box-shadow:none !important;
+    opacity:.9 !important;
+    z-index:3 !important;
+}
+.geoport-fav-delete:hover{
+    background:#626d82 !important;
+    border-color:#a5afc3 !important;
+    color:#ffffff !important;
+    opacity:1 !important;
+}
+.geoport-fav-open{
+    padding-right:29px !important;
+}
+.geoport-fav-name.long{
+    font-size:14px !important;
+    line-height:1.15 !important;
+    white-space:normal !important;
+    display:-webkit-box !important;
+    -webkit-box-orient:vertical !important;
+    -webkit-line-clamp:2 !important;
+    overflow:hidden !important;
+    word-break:break-word !important;
+}
+.geoport-fav-name.xlong{
+    font-size:12.5px !important;
+    line-height:1.1 !important;
+}
+
+/* Make the clear-all button visually belong to the same action family. */
+.geoport-fav-clear-all{
+    min-width:58px !important;
+    min-height:34px !important;
+    padding:5px 12px !important;
+    border-radius:9px !important;
+    background:#8f3b3b !important;
+    border:1px solid #df9e9e !important;
+    color:#ffffff !important;
+}
+.geoport-fav-clear-all:hover{
+    background:#9d4343 !important;
+    border-color:#efb2b2 !important;
+}
+</style>
+
+<script>
+(function(){
+    function applyDPortDangerStyle(){
+        var labels = {'清除座標':1,'清除全部':1,'清除':1,'刪除':1};
+        var buttons = document.querySelectorAll('button');
+        buttons.forEach(function(btn){
+            var text = (btn.textContent || '').trim();
+            if(labels[text]){
+                btn.classList.add('dport-subtle-danger');
+            }
+        });
+
+        var clearAll=document.querySelectorAll('.geoport-fav-clear-all');
+        clearAll.forEach(function(btn){
+            btn.textContent='清除';
+            btn.title='一鍵清除全部我的最愛';
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', applyDPortDangerStyle);
+    window.addEventListener('load', applyDPortDangerStyle);
+
+    // The Favorite list is rerendered dynamically, so re-apply the visual
+    // class without changing the button behavior.
+    if(typeof MutationObserver !== 'undefined'){
+        var observer=new MutationObserver(function(){
+            applyDPortDangerStyle();
+        });
+        observer.observe(document.body,{childList:true,subtree:true});
+    }
+})();
+</script>
+'''
