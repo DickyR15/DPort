@@ -4,6 +4,8 @@ import re
 main = Path("src/main.py")
 text = main.read_text(encoding="utf-8")
 
+# Keep the existing Wi-Fi discovery/connection changes from the Wi-Fi test
+# branch. These are applied only when the original USB-only guard is present.
 old_wifi = """    # USB-ONLY: Wi-Fi / Network discovery intentionally disabled.
     logger.info("USB-ONLY mode: Wi-Fi/Bonjour/mDNS/RemotePairing discovery skipped")
 """
@@ -31,10 +33,6 @@ new_wifi = """    # Wi-Fi / Network discovery: Apple mobdev2 Bonjour over the lo
                     info["wifiAddress"] = str(ip)
                     info["wifiPort"] = 62078
                     info["wifiState"] = True
-                    try:
-                        info["userLocale"] = get_user_country()
-                    except Exception:
-                        info["userLocale"] = None
                     found.append((device_udid, info))
                 finally:
                     try:
@@ -89,16 +87,10 @@ old_state = '''                            try:
 new_state = '''                            try:
                                 info["wifiState"] = await client.get_enable_wifi_connections()
                                 if not info["wifiState"]:
-                                    logger.info(
-                                        f"Wi-Fi lockdown disabled for {device.serial}; enabling it via USB."
-                                    )
                                     await client.set_enable_wifi_connections(True)
                                     await asyncio.sleep(1.0)
                                     info["wifiState"] = await client.get_enable_wifi_connections()
-                            except Exception as exc:
-                                logger.warning(
-                                    f"Wi-Fi lockdown state/enable check failed for {device.serial}: {exc}"
-                                )
+                            except Exception:
                                 info["wifiState"] = False
 '''
 if old_state in text:
@@ -111,29 +103,33 @@ if not map_file.exists():
     raise SystemExit("UI template not found: src/templates/map.html")
 map_text = map_file.read_text(encoding="utf-8")
 
-legacy_script_pattern = re.compile(
+old_guard = '''async function dportRefreshDeviceList() {
+    if (typeof isDeviceConnected !== 'undefined' && isDeviceConnected) {
+        displayToast("裝置已連接，無需重新整理裝置清單。");
+        return;
+    }
+
+    if (deviceListManualRefreshInFlight) return;'''
+new_guard = '''async function dportRefreshDeviceList() {
+    if (deviceListManualRefreshInFlight) return;'''
+map_text = map_text.replace(old_guard, new_guard, 1)
+
+map_text = map_text.replace(
+    "button.disabled = (typeof isDeviceConnected !== 'undefined' && isDeviceConnected);",
+    "button.disabled = false;",
+)
+
+legacy = re.compile(
     r'''\s*<script>\s*\(function\(\)\{\s*
-        function\s+syncDeviceRefreshButton\(\)\s*\{.*?
-        document\.addEventListener\(['"]DOMContentLoaded['"],function\(\)\{\s*
-        syncDeviceRefreshButton\(\);\s*
-        setInterval\(syncDeviceRefreshButton,500\);\s*
-        \}\);\s*
-        \}\)\(\);\s*</script>''',
+    function\s+syncDeviceRefreshButton\(\)\{.*?
+    document\.addEventListener\('DOMContentLoaded',function\(\)\{\s*
+    syncDeviceRefreshButton\(\);\s*
+    setInterval\(syncDeviceRefreshButton,500\);\s*
+    \}\);\s*
+    \}\)\(\);\s*</script>''',
     re.S | re.X,
 )
-map_text, legacy_count = legacy_script_pattern.subn("\n", map_text)
-
-guard_pattern = re.compile(
-    r'''(?s)(async function dportRefreshDeviceList\(\)\s*\{\s*)'''
-    r'''if\s*\(typeof\s+isDeviceConnected\s*!==\s*['"]undefined['"]\s*&&\s*isDeviceConnected\)\s*\{.*?\}\s*'''
-)
-map_text, guard_count = guard_pattern.subn(r'\1', map_text)
-
-map_text, final_count = re.subn(
-    r'''button\.disabled\s*=\s*\(\s*typeof\s+isDeviceConnected.*?;''',
-    'button.disabled = false;',
-    map_text,
-)
+map_text, _ = legacy.subn("\n", map_text)
 
 map_text = re.sub(
     r'''\s*<script id="dport-refresh-authoritative-state">.*?</script>\s*''',
@@ -167,14 +163,18 @@ map_text += r'''
             });
             var payload = response && response.ok ? await response.json() : null;
             var devices = payload && Array.isArray(payload.devices) ? payload.devices : [];
+
             var usbPresent = devices.some(function(device){
                 return String((device && device.ConnectionType) || 'USB').toUpperCase() === 'USB';
             });
+
             var connected = (
                 typeof isDeviceConnected !== 'undefined' &&
                 isDeviceConnected === true
             );
 
+            // USB physically present + app connected => disabled.
+            // USB absent (or Wi-Fi-only) => enabled.
             button.disabled = usbPresent && connected;
             button.removeAttribute('aria-disabled');
         } catch (e) {
@@ -199,6 +199,4 @@ map_text = map_text.replace(
 )
 map_file.write_text(map_text, encoding="utf-8")
 
-print(f"legacy refresh sync scripts removed: {legacy_count}")
-print(f"stale refresh guards removed: {guard_count}")
-print(f"stale cleanup assignments fixed: {final_count}")
+print("Wi-Fi discovery + refresh-state patch applied.")
