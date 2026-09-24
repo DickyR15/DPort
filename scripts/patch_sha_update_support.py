@@ -61,7 +61,7 @@ def _read_release_sha256(url: str) -> str:
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
-    for token in raw.replace("\r", " ").replace("\n", " ").split():
+    for token in raw.replace("\\r", " ").replace("\\n", " ").split():
         if len(token) == 64 and all(c in "0123456789abcdefABCDEF" for c in token):
             return token.lower()
     raise RuntimeError("Release SHA-256 checksum file is invalid")
