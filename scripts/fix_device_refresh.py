@@ -96,38 +96,32 @@ elif "Normal map clicks select a coordinate and identify the place." not in text
 # 3. Favorite place-name resolver
 # ---------------------------------------------------------------------------
 reverse_marker = "function geoportScheduleReverseGeocode(lat,lng){"
-resolver = """async function geoportResolvePlaceNameForCoordinates(lat,lng){
-    const cached=geoportGetCurrentPlaceNameForCoordinates(lat,lng);
+resolver = """window.geoportResolvePlaceNameForCoordinates = async function(lat,lng){
+    var cached=geoportGetCurrentPlaceNameForCoordinates(lat,lng);
     if(cached) return cached;
 
-    const a=Number(lat),b=Number(lng);
+    var a=Number(lat),b=Number(lng);
     if(!Number.isFinite(a)||!Number.isFinite(b)) return '';
 
-    const layers=[
-        'poi,manmade,building',
-        'natural,waterway,place,highway,railway,landuse',
-        'address'
-    ];
+    var url='https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+        +'&lat='+encodeURIComponent(a)
+        +'&lon='+encodeURIComponent(b)
+        +'&zoom=18&addressdetails=1&namedetails=1'
+        +'&accept-language=zh-TW,zh;q=0.9,en;q=0.7';
 
-    for(const layer of layers){
-        const url='https://nominatim.openstreetmap.org/reverse?format=jsonv2'
-            +'&lat='+encodeURIComponent(a)
-            +'&lon='+encodeURIComponent(b)
-            +'&zoom=18&addressdetails=1&namedetails=1'
-            +'&layer='+encodeURIComponent(layer)
-            +'&accept-language=zh-TW,zh;q=0.9,en;q=0.7';
-        try{
-            const data=await fetchJsonWithTimeout(url,6000);
-            if(!data) continue;
-            if(layer!=='address' && !geoportIsUsefulNearbyPlace(data,a,b)) continue;
-            const name=geoportFormatReverseName(data);
-            if(name) return name;
-        }catch(e){
-            console.debug('最愛位置名稱辨識略過一次:',e);
+    try{
+        var data=await fetchJsonWithTimeout(url,5000);
+        if(!data) return '';
+
+        var name='';
+        if(typeof geoportFormatReverseName==='function'){
+            name=geoportFormatReverseName(data);
         }
+        return name || String(data.display_name||'').trim();
+    }catch(e){
+        return '';
     }
-    return '';
-}
+};
 
 """
 if "async function geoportResolvePlaceNameForCoordinates" not in text:
@@ -409,8 +403,8 @@ text += r'''
     font-size:13px !important;
     font-weight:700 !important;
     color:#fff !important;
-    background:#8f3b3b !important;
-    border:1px solid #e1a0a0 !important;
+    background:#a33b3b !important;
+    border:1px solid #ffaaaa !important;
     cursor:pointer;
 }
 .geoport-fav-clear-all:hover{
@@ -419,6 +413,7 @@ text += r'''
 .geoport-fav-list{
     display:grid !important;
     grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    grid-template-rows:repeat(3,64px);
     grid-auto-rows:64px;
     gap:8px;
     padding:10px !important;
@@ -438,10 +433,10 @@ text += r'''
     width:100%;
     height:64px;
     min-height:64px !important;
-    border:1px solid #7f8ba3 !important;
+    border:1px solid #9ab3ff !important;
     border-radius:10px !important;
-    background:#303744 !important;
-    color:#f7f9ff !important;
+    background:#2f3542 !important;
+    color:#ffffff !important;
     display:flex;
     align-items:center;
     justify-content:flex-start;
@@ -451,8 +446,8 @@ text += r'''
     box-shadow:none !important;
 }
 .geoport-fav-open:hover{
-    background:#3a4557 !important;
-    border-color:#aebbd3 !important;
+    background:#36415a !important;
+    border-color:#9ab3ff !important;
 }
 .geoport-fav-open:focus-visible{
     outline:2px solid #9ab3ff !important;
@@ -477,9 +472,9 @@ text += r'''
     width:30px;
     height:30px;
     padding:0 !important;
-    border:1px solid #df9e9e !important;
+    border:1px solid #ffaaaa !important;
     border-radius:8px !important;
-    background:#8f3b3b !important;
+    background:#a33b3b !important;
     color:#fff !important;
     font-size:18px !important;
     line-height:28px !important;
@@ -487,7 +482,7 @@ text += r'''
     cursor:pointer;
 }
 .geoport-fav-delete:hover{
-    background:#aa4747 !important;
+    background:#b74646 !important;
 }
 .geoport-fav-empty{
     grid-column:1 / -1;
@@ -532,49 +527,28 @@ text += r'''
         if(geoportFastReverseController){
             try{geoportFastReverseController.abort();}catch(e){}
         }
+
         var controller=new AbortController();
         geoportFastReverseController=controller;
-
         clearTimeout(window.geoportReverseGeocodeTimer);
+
         window.geoportReverseGeocodeTimer=setTimeout(async function(){
-            var base='https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+            var url='https://nominatim.openstreetmap.org/reverse?format=jsonv2'
                 +'&lat='+encodeURIComponent(a)
                 +'&lon='+encodeURIComponent(b)
                 +'&zoom=18&addressdetails=1&namedetails=1'
                 +'&accept-language=zh-TW,zh;q=0.9,en;q=0.7';
 
-            async function lookup(layer){
-                try{
-                    var sep = layer ? '&layer='+encodeURIComponent(layer) : '';
-                    return await fetchJsonWithTimeout(base+sep,5000);
-                }catch(e){
-                    return null;
-                }
-            }
-
             try{
-                var results=await Promise.all([
-                    lookup('poi,manmade,building'),
-                    lookup('natural,waterway,place,highway,railway,landuse')
-                ]);
-                if(controller.signal.aborted) return;
+                var data=await fetchJsonWithTimeout(url,5000);
+                if(controller.signal.aborted || !data) return;
 
-                var chosen=null;
-                for(var i=0;i<results.length;i++){
-                    if(typeof geoportIsUsefulNearbyPlace==='function' &&
-                       geoportIsUsefulNearbyPlace(results[i],a,b)){
-                        chosen=results[i];
-                        break;
-                    }
+                var finalName='';
+                if(typeof geoportFormatReverseName==='function'){
+                    finalName=geoportFormatReverseName(data);
                 }
-
-                if(!chosen){
-                    chosen=await lookup('address');
-                    if(controller.signal.aborted) return;
-                }
-
-                var finalName=(chosen && typeof geoportFormatReverseName==='function'
-                    ? geoportFormatReverseName(chosen) : '') || '未辨識地點';
+                finalName=finalName || String(data.display_name||'').trim();
+                finalName=finalName || '未辨識地點';
 
                 if(typeof geoportSetCurrentPlaceName==='function'){
                     geoportSetCurrentPlaceName(finalName,a,b);
@@ -592,11 +566,12 @@ text += r'''
                     console.debug('快速反向地理編碼略過一次:',e);
                 }
             }
-        },120);
+        },80);
     };
 
-    // Immediate Favorite save. Reverse-geocoding never blocks this action.
-    window.geoportSaveFavorite = async function(){
+    // Save immediately. Reverse-geocoding and the optional name prompt run
+    // asynchronously after the Favorite has already been persisted.
+    window.geoportSaveFavorite = function(){
         var c=geoportParseCoordinates(document.getElementById('coordinates').value);
         if(!c){dportUiAlert('請輸入緯度與經度。');return;}
 
@@ -604,35 +579,36 @@ text += r'''
         var placeholder='自動辨識中…';
         var suggested=current || placeholder;
 
-        var name=await dportUiPrompt(
-            '請輸入此地點名稱',
-            suggested
-        );
-        if(name===null) return;
-
-        var cleanName=String(name).trim();
-        if(!cleanName){dportUiAlert('地點名稱不可空白。');return;}
-
         var items=geoportGetFavorites().filter(function(x){
             return !(x.lat===c.lat && x.lng===c.lng);
         });
-        var item={name:cleanName,lat:c.lat,lng:c.lng};
+
+        // Persist first, so clicking「儲存最愛位置」never has to wait for
+        // reverse geocoding.
+        var item={name:suggested,lat:c.lat,lng:c.lng};
         items.unshift(item);
         geoportSetFavorites(items);
         geoportRenderFavorites();
 
-        // Only auto-replace the temporary/default name. A user-edited name
-        // is always preserved.
-        if(!current || cleanName===placeholder){
-            (async function(){
-                var resolved='';
-                try{
-                    if(typeof geoportResolvePlaceNameForCoordinates==='function'){
-                        resolved=await geoportResolvePlaceNameForCoordinates(c.lat,c.lng);
-                    }
-                }catch(e){}
+        if(typeof displayToast==='function'){
+            displayToast('已加入我的最愛');
+        }
 
-                if(!resolved) return;
+        // Keep the manual naming feature, but do not block the save on it.
+        Promise.resolve()
+            .then(function(){
+                return dportUiPrompt(
+                    '請輸入此地點名稱（可稍後再命名）',
+                    suggested
+                );
+            })
+            .then(function(name){
+                if(name===null) return;
+                var cleanName=String(name).trim();
+                if(!cleanName){
+                    dportUiAlert('地點名稱不可空白。');
+                    return;
+                }
 
                 var latest=geoportGetFavorites();
                 var match=latest.find(function(x){
@@ -640,13 +616,45 @@ text += r'''
                 });
                 if(!match) return;
 
-                if(match.name===placeholder || match.name==='自訂位置'){
-                    match.name=resolved;
-                    geoportSetFavorites(latest);
-                    geoportRenderFavorites();
+                match.name=cleanName;
+                geoportSetFavorites(latest);
+                geoportRenderFavorites();
+
+                // A custom name supplied by the user is final.
+                match._dportManualName=true;
+                geoportSetFavorites(latest);
+            })
+            .catch(function(e){
+                console.debug('最愛位置命名視窗略過一次:',e);
+            });
+
+        // Background name recognition. It can finish whenever it does; the
+        // Favorite already exists and the UI never waits for this request.
+        (async function(){
+            if(current) return;
+
+            var resolved='';
+            try{
+                if(typeof geoportResolvePlaceNameForCoordinates==='function'){
+                    resolved=await geoportResolvePlaceNameForCoordinates(c.lat,c.lng);
                 }
-            })();
-        }
+            }catch(e){}
+
+            if(!resolved) return;
+
+            var latest=geoportGetFavorites();
+            var match=latest.find(function(x){
+                return x.lat===c.lat && x.lng===c.lng;
+            });
+            if(!match) return;
+
+            // Never overwrite a name the user has already entered.
+            if(match.name===placeholder && !match._dportManualName){
+                match.name=resolved;
+                geoportSetFavorites(latest);
+                geoportRenderFavorites();
+            }
+        })();
     };
 
     // One-click clear: remove all Favorite locations at once.
