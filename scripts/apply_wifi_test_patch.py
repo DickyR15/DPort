@@ -12,149 +12,103 @@ if not map_file.exists():
 src = main.read_text(encoding="utf-8")
 ui = map_file.read_text(encoding="utf-8")
 
-# ---------- Python backend: enable Wi-Fi and list Wi-Fi devices ----------
-state_pattern = re.compile(
-    r'''(?m)^(\s*)try:\s*\n\1    info\["wifiState"\]\s*=\s*await client\.get_enable_wifi_connections\(\)\s*\n\1except Exception:\s*\n\1    info\["wifiState"\]\s*=\s*False\s*$'''
-)
-state_repl = r'''\1try:
-\1    info["wifiState"] = await client.get_enable_wifi_connections()
-\1    if not info["wifiState"]:
-\1        logger.info("Wi-Fi lockdown is off; enabling it over USB.")
-\1        await client.set_enable_wifi_connections(True)
-\1        await asyncio.sleep(1.0)
-\1        info["wifiState"] = await client.get_enable_wifi_connections()
-\1except Exception as exc:
-\1    logger.warning(f"Wi-Fi lockdown enable/check failed: {exc}")
-\1    info["wifiState"] = False'''
-src, state_hits = state_pattern.subn(state_repl, src, count=0)
+# 1) Enable Apple's Wi-Fi lockdown transport after USB enumeration.
+wifi_state_old = """                            try:
+                                info["wifiState"] = await client.get_enable_wifi_connections()
+                            except Exception:
+                                info["wifiState"] = False"""
+wifi_state_new = """                            try:
+                                info["wifiState"] = await client.get_enable_wifi_connections()
+                                if not info["wifiState"]:
+                                    logger.info("Wi-Fi lockdown is off; enabling it over USB.")
+                                    await client.set_enable_wifi_connections(True)
+                                    await asyncio.sleep(1.0)
+                                    info["wifiState"] = await client.get_enable_wifi_connections()
+                            except Exception as exc:
+                                logger.warning(f"Wi-Fi lockdown enable/check failed: {exc}")
+                                info["wifiState"] = False"""
+ui_count = src.count(wifi_state_old)
+src = src.replace(wifi_state_old, wifi_state_new)
 
-disabled_pattern = re.compile(
-    r'''(?m)^(\s*)# USB-ONLY: Wi-Fi / Network discovery intentionally disabled\.\s*\n\1logger\.info\("USB-ONLY mode: Wi-Fi/Bonjour/mDNS/RemotePairing discovery skipped"\)\s*$'''
-)
-network_repl = r'''\1# Diagnostic + paired discovery for Apple's normal mobdev2 Wi-Fi path.
-\1# First browse raw Bonjour so we can distinguish "no mDNS advert" from
-\1# "advertisement received but no matching Windows pairing record".
-\1try:
-\1    adverts = asyncio.run(browse_mobdev2(timeout=min(float(timeout), 4.0)))
-\1    logger.info(f"RAW mobdev2 Bonjour adverts: {len(adverts)}")
-\1    for advert in adverts:
-\1        try:
-\1            addresses = [getattr(a, "full_ip", str(a)) for a in getattr(advert, "addresses", [])]
-\1            logger.info(
-\1                "mobdev2 advert: "
-\1                f"instance={getattr(advert, 'instance', None)!r}, "
-\1                f"port={getattr(advert, 'port', None)}, "
-\1                f"addresses={addresses}, "
-\1                f"properties={getattr(advert, 'properties', {})}"
-\1            )
-\1        except Exception as exc:
-\1            logger.warning(f"mobdev2 advert logging failed: {exc}")
-\1except Exception as exc:
-\1    logger.warning(f"RAW mobdev2 Bonjour browse failed: {exc}")
-\1
-\1try:
-\1    network_count = 0
-\1    async for ip, network_lockdown in get_mobdev2_lockdowns(
-\1        udid=None,
-\1        only_paired=True,
-\1        timeout=min(float(timeout), 5.0),
-\1    ):
-\1        try:
-\1            info = dict(network_lockdown.short_info)
-\1            network_udid = (
-\1                getattr(network_lockdown, "udid", None)
-\1                or info.get("UniqueDeviceID")
-\1                or info.get("Identifier")
-\1            )
-\1            if not network_udid:
-\1                continue
-\1            info["Identifier"] = network_udid
-\1            info["ConnectionType"] = "Network"
-\1            info["wifiAddress"] = str(ip)
-\1            info["wifiPort"] = 62078
-\1            info["wifiState"] = True
-\1            add_device(network_udid, "Network", info)
-\1            network_count += 1
-\1            logger.info(
-\1                f"Wi-Fi mobdev2 paired device found: udid={network_udid}, ip={ip}"
-\1            )
-\1        except Exception as exc:
-\1            logger.warning(f"Wi-Fi device metadata failed: {exc}")
-\1        finally:
-\1            try:
-\1                await network_lockdown.close()
-\1            except Exception:
-\1                pass
-\1    logger.info(f"Wi-Fi mobdev2 paired discovery completed: {network_count} device(s)")
-\1except Exception as exc:
-\1    logger.warning(f"Wi-Fi mobdev2 paired discovery failed: {exc}")'''
-src, network_hits = disabled_pattern.subn(network_repl, src, count=0)
+# 2) Common connect route must accept Network / Manual, not reject them as USB-only.
+usb_guard_old = """    if connection_type != "USB":
+        logger.warning(f"USB-ONLY build: rejecting non-USB connection type: {connection_type}")
+        return jsonify({"error": "USB-only mode: please connect the iPhone by USB."}), 400
 
-if network_hits == 0:
-    raise SystemExit("The /list_devices Wi-Fi disabled block was not found in src/main.py")
+"""
+usb_guard_new = """    if connection_type not in ("USB", "Network", "Manual"):
+        logger.warning(f"Unsupported connection type: {connection_type}")
+        return jsonify({"error": f"Unsupported connection type: {connection_type}"}), 400
 
-# Ensure all mobdev2 calls use pymobiledevice3's automatic host pair-record sources.
+"""
+usb_guard_count = src.count(usb_guard_old)
+src = src.replace(usb_guard_old, usb_guard_new)
+
+# 3) Normal iOS 17.4+/26 Network should use mobdev2/CoreDeviceProxy, not legacy
+# RemotePairing-record gating.
+network_old = """    if connection_type == "Network":
+        check_pair_record(udid)
+        if pair_record is None:
+            logger.error("Network: No Remote Pair Record Found. Please connect once by USB first.")
+            return jsonify({"Error": "No Pair Record Found"})
+        return connect_wifi(data)
+"""
+network_new = """    if connection_type == "Network":
+        return connect_wifi(data)
+"""
+network_count = src.count(network_old)
+src = src.replace(network_old, network_new)
+
+# 4) Explicit Manual Wi-Fi path should use the same implementation.
+manual_old = """    if connection_type == "Manual":
+        check_pair_record(udid)
+        if pair_record is None:
+            return jsonify({"Error": "No Pair Record Found"})
+        return connect_wifi(data)
+"""
+manual_new = """    if connection_type == "Manual":
+        return connect_wifi(data)
+"""
+manual_count = src.count(manual_old)
+src = src.replace(manual_old, manual_new)
+
+# 5) Let pymobiledevice3 11.18.0 select the correct host pair records itself.
 src = src.replace("pair_records=get_home_folder(),\n", "")
 
-# Allow USB and Wi-Fi/Network connection types through the common connect route.
-usb_guard = re.compile(
-    r'''(?s)    if connection_type != "USB":\n        logger\.warning\(f"USB-ONLY build: rejecting non-USB connection type: \{connection_type\}"\)\n        return jsonify\(\{"error": "USB-only mode: please connect the iPhone by USB\."\}\), 400\n\n'''
-)
-src, usb_guard_hits = usb_guard.subn(
-    '''    if connection_type not in ("USB", "Network", "Manual"):\n        logger.warning(f"Unsupported connection type: {connection_type}")\n        return jsonify({"error": f"Unsupported connection type: {connection_type}"}), 400\n\n''',
-    src,
-    count=0,
-)
-
-network_guard = re.compile(
-    r'''(?s)    if connection_type == "Network":\n        check_pair_record\(udid\)\n        if pair_record is None:\n            logger\.error\("Network: No Remote Pair Record Found\. Please connect once by USB first\."\)\n            return jsonify\(\{"Error": "No Pair Record Found"\}\)\n        return connect_wifi\(data\)'''
-)
-src, network_guard_hits = network_guard.subn(
-    '''    if connection_type == "Network":\n        return connect_wifi(data)''',
-    src,
-    count=0,
-)
-
-manual_guard = re.compile(
-    r'''(?s)    if connection_type == "Manual":\n        check_pair_record\(udid\)\n        if pair_record is None:\n            return jsonify\(\{"Error": "No Pair Record Found"\}\)\n        return connect_wifi\(data\)'''
-)
-src, manual_guard_hits = manual_guard.subn(
-    '''    if connection_type == "Manual":\n        return connect_wifi(data)''',
-    src,
-    count=0,
-)
-
-# Keep USB/Wi-Fi selection stable across background / force refreshes.
-clear_marker = """        deviceDropdown.innerHTML = '';
+# 6) Preserve the user's exact USB/Wi-Fi selection when the background
+# auto-refresh repopulates the list. Without this, the same iPhone's Network
+# option can become the selected option after a refresh.
+clear_old = """        deviceDropdown.innerHTML = '';
         connectionDropdown.innerHTML = '';
 """
-if clear_marker not in ui:
-    raise SystemExit("populateDeviceList clear marker not found")
-ui = ui.replace(clear_marker, """        const previousOption = deviceDropdown.options[deviceDropdown.selectedIndex];
+clear_new = """        const previousOption = deviceDropdown.options[deviceDropdown.selectedIndex];
         const previousKey = previousOption ? (previousOption.dataset.dportKey || '') : '';
 
         deviceDropdown.innerHTML = '';
         connectionDropdown.innerHTML = '';
-""", 1)
+"""
+clear_count = ui.count(clear_old)
+if clear_count == 0:
+    raise SystemExit("populateDeviceList clear marker not found")
+ui = ui.replace(clear_old, clear_new, 1)
 
-option_marker = """                    option.value = JSON.stringify(deviceInfo);
+option_old = """                    option.value = JSON.stringify(deviceInfo);
 
                     devicesInfo[udid] = devicesInfo[udid] || {};
 """
-if option_marker not in ui:
-    raise SystemExit("device option marker not found")
-ui = ui.replace(option_marker, """                    option.value = JSON.stringify(deviceInfo);
+option_new = """                    option.value = JSON.stringify(deviceInfo);
                     option.dataset.dportKey = optionKey;
 
                     devicesInfo[udid] = devicesInfo[udid] || {};
-""", 1)
+"""
+if option_old not in ui:
+    raise SystemExit("device option marker not found")
+ui = ui.replace(option_old, option_new, 1)
 
-restore_marker = """        if (requestSerial !== deviceListRequestSerial) return false;
+restore_old = """        if (requestSerial !== deviceListRequestSerial) return false;
         deviceDropdown.devicesInfo = devicesInfo;
 """
-if restore_marker not in ui:
-    raise SystemExit("device restore marker not found")
-ui = ui.replace(restore_marker, """        if (requestSerial !== deviceListRequestSerial) return false;
+restore_new = """        if (requestSerial !== deviceListRequestSerial) return false;
 
         if (previousKey) {
             const restoredIndex = Array.from(deviceDropdown.options).findIndex(function(opt){
@@ -166,71 +120,61 @@ ui = ui.replace(restore_marker, """        if (requestSerial !== deviceListReque
         }
 
         deviceDropdown.devicesInfo = devicesInfo;
-""", 1)
+"""
+if restore_old not in ui:
+    raise SystemExit("device restore marker not found")
+ui = ui.replace(restore_old, restore_new, 1)
 
-# Ensure the Wi-Fi tunnel also uses pymobiledevice3 automatic host pair-record
-# discovery rather than a hard-coded path.
-src = src.replace('pair_records=get_home_folder(),
-', '')
-
-main.write_text(src, encoding="utf-8")
-map_file.write_text(ui, encoding="utf-8")
-
-print(f"Wi-Fi connect guard hits: {usb_guard_hits}")
-print(f"Network legacy guard hits: {network_guard_hits}")
-print(f"Manual legacy guard hits: {manual_guard_hits}")
-print("Wi-Fi tunnel pair-record override removed.")
-print("USB/Wi-Fi selection is preserved across list refresh.")
-
-# ---------- UI ----------
-# ---------- UI: explicit connection-state refresh behavior ----------
-legacy_refresh = re.compile(
-    r'''\s*<script>\s*\(function\(\)\{\s*
-    function\s+syncDeviceRefreshButton\(\)\s*\{.*?
-    document\.addEventListener\(\s*['"]DOMContentLoaded['"]\s*,\s*function\(\)\{\s*
-    syncDeviceRefreshButton\(\);\s*
-    setInterval\(syncDeviceRefreshButton\s*,\s*500\);\s*
-    \}\);\s*
-    \}\)\(\);\s*</script>\s*''',
+# 7) Remove the old background script that can force the wrong state.
+legacy_sync = re.compile(
+    r"""\\s*<script>\\s*\\(function\\(\\)\\{\\s*
+    function\\s+syncDeviceRefreshButton\\(\\)\\s*\\{.*?
+    document\\.addEventListener\\(\\s*['"]DOMContentLoaded['"]\\s*,\\s*function\\(\\)\\{\\s*
+    syncDeviceRefreshButton\\(\\);\\s*
+    setInterval\\(syncDeviceRefreshButton\\s*,\\s*500\\);\\s*
+    \\}\\);\\s*
+    \\}\\)\\(\\);\\s*</script>\\s*""",
     re.S | re.X,
 )
-ui, legacy_ui_removed = legacy_refresh.subn("\n", ui)
+ui, legacy_count = legacy_sync.subn("\\n", ui)
 
-ui = ui.replace(
-    "button.disabled = (typeof isDeviceConnected !== 'undefined' && isDeviceConnected);",
-    "button.disabled = false;",
-)
+# 8) After a successful connection, refresh is disabled; after USB removal or
+# programmatic disconnect, it is explicitly enabled. No timer re-locks it.
+success_anchor = """        if (connectButton) {
+            connectButton.disabled = true;  // Disable the button
+        }
+"""
+success_insert = """        if (connectButton) {
+            connectButton.disabled = true;  // Disable the button
+        }
+        var refreshButtonConnected = document.getElementById('refresh-device');
+        if (refreshButtonConnected) {
+            refreshButtonConnected.disabled = true;
+            refreshButtonConnected.removeAttribute('aria-disabled');
+        }
+"""
+if success_anchor in ui and "refreshButtonConnected.disabled = true;" not in ui:
+    ui = ui.replace(success_anchor, success_insert, 1)
 
-# The user-visible rule is:
-# connected => Refresh disabled
-# USB physically removed => Refresh enabled
-# No timer may override the removal handler.
-handler_pattern = re.compile(
-    r'''(function\s+handleUsbCableRemoved\(\)\s*\{.*?
-        if\s*\(spinnerElement\)\s*spinnerElement\.style\.display\s*=\s*'none';)''',
-    re.S | re.X,
-)
-if "refreshButtonAfterUsbRemoval.disabled = false;" not in ui:
-    def add_refresh_reenable(m):
-        return m.group(1) + """
+remove_anchor = """    if (spinnerElement) spinnerElement.style.display = 'none';
+"""
+remove_insert = """    if (spinnerElement) spinnerElement.style.display = 'none';
     var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
     if (refreshButtonAfterUsbRemoval) {
         refreshButtonAfterUsbRemoval.disabled = false;
         refreshButtonAfterUsbRemoval.removeAttribute('aria-disabled');
-    }"""
-    ui, handler_hits = handler_pattern.subn(add_refresh_reenable, ui, count=1)
-else:
-    handler_hits = 0
-
-ui = ui.replace(
-    'title="重新讀取 USB 裝置清單"',
-    'title="重新讀取 USB / Wi-Fi 裝置清單"',
-)
+    }
+"""
+if remove_anchor in ui and "refreshButtonAfterUsbRemoval.disabled = false;" not in ui:
+    ui = ui.replace(remove_anchor, remove_insert, 1)
 
 main.write_text(src, encoding="utf-8")
 map_file.write_text(ui, encoding="utf-8")
 
-print(f"Wi-Fi state enable blocks updated: {state_hits}")
-print(f"Wi-Fi /list_devices blocks replaced: {network_hits}")
-print(f"Legacy refresh timers removed: {legacy_ui_removed}")
-print(f"USB removal handler refresh re-enable added: {handler_hits}")
+print(f"Wi-Fi state blocks updated: {ui_count}")
+print(f"USB-only connect guards replaced: {usb_guard_count}")
+print(f"Network legacy guards replaced: {network_count}")
+print(f"Manual legacy guards replaced: {manual_count}")
+print(f"Refresh background scripts removed: {legacy_count}")
+print("Wi-Fi tunnel pair-record overrides removed.")
+print("USB/Wi-Fi selection preservation enabled.")
