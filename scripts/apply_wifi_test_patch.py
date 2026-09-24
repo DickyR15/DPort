@@ -99,38 +99,88 @@ if old_state in text:
 main.write_text(text, encoding="utf-8")
 
 map_file = Path("src/templates/map.html")
-if not map_file.exists():
-    raise SystemExit("UI template not found: src/templates/map.html")
 map_text = map_file.read_text(encoding="utf-8")
 
-old_guard = '''async function dportRefreshDeviceList() {
+# Keep the Wi-Fi discovery UI, but make Refresh deterministic:
+# connected => disabled; USB removed/disconnected => enabled.
+old_finally = "button.disabled = (typeof isDeviceConnected !== 'undefined' && isDeviceConnected);"
+map_text = map_text.replace(old_finally, "button.disabled = false;")
+
+old_guard = """async function dportRefreshDeviceList() {
     if (typeof isDeviceConnected !== 'undefined' && isDeviceConnected) {
         displayToast("裝置已連接，無需重新整理裝置清單。");
         return;
     }
 
-    if (deviceListManualRefreshInFlight) return;'''
-new_guard = '''async function dportRefreshDeviceList() {
-    if (deviceListManualRefreshInFlight) return;'''
+    if (deviceListManualRefreshInFlight) return;"""
+new_guard = """async function dportRefreshDeviceList() {
+    if (isDeviceConnected) {
+        displayToast("裝置已連接，無需重新整理裝置清單。");
+        return;
+    }
+
+    if (deviceListManualRefreshInFlight) return;"""
 map_text = map_text.replace(old_guard, new_guard, 1)
 
-map_text = map_text.replace(
-    "button.disabled = (typeof isDeviceConnected !== 'undefined' && isDeviceConnected);",
-    "button.disabled = false;",
-)
-
-legacy = re.compile(
+legacy_pattern = re.compile(
     r'''\s*<script>\s*\(function\(\)\{\s*
-    function\s+syncDeviceRefreshButton\(\)\{.*?
-    document\.addEventListener\('DOMContentLoaded',function\(\)\{\s*
+    function\s+syncDeviceRefreshButton\(\)\s*\{.*?
+    document\.addEventListener\(\s*['"]DOMContentLoaded['"]\s*,\s*function\(\)\{\s*
     syncDeviceRefreshButton\(\);\s*
-    setInterval\(syncDeviceRefreshButton,500\);\s*
+    setInterval\(syncDeviceRefreshButton\s*,\s*500\);\s*
     \}\);\s*
-    \}\)\(\);\s*</script>''',
+    \}\)\(\);\s*</script>\s*''',
     re.S | re.X,
 )
-map_text, _ = legacy.subn("\n", map_text)
+map_text, legacy_removed = legacy_pattern.subn("\n", map_text)
 
+disconnect_anchor = "    if (spinnerElement) spinnerElement.style.display = 'none';"
+disconnect_insert = """    if (spinnerElement) spinnerElement.style.display = 'none';
+
+    var refreshButton = document.getElementById('refresh-device');
+    if (refreshButton) {
+        refreshButton.disabled = false;
+        refreshButton.removeAttribute('aria-disabled');
+    }
+"""
+if disconnect_anchor in map_text and "refreshButton.disabled = false;" not in map_text:
+    map_text = map_text.replace(disconnect_anchor, disconnect_insert, 1)
+
+connect_anchor = """        if (connectButton) {
+            connectButton.disabled = true;  // Disable the button
+        }
+"""
+connect_insert = """        if (connectButton) {
+            connectButton.disabled = true;  // Disable the button
+        }
+        var refreshButtonConnected = document.getElementById('refresh-device');
+        if (refreshButtonConnected) {
+            refreshButtonConnected.disabled = true;
+            refreshButtonConnected.removeAttribute('aria-disabled');
+        }
+"""
+if connect_anchor in map_text and "refreshButtonConnected.disabled = true;" not in map_text:
+    map_text = map_text.replace(connect_anchor, connect_insert, 1)
+
+manual_disc_anchor = """        if (connectButton) {
+            connectButton.disabled = false;
+        }
+    }
+"""
+manual_disc_insert = """        if (connectButton) {
+            connectButton.disabled = false;
+        }
+        var refreshButtonDisconnected = document.getElementById('refresh-device');
+        if (refreshButtonDisconnected) {
+            refreshButtonDisconnected.disabled = false;
+            refreshButtonDisconnected.removeAttribute('aria-disabled');
+        }
+    }
+"""
+if manual_disc_anchor in map_text and "refreshButtonDisconnected.disabled = false;" not in map_text:
+    map_text = map_text.replace(manual_disc_anchor, manual_disc_insert, 1)
+
+# Remove any earlier authoritative script that can race with the explicit states.
 map_text = re.sub(
     r'''\s*<script id="dport-refresh-authoritative-state">.*?</script>\s*''',
     "\n",
@@ -138,65 +188,9 @@ map_text = re.sub(
     flags=re.S,
 )
 
-map_text += r'''
-<script id="dport-refresh-authoritative-state">
-(function(){
-    var refreshStateBusy = false;
-
-    async function syncRefreshButton(){
-        var button = document.getElementById('refresh-device');
-        if (!button || refreshStateBusy) return;
-
-        var manualBusy = (
-            typeof deviceListManualRefreshInFlight !== 'undefined' &&
-            deviceListManualRefreshInFlight === true
-        );
-        if (manualBusy) {
-            button.disabled = true;
-            return;
-        }
-
-        refreshStateBusy = true;
-        try {
-            var response = await fetch('/usb_presence?_=' + Date.now(), {
-                cache: 'no-store'
-            });
-            var payload = response && response.ok ? await response.json() : null;
-            var devices = payload && Array.isArray(payload.devices) ? payload.devices : [];
-
-            var usbPresent = devices.some(function(device){
-                return String((device && device.ConnectionType) || 'USB').toUpperCase() === 'USB';
-            });
-
-            var connected = (
-                typeof isDeviceConnected !== 'undefined' &&
-                isDeviceConnected === true
-            );
-
-            // USB physically present + app connected => disabled.
-            // USB absent (or Wi-Fi-only) => enabled.
-            button.disabled = usbPresent && connected;
-            button.removeAttribute('aria-disabled');
-        } catch (e) {
-            button.disabled = false;
-        } finally {
-            refreshStateBusy = false;
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', function(){
-        syncRefreshButton();
-        setInterval(syncRefreshButton, 800);
-    });
-    window.addEventListener('focus', syncRefreshButton);
-})();
-</script>
-'''
-
-map_text = map_text.replace(
-    'title="重新讀取 USB 裝置清單"',
-    'title="重新讀取 USB / Wi-Fi 裝置清單"',
-)
+# Explicit states are driven by the actual application state changes.
+# Do not add another background timer.
 map_file.write_text(map_text, encoding="utf-8")
 
-print("Wi-Fi discovery + refresh-state patch applied.")
+print(f"legacy background refresh synchronizer removed: {legacy_removed}")
+print("Wi-Fi discovery + deterministic USB refresh state patch applied.")
