@@ -12,12 +12,90 @@ html = path.read_text(encoding="utf-8")
 for pattern in (
     r'\s*<style id="dport-final-ui-polish-v[0-9]+">.*?</style>\s*',
     r'\s*<script id="dport-final-favorites-render-v[0-9]+">.*?</script>\s*',
-    r'\s*<script id="dport-map-status-overlay-script">.*?</script>\s*',
+    r'\s*<script id="dport-map-status-overlay-script">
+(function(){
+    function findStatusCard(){
+        var found=[];
+        document.querySelectorAll('body *').forEach(function(el){
+            if(!el || el.id==='dport-map-status-overlay') return;
+            var t=(el.innerText||'').replace(/\s+/g,' ').trim();
+            if(
+                t.indexOf('準備就緒')>=0 &&
+                (t.indexOf('USB')>=0 || t.indexOf('裝置')>=0)
+            ){
+                var r=el.getBoundingClientRect();
+                if(r.width>=160 && r.height>=32 && r.width<=700 && r.height<=260){
+                    found.push(el);
+                }
+            }
+        });
+        found.sort(function(a,b){
+            var ra=a.getBoundingClientRect();
+            var rb=b.getBoundingClientRect();
+            return (ra.width*ra.height)-(rb.width*rb.height);
+        });
+        return found[0] || null;
+    }
+
+    function findMapFollowButton(){
+        var buttons=Array.from(document.querySelectorAll('button'));
+        return buttons.find(function(btn){
+            var t=(btn.innerText||btn.textContent||'').replace(/\s+/g,'').trim();
+            return t.indexOf('地圖跟隨')>=0 || t.indexOf('跟隨地圖')>=0;
+        }) || null;
+    }
+
+    function mountNextToMapFollow(){
+        if(document.getElementById('dport-map-status-overlay')) return true;
+
+        var source=findStatusCard();
+        var follow=findMapFollowButton();
+        if(!source || !follow || !follow.parentElement) return false;
+
+        var holder=document.createElement('div');
+        holder.id='dport-map-status-overlay';
+
+        // Put the real status element immediately to the right of the Follow
+        // control, staying in the same header container.
+        follow.insertAdjacentElement('afterend',holder);
+        holder.appendChild(source);
+
+        var parent=follow.parentElement;
+        var style=getComputedStyle(parent);
+        if(style.display==='flex' || style.display==='inline-flex'){
+            parent.style.alignItems='center';
+        }else{
+            parent.style.display='flex';
+            parent.style.alignItems='center';
+            parent.style.flexWrap='nowrap';
+            parent.style.minWidth='0';
+            parent.style.maxWidth='100%';
+            parent.style.overflow='hidden';
+        }
+
+        return true;
+    }
+
+    function ensure(){
+        if(mountNextToMapFollow()) return;
+        [200,500,1000,1800,3000].forEach(function(ms){
+            setTimeout(mountNextToMapFollow,ms);
+        });
+    }
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',ensure,{once:true});
+    }else{
+        ensure();
+    }
+    window.addEventListener('load',ensure);
+})();
+</script>\s*',
 ):
     html = re.sub(pattern, "\n", html, flags=re.S)
 
 block = r'''
-<style id="dport-final-ui-polish-v5">
+<style id="dport-final-ui-polish-v6">
 :root{
     --dport-panel:#2a3240;
     --dport-panel-hover:#313b4d;
@@ -27,10 +105,10 @@ block = r'''
     --dport-muted:#aeb8ca;
     --dport-blue:#5669e7;
     --dport-blue-hover:#697bf4;
-    --dport-danger-bg:rgba(151,70,70,.42);
-    --dport-danger-bg-hover:rgba(171,80,80,.56);
-    --dport-danger-border:rgba(225,158,158,.66);
-    --dport-danger-text:#ffeaea;
+    --dport-danger-bg:rgba(67,78,98,.66);
+    --dport-danger-bg-hover:rgba(87,101,126,.82);
+    --dport-danger-border:rgba(127,143,171,.72);
+    --dport-danger-text:#edf2fa;
 }
 
 /* One consistent DPort interaction language for application buttons.
@@ -67,7 +145,7 @@ body button:disabled{
 #dport-map-follow,#dport-locate,#dport-stop-location{
     background:var(--dport-blue) !important;
     border:1px solid #8f9cff !important;
-    color:#fff !important;
+    color:#ffffff !important;
     box-shadow:0 4px 12px rgba(36,51,132,.24) !important;
 }
 #search:hover,#connect:hover,#disconnect:hover,#set-location:hover,#stop-location:hover,
@@ -90,7 +168,7 @@ body button:disabled{
     border-color:var(--dport-border-hover) !important;
 }
 
-/* Destructive actions: consistent translucent red. */
+/* Destructive actions: dark blue-gray translucent, matching DPort. */
 #geoport-clear-coordinates,.geoport-recent-delete-selected,
 .geoport-recent-clear,.geoport-fav-clear-all{
     background:var(--dport-danger-bg) !important;
@@ -102,7 +180,7 @@ body button:disabled{
 .geoport-recent-clear:hover,.geoport-fav-clear-all:hover{
     background:var(--dport-danger-bg-hover) !important;
     border-color:#efb2b2 !important;
-    color:#fff !important;
+    color:#ffffff !important;
     box-shadow:0 6px 15px rgba(0,0,0,.18) !important;
 }
 
@@ -204,20 +282,38 @@ body button:disabled{
 .geoport-fav-name.xlong{font-size:12.5px !important;line-height:1.08 !important}
 .geoport-fav-detail{display:none !important}
 
-/* The button remains 32x32 for easy clicking, while its visual chip is only
-   18x18. The hit area is positioned inside the card's top-right corner. */
-.geoport-fav-delete{
+/* Favorite delete: generous click target, compact visual chip, always inside card. */
+.geoport-fav-card{
+    position:relative !important;
+    width:100% !important;
+    height:68px !important;
+    min-width:0 !important;
+    min-height:68px !important;
+    overflow:hidden !important;
+    border-radius:11px !important;
+}
+.geoport-fav-open{
+    position:absolute !important;
+    inset:0 !important;
+    width:100% !important;
+    height:100% !important;
+    min-height:0 !important;
+    box-sizing:border-box !important;
+    padding:8px 34px 8px 13px !important;
+    z-index:1 !important;
+}
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete{
     position:absolute !important;
     top:2px !important;
     right:2px !important;
-    width:32px !important;
-    min-width:32px !important;
-    max-width:32px !important;
-    height:32px !important;
-    min-height:32px !important;
-    max-height:32px !important;
-    padding:0 !important;
+    width:34px !important;
+    min-width:34px !important;
+    max-width:34px !important;
+    height:34px !important;
+    min-height:34px !important;
+    max-height:34px !important;
     margin:0 !important;
+    padding:0 !important;
     border:0 !important;
     border-radius:8px !important;
     background:transparent !important;
@@ -228,8 +324,9 @@ body button:disabled{
     overflow:visible !important;
     transform:none !important;
     z-index:20 !important;
+    cursor:pointer !important;
 }
-.geoport-fav-delete::before{
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete::before{
     content:'' !important;
     position:absolute !important;
     top:7px !important;
@@ -238,10 +335,11 @@ body button:disabled{
     height:18px !important;
     box-sizing:border-box !important;
     border-radius:5px !important;
-    background:rgba(151,70,70,.42) !important;
-    border:1px solid rgba(225,158,158,.60) !important;
+    background:rgba(67,78,98,.68) !important;
+    border:1px solid rgba(127,143,171,.72) !important;
+    box-shadow:0 2px 6px rgba(0,0,0,.15) !important;
 }
-.geoport-fav-delete::after{
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete::after{
     content:'×' !important;
     position:absolute !important;
     top:7px !important;
@@ -251,17 +349,18 @@ body button:disabled{
     display:flex !important;
     align-items:center !important;
     justify-content:center !important;
-    color:#ffeaea !important;
+    color:#edf2fa !important;
     font-size:12px !important;
     line-height:18px !important;
     font-weight:800 !important;
 }
-.geoport-fav-delete:hover::before{
-    background:rgba(171,80,80,.58) !important;
-    border-color:rgba(239,177,177,.80) !important;
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover::before{
+    background:rgba(87,101,126,.84) !important;
+    border-color:#8fa1c1 !important;
 }
-.geoport-fav-delete:hover::after{color:#fff !important}
-
+html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover::after{
+    color:#ffffff !important;
+}
 .geoport-fav-clear-all{
     min-width:56px !important;
     min-height:38px !important;
@@ -270,45 +369,46 @@ body button:disabled{
     border-radius:9px !important;
 }
 
-/* ---------------- Map-center DPort notifications ---------------- */
+/* ---------------- DPort status notification next to Map Follow ---------------- */
 #dport-map-status-overlay{
-    position:absolute !important;
-    left:50% !important;
-    top:50% !important;
-    transform:translate(-50%,-50%) !important;
-    z-index:900 !important;
-    width:min(430px,72%) !important;
-    max-width:430px !important;
-    margin:0 !important;
+    position:relative !important;
+    left:auto !important;
+    top:auto !important;
+    transform:none !important;
+    z-index:30 !important;
+    flex:1 1 auto !important;
+    min-width:0 !important;
+    max-width:420px !important;
+    width:auto !important;
+    margin:0 0 0 8px !important;
     padding:0 !important;
     box-sizing:border-box !important;
     pointer-events:none !important;
+    overflow:hidden !important;
 }
 #dport-map-status-overlay > *{
     width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
     box-sizing:border-box !important;
-    background:rgba(31,38,50,.90) !important;
-    border:1px solid rgba(112,130,168,.80) !important;
-    border-radius:12px !important;
+    background:rgba(31,38,50,.92) !important;
+    border:1px solid rgba(92,108,137,.82) !important;
+    border-radius:9px !important;
     color:#f5f7fb !important;
-    box-shadow:0 10px 28px rgba(0,0,0,.28) !important;
+    box-shadow:0 6px 18px rgba(0,0,0,.20) !important;
     backdrop-filter:blur(7px) !important;
+    overflow:hidden !important;
+}
+#dport-map-status-overlay > * > *{
+    max-width:100% !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
 }
 @media (max-width:900px){
-    #dport-map-status-overlay{width:min(360px,78%) !important;}
-    .geoport-fav-list{
-        grid-template-rows:repeat(3,64px) !important;
-        grid-auto-rows:64px !important;
-        height:224px !important;
-        max-height:224px !important;
+    #dport-map-status-overlay{
+        max-width:260px !important;
+        margin-left:6px !important;
     }
-    .geoport-fav-card,.geoport-fav-open{
-        height:64px !important;
-        min-height:64px !important;
-    }
-    .geoport-fav-name{font-size:14px !important}
-    .geoport-fav-name.long{font-size:13px !important}
-    .geoport-fav-name.xlong{font-size:12px !important}
 }
 </style>
 
