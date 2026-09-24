@@ -150,50 +150,8 @@ jobs:
       - name: Fix device refresh state
         shell: pwsh
         run: |
-          $map = 'src/templates/map.html'
-          if (-not (Test-Path $map)) { throw "UI template not found: $map" }
-          $html = Get-Content -LiteralPath $map -Raw
+          python scripts/fix_device_refresh.py
 
-          # Remove the old connected-state guard from every copy of the refresh function.
-          $html = [regex]::Replace(
-            $html,
-            '(?s)(async function dportRefreshDeviceList\(\)\s*\{\s*)if\s*\(typeof isDeviceConnected[^}]+\}\s*',
-            '$1'
-          )
-
-          # The template contains multiple historical copies of the refresh-button
-          # sync helper. Normalize all of them so connection state never disables
-          # Refresh; only an active manual refresh may do so.
-          $syncPattern = '(?s)const connected=\(typeof isDeviceConnected!==''undefined'' && isDeviceConnected===true\);\s*if\(connected\)\{\s*button\.disabled=true;\s*if\(button\.textContent!==''↻ 重新整理'' && button\.textContent!==''↻ 讀取中…''\)\{\s*button\.textContent=''↻ 重新整理'';\s*\}\s*\}'
-          $syncReplacement = @'
-const refreshing=(typeof deviceListManualRefreshInFlight!=='undefined' && deviceListManualRefreshInFlight===true);
-        button.disabled=refreshing;
-        if(!refreshing && button.textContent!=='↻ 重新整理' && button.textContent!=='↻ 讀取中…'){
-            button.textContent='↻ 重新整理';
-        }
-'@
-          $syncHits = ([regex]::Matches($html, $syncPattern)).Count
-          $html = [regex]::Replace($html, $syncPattern, $syncReplacement)
-
-          # Never restore the disabled state from isDeviceConnected in the manual refresh finally block.
-          $finalPattern = 'button\.disabled\s*=\s*\(typeof isDeviceConnected[^;]+;'
-          $finalHits = ([regex]::Matches($html, $finalPattern)).Count
-          $html = [regex]::Replace($html, $finalPattern, 'button.disabled = false;')
-
-          # Also patch any remaining direct refresh-button disablement tied to
-          # connection state.
-          $html = [regex]::Replace(
-            $html,
-            '(?s)(const button = document\.getElementById\(''refresh-device''\);\s*if \(button\) \{\s*).*?button\.disabled\s*=\s*true;',
-            '$1button.disabled = true;',
-            10
-          )
-
-          $html = $html.Replace('title="重新讀取 USB 裝置清單"', 'title="重新讀取 USB / Wi-Fi 裝置清單"')
-          Set-Content -LiteralPath $map -Value $html -Encoding utf8
-
-          Write-Host "Normalized $syncHits refresh sync block(s) and $finalHits stale final-state assignment(s)."
-          Write-Host 'Refresh remains enabled after USB disconnect; only an active manual refresh disables it.'
       - name: Validate source
         shell: pwsh
         run: |
