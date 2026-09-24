@@ -253,6 +253,8 @@ jobs:
           path: |
             dist/DPort-${{ steps.version.outputs.version }}.exe
             dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
+            debug_layout/map.html
+            debug_layout/layout_matches.txt
 
       - name: Publish GitHub Release
         if: github.ref == 'refs/heads/main' || github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
