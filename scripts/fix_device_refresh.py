@@ -769,62 +769,79 @@ text=text.replace(
 )
 
 
-# Final DPort 6.9.1 action styling. Scope everything to the intended controls so
-# no global button/theme rule can turn the interface white.
+# Final DPort 6.9.1 action styling.
+# Match the subdued semi-transparent red used by the existing recent-location
+# delete action. Keep this override scoped so the rest of the dark UI is intact.
 text += r'''
 <style>
-/* All clear/delete actions: exactly the same DPort danger treatment. */
+/* One consistent DPort "delete/clear" appearance. */
 #geoport-clear-coordinates,
 .geoport-recent-delete-selected,
 .geoport-recent-clear,
-.geoport-fav-clear-all,
-.geoport-fav-delete{
-    background:#8f3b3b !important;
-    border:1px solid #df9e9e !important;
-    color:#ffffff !important;
+.geoport-fav-clear-all{
+    background:rgba(143,59,59,.58) !important;
+    border:1px solid rgba(223,158,158,.72) !important;
+    color:#f6eded !important;
     box-shadow:none !important;
 }
 #geoport-clear-coordinates:hover,
 .geoport-recent-delete-selected:hover,
 .geoport-recent-clear:hover,
-.geoport-fav-clear-all:hover,
-.geoport-fav-delete:hover{
-    background:#9d4343 !important;
-    border-color:#efb2b2 !important;
+.geoport-fav-clear-all:hover{
+    background:rgba(157,67,67,.70) !important;
+    border-color:rgba(239,178,178,.82) !important;
     color:#ffffff !important;
 }
 
-/* Favorite X: tiny and visually subordinate to the location name. */
+/* Favorite X: small, top-right, semi-transparent red, and outside the main
+   text flow so the place name never runs beneath the button. */
+.geoport-fav-card{
+    position:relative !important;
+}
+.geoport-fav-open{
+    padding-right:26px !important;
+}
 .geoport-fav-delete{
     position:absolute !important;
-    top:50% !important;
-    right:4px !important;
-    transform:translateY(-50%) !important;
-    width:17px !important;
-    min-width:17px !important;
-    max-width:17px !important;
-    height:17px !important;
-    min-height:17px !important;
-    max-height:17px !important;
+    top:6px !important;
+    right:6px !important;
+    width:16px !important;
+    min-width:16px !important;
+    max-width:16px !important;
+    height:16px !important;
+    min-height:16px !important;
+    max-height:16px !important;
     padding:0 !important;
     margin:0 !important;
     border-radius:5px !important;
-    font-size:11px !important;
-    line-height:15px !important;
+    background:rgba(143,59,59,.58) !important;
+    border:1px solid rgba(223,158,158,.68) !important;
+    color:#f6eded !important;
+    font-size:10px !important;
     font-weight:700 !important;
-    z-index:3 !important;
+    line-height:14px !important;
+    text-align:center !important;
+    box-shadow:none !important;
+    opacity:.92 !important;
+    z-index:5 !important;
 }
-.geoport-fav-open{
-    padding-right:24px !important;
+.geoport-fav-delete:hover{
+    background:rgba(157,67,67,.72) !important;
+    border-color:rgba(239,178,178,.82) !important;
+    color:#ffffff !important;
+    opacity:1 !important;
 }
+
+/* Long names keep two lines while reserving just enough space for the tiny X. */
 .geoport-fav-name.long{
     font-size:14px !important;
-    line-height:1.15 !important;
+    line-height:1.16 !important;
     white-space:normal !important;
     display:-webkit-box !important;
     -webkit-box-orient:vertical !important;
     -webkit-line-clamp:2 !important;
     overflow:hidden !important;
+    text-overflow:clip !important;
     word-break:break-word !important;
 }
 .geoport-fav-name.xlong{
@@ -832,16 +849,13 @@ text += r'''
     line-height:1.1 !important;
 }
 
-/* The title action should read only「清除」. */
+/* The Favorite header action remains exactly「清除」. */
 .geoport-fav-clear-all{
     min-width:58px !important;
     min-height:34px !important;
     padding:5px 12px !important;
     border-radius:9px !important;
 }
-
-/* Do not let the UI automation script mutate theme colors on unrelated
-   buttons. These four controls are styled directly above. */
 </style>
 '''
 path.write_text(text, encoding='utf-8')
