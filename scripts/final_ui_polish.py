@@ -720,6 +720,255 @@ if "</body>" in html:
 else:
     html += css + favorites_js + status_js + header_css + header_js
 
+
+# DPort UI FINAL v4 — Ultra-wide notification placement.
+# The existing application has two separate notification mechanisms:
+# 1) .dport-hero-notifications (header)
+# 2) #dport-ultra-notification-slot (left control card)
+# On ultra-wide layouts, always surface the live toast in the header, directly
+# to the left of the compact device connection panel.
+header_v4 = """
+<style id="dport-ultra-header-notification-v4">
+@media (min-width:1400px){
+  body.dport-layout-ultrawide .dport-hero{
+    display:grid !important;
+    grid-template-columns:
+      max-content
+      minmax(330px,0.92fr)
+      minmax(280px,340px)
+      minmax(320px,390px)
+      max-content !important;
+    align-items:center !important;
+    column-gap:10px !important;
+    row-gap:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-brand{
+    grid-column:1 !important;
+    min-width:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-header-center{
+    display:contents !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot{
+    display:block !important;
+    grid-column:2 !important;
+    min-width:0 !important;
+    width:100% !important;
+    margin:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-notifications{
+    display:block !important;
+    grid-column:3 !important;
+    grid-row:1 !important;
+    align-self:center !important;
+    justify-self:stretch !important;
+    width:100% !important;
+    max-width:none !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    order:initial !important;
+    overflow:visible !important;
+    z-index:20 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot{
+    display:block !important;
+    grid-column:4 !important;
+    grid-row:1 !important;
+    align-self:center !important;
+    justify-self:stretch !important;
+    width:100% !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    box-sizing:border-box !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-device-slot #device{
+    min-width:0 !important;
+    max-width:none !important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-actions{
+    display:flex !important;
+    grid-column:5 !important;
+    grid-row:1 !important;
+    justify-self:end !important;
+    align-self:center !important;
+    min-width:0 !important;
+    width:auto !important;
+    margin:0 !important;
+    padding:0 !important;
+    order:initial !important;
+  }
+
+  /* Dynamic DPort toast becomes a normal compact header card. */
+  body.dport-layout-ultrawide .dport-hero-notifications .toast{
+    display:block !important;
+    width:100% !important;
+    max-width:none !important;
+    margin:0 !important;
+    border:1px solid rgba(92,108,137,.84) !important;
+    border-radius:10px !important;
+    background:rgba(31,38,50,.94) !important;
+    color:#f5f7fb !important;
+    box-shadow:0 7px 18px rgba(0,0,0,.22) !important;
+    overflow:hidden !important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-notifications .toast-header{
+    min-height:32px !important;
+    padding:5px 9px !important;
+    background:#3d4653 !important;
+    color:#fff !important;
+    border-bottom:1px solid #566171 !important;
+    font-size:12px !important;
+    font-weight:800 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-notifications .toast-body{
+    padding:8px 10px !important;
+    background:#252d37 !important;
+    color:#fff !important;
+    font-size:13px !important;
+    line-height:1.35 !important;
+    font-weight:700 !important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-notifications #liveToast{
+    display:none !important;
+  }
+
+  body.dport-layout-ultrawide .dport-ultra-notification-slot{
+    display:none !important;
+  }
+}
+
+@media (min-width:2200px){
+  body.dport-layout-ultrawide .dport-hero{
+    grid-template-columns:
+      max-content
+      minmax(420px,0.95fr)
+      minmax(300px,350px)
+      minmax(340px,400px)
+      max-content !important;
+    column-gap:11px !important;
+  }
+}
+
+@media (max-width:1399px){
+  body.dport-layout-ultrawide .dport-hero-notifications{
+    display:none !important;
+  }
+}
+</style>
+"""
+
+header_v4_js = """
+<script id="dport-ultra-header-notification-v4-script">
+(function(){
+  function isUltra(){
+    return document.body && document.body.classList.contains('dport-layout-ultrawide');
+  }
+
+  function headerTarget(){
+    return document.querySelector('.dport-hero-notifications');
+  }
+
+  function leftCard(){
+    return document.getElementById('dport-ultra-notification-slot');
+  }
+
+  function moveToast(toast){
+    if(!toast || !isUltra()) return;
+
+    var target=headerTarget();
+    if(!target) return;
+
+    var left=leftCard();
+    if(left && left.contains(toast)){
+      target.appendChild(toast);
+    }
+
+    if(toast.parentElement===target){
+      target.classList.add('dport-header-has-toast');
+      target.querySelectorAll('.toast').forEach(function(other){
+        if(other!==toast){
+          other.remove();
+        }
+      });
+    }
+  }
+
+  function scan(){
+    if(!isUltra()) return;
+
+    var target=headerTarget();
+    if(!target) return;
+
+    var left=leftCard();
+    if(left){
+      left.querySelectorAll('.toast').forEach(moveToast);
+    }
+
+    target.querySelectorAll('.toast').forEach(function(toast){
+      if(toast.id==='liveToast') return;
+      moveToast(toast);
+    });
+  }
+
+  function boot(){
+    scan();
+
+    if(window.MutationObserver){
+      var observer=new MutationObserver(function(){
+        scan();
+      });
+      observer.observe(document.body,{childList:true,subtree:true});
+    }
+
+    /* displayToast creates the toast dynamically after user actions. */
+    var original=window.displayToast;
+    if(typeof original==='function' && !original.__dportUltraHeaderV4){
+      var wrapped=function(){
+        var result=original.apply(this,arguments);
+        setTimeout(scan,0);
+        setTimeout(scan,40);
+        return result;
+      };
+      wrapped.__dportUltraHeaderV4=true;
+      window.displayToast=wrapped;
+    }
+
+    window.addEventListener('resize',scan);
+    window.addEventListener('load',scan);
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',boot,{once:true});
+  }else{
+    boot();
+  }
+})();
+</script>
+"""
+
+if "</body>" in html:
+    html = html.replace("</body>", header_v4 + header_v4_js + "\n</body>", 1)
+else:
+    html += header_v4 + header_v4_js
+
 path.write_text(html, encoding="utf-8")
 
 print("DPort final UI polish v8 applied successfully.")
