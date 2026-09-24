@@ -115,9 +115,80 @@ text = text.replace(old_state, new_state, 1)
 
 main.write_text(text, encoding="utf-8")
 
+# Wi-Fi testing must allow a manual device-list refresh while USB is attached,
+# because USB is the bootstrap path that enables Wi-Fi lockdown/Bonjour.
+map_file = Path("src/templates/map.html")
+map_text = map_file.read_text(encoding="utf-8")
+
+old_refresh_guard = """async function dportRefreshDeviceList() {
+    if (typeof isDeviceConnected !== 'undefined' && isDeviceConnected) {
+        displayToast("裝置已連接，無需重新整理裝置清單。");
+        return;
+    }
+
+"""
+new_refresh_guard = """async function dportRefreshDeviceList() {
+
+"""
+if old_refresh_guard in map_text:
+    map_text = map_text.replace(old_refresh_guard, new_refresh_guard, 1)
+elif "async function dportRefreshDeviceList() {" not in map_text:
+    raise SystemExit("Manual refresh function not found in map.html")
+
+old_final_disable = """        if (button) {
+            button.textContent = button.dataset.originalText || '↻ 重新整理';
+            button.disabled = (typeof isDeviceConnected !== 'undefined' && isDeviceConnected);
+        }
+"""
+new_final_disable = """        if (button) {
+            button.textContent = button.dataset.originalText || '↻ 重新整理';
+            button.disabled = false;
+        }
+"""
+if old_final_disable in map_text:
+    map_text = map_text.replace(old_final_disable, new_final_disable, 1)
+
+old_sync = """    function syncDeviceRefreshButton(){
+        const button=document.getElementById('refresh-device');
+        if(!button)return;
+        const connected=(typeof isDeviceConnected!=='undefined' && isDeviceConnected===true);
+        if(connected){
+            button.disabled=true;
+            if(button.textContent!=='↻ 重新整理' && button.textContent!=='↻ 讀取中…'){
+                button.textContent='↻ 重新整理';
+            }
+        }
+    }
+"""
+new_sync = """    function syncDeviceRefreshButton(){
+        const button=document.getElementById('refresh-device');
+        if(!button)return;
+        if(typeof deviceListManualRefreshInFlight!=='undefined' && deviceListManualRefreshInFlight){
+            button.disabled=true;
+            return;
+        }
+        button.disabled=false;
+        if(button.textContent!=='↻ 重新整理' && button.textContent!=='↻ 讀取中…'){
+            button.textContent='↻ 重新整理';
+        }
+    }
+"""
+if old_sync in map_text:
+    map_text = map_text.replace(old_sync, new_sync, 1)
+
+# Update the tooltip to make the USB-bootstrap behavior clear.
+map_text = map_text.replace(
+    'title="重新讀取 USB 裝置清單"',
+    'title="重新讀取 USB / Wi-Fi 裝置清單"',
+    1,
+)
+
+map_file.write_text(map_text, encoding="utf-8")
+
 # Keep the patch idempotent.
 print("Applied Wi-Fi test patch:")
 print("- Enables Wi-Fi lockdown transport while USB-connected")
 print("- Enumerates paired Wi-Fi devices via mobdev2 Bonjour")
 print("- Allows Network connections without a RemotePairing record")
 print("- Reuses the existing Wi-Fi tunnel implementation")
+print("- Keeps manual refresh enabled while USB is connected")
