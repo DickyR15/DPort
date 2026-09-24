@@ -55,17 +55,15 @@ jobs:
           python scripts/apply_wifi_test_patch.py
           python -m py_compile src/main.py
 
-      - name: Verify Wi-Fi listing patch
+      - name: Verify Wi-Fi listing and connection path
         shell: pwsh
         run: |
           $main = Get-Content 'src/main.py' -Raw
           if (-not $main.Contains('get_mobdev2_lockdowns(')) { throw 'mobdev2 Wi-Fi discovery is missing.' }
+          if (-not $main.Contains('Selected Wi-Fi address:')) { throw 'Wi-Fi selected-address connection path is missing.' }
           if (-not $main.Contains('Wi-Fi RSD tunnel was not established.')) { throw 'Wi-Fi tunnel failure handling is missing.' }
-          if (-not $main.Contains('get_mobdev2_lockdowns(')) { throw 'mobdev2 Wi-Fi discovery is missing.' }
-          if (-not ($main.Contains('info["ConnectionType"] = "Network"') -or $main.Contains('info["ConnectionType"] = ''Network'''))) {
-            throw 'Network connection metadata is missing.'
-          }
-          Write-Host 'PASS: /list_devices includes mobdev2 Wi-Fi discovery.'
+          if (-not $main.Contains('fallback = None')) { throw 'Wi-Fi tunnel candidate matching is missing.' }
+          Write-Host 'PASS: Wi-Fi discovery + connection + tunnel path verified.'
 
       - name: Verify Wi-Fi support in source
         shell: pwsh
