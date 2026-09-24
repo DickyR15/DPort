@@ -7,28 +7,25 @@ if not path.exists():
 
 html = path.read_text(encoding="utf-8")
 
+
 # Route DPort's dynamic displayToast() messages to the ultra-wide header.
-# The original source sends ultra-wide toasts into the left control-card slot;
-# replace that target selection before the final HTML is written.
-toast_target_patch = r"""
-(?P<prefix>const ultraMode = document\.body\.classList\.contains\('dport-layout-ultrawide'\);\s*
-      const ultraSlot = document\.getElementById\('dport-ultra-notification-slot'\);\s*
-      const heroContainer = document\.querySelector\('\.dport-hero-notifications'\);\s*)
-      const target = ultraMode && ultraSlot \? ultraSlot : heroContainer;
-      if \(!target\) return;
-"""
-toast_target_replacement = r"""
-\g<prefix>      const target = ultraMode && heroContainer ? heroContainer : (ultraSlot || heroContainer);
+# The original source sends ultra-wide toasts into the left control-card slot.
+# Replace that exact target block while building the final map template.
+toast_target_old = """const ultraMode = document.body.classList.contains('dport-layout-ultrawide');
+      const ultraSlot = document.getElementById('dport-ultra-notification-slot');
+      const heroContainer = document.querySelector('.dport-hero-notifications');
+      const target = ultraMode && ultraSlot ? ultraSlot : heroContainer;
       if (!target) return;
 """
-html = re.sub(
-    toast_target_patch,
-    toast_target_replacement,
-    html,
-    count=1,
-    flags=re.S
-)
-
+toast_target_new = """const ultraMode = document.body.classList.contains('dport-layout-ultrawide');
+      const ultraSlot = document.getElementById('dport-ultra-notification-slot');
+      const heroContainer = document.querySelector('.dport-hero-notifications');
+      const target = ultraMode && heroContainer ? heroContainer : (ultraSlot || heroContainer);
+      if (!target) return;
+"""
+if toast_target_old not in html:
+    raise SystemExit("displayToast target block not found in source template")
+html = html.replace(toast_target_old, toast_target_new, 1)
 # Remove only previous generated final UI layers.
 for pattern in (
     r'\s*<style id="dport-final-ui-polish-v[0-9]+">.*?</style>\s*',
