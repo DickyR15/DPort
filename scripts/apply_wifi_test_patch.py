@@ -265,13 +265,14 @@ print(f"Wi-Fi tunnel matching present: {'fallback = None' in src}")
 print("USB/Wi-Fi selection is sticky across list refresh.")
 
 
+
 # --- Final backend Wi-Fi connection fix ---
 src = src.replace(
-    '                        f"mobdev2 device: ip={ip}, udid={device_udid}, iOS={product}, paired={getattr(device, \\'paired\\', None)}"',
-    '                        f"mobdev2 device: ip={ip}, udid={device_udid}, iOS={product}"'
+    """                        f"mobdev2 device: ip={ip}, udid={device_udid}, iOS={product}, paired={getattr(device, 'paired', None)}" """.rstrip(),
+    """                        f"mobdev2 device: ip={ip}, udid={device_udid}, iOS={product}" """.rstrip(),
 )
 
-wifi_probe_old = '''            try:
+wifi_probe_old = """            try:
                 devices = get_wifi_with_retry()
                 logger.info(f"Connect Wifi Devices: {devices}")
                 logger.info(f"Wifi Address:  {wifi_address}")
@@ -281,19 +282,18 @@ wifi_probe_old = '''            try:
                 return jsonify({'error': 'No Devices Found', 'details': error_message}), 404
 
 
-'''
-wifi_probe_new = '''            logger.info(f"Selected Wi-Fi address: {wifi_address}")
+"""
+wifi_probe_new = """            logger.info(f"Selected Wi-Fi address: {wifi_address}")
             logger.info(f"Selected Wi-Fi port: {wifi_port}")
             if not wifi_address:
                 return jsonify({
                     'error': 'Wi-Fi 裝置沒有有效的 IP 位址，請重新整理裝置清單。'
                 }), 400
 
-'''
-if wifi_probe_old in src:
-    src = src.replace(wifi_probe_old, wifi_probe_new, 1)
+"""
+src = src.replace(wifi_probe_old, wifi_probe_new, 1)
 
-rsd_old = '''            if not check_rsd_data():
+rsd_old = """            if not check_rsd_data():
                 logger.error("RSD Data is None, Perhaps the tunnel isn't established")
             else:
                 rsd_data = rsd_host, rsd_port
@@ -302,8 +302,8 @@ rsd_old = '''            if not check_rsd_data():
             rsd_data_map.setdefault(udid, {})[connection_type] = {"host": rsd_host, "port": rsd_port}
             logger.info(f"Device Connection Map: {rsd_data_map}")
             return jsonify({'rsd_data': rsd_data})
-'''
-rsd_new = '''            if not check_rsd_data() or rsd_host is None or rsd_port is None:
+"""
+rsd_new = """            if not check_rsd_data() or rsd_host is None or rsd_port is None:
                 logger.error("Wi-Fi RSD tunnel was not established.")
                 return jsonify({
                     'error': 'Wi-Fi tunnel 建立失敗',
@@ -318,11 +318,10 @@ rsd_new = '''            if not check_rsd_data() or rsd_host is None or rsd_port
             }
             logger.info(f"Device Connection Map: {rsd_data_map}")
             return jsonify({'rsd_data': rsd_data})
-'''
-if rsd_old in src:
-    src = src.replace(rsd_old, rsd_new, 1)
+"""
+src = src.replace(rsd_old, rsd_new, 1)
 
-tunnel_old = '''        async for ip, candidate in get_mobdev2_lockdowns(
+tunnel_old = """        async for ip, candidate in get_mobdev2_lockdowns(
             udid=udid,
             pair_records=get_home_folder(),
             only_paired=True,
@@ -332,8 +331,18 @@ tunnel_old = '''        async for ip, candidate in get_mobdev2_lockdowns(
             wifi_address = str(ip)
             lockdown = candidate
             break
-'''
-tunnel_new = '''        fallback = None
+"""
+tunnel_old2 = """        async for ip, candidate in get_mobdev2_lockdowns(
+            udid=udid,
+            only_paired=True,
+            timeout=timeout,
+        ):
+            logger.info(f"mobdev2 tunnel candidate: {ip}, udid={candidate.udid}")
+            wifi_address = str(ip)
+            lockdown = candidate
+            break
+"""
+tunnel_new = """        fallback = None
         async for ip, candidate in get_mobdev2_lockdowns(
             udid=udid,
             only_paired=True,
@@ -352,9 +361,13 @@ tunnel_new = '''        fallback = None
 
         if lockdown is None and fallback is not None:
             wifi_address, lockdown = fallback
-'''
+"""
 if tunnel_old in src:
     src = src.replace(tunnel_old, tunnel_new, 1)
+elif tunnel_old2 in src:
+    src = src.replace(tunnel_old2, tunnel_new, 1)
+else:
+    raise SystemExit("Expected Wi-Fi tunnel block not found")
 
 main.write_text(src, encoding="utf-8")
 print("Final backend Wi-Fi connection fix applied.")
