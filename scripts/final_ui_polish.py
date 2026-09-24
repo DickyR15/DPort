@@ -271,13 +271,13 @@ block = r'''
 .geoport-fav-delete{
     position:absolute !important;
     top:5px !important;
-    right:5px !important;
-    width:14px !important;
-    min-width:14px !important;
-    max-width:14px !important;
-    height:14px !important;
-    min-height:14px !important;
-    max-height:14px !important;
+    right:6px !important;
+    width:16px !important;
+    min-width:16px !important;
+    max-width:16px !important;
+    height:16px !important;
+    min-height:16px !important;
+    max-height:16px !important;
     padding:0 !important;
     margin:0 !important;
     display:grid !important;
