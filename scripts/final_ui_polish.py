@@ -12,6 +12,8 @@ for pattern in (
     r'\s*<style id="dport-final-ui-polish-v[0-9]+">.*?</style>\s*',
     r'\s*<script id="dport-final-favorites-render-v[0-9]+">.*?</script>\s*',
     r'\s*<script id="dport-map-status-overlay-script">.*?</script>\s*',
+    r'\s*<style id="dport-top-header-layout-v[0-9]+">.*?</style>\s*',
+    r'\s*<script id="dport-top-header-layout-script-v[0-9]+">.*?</script>\s*',
 ):
     html = re.sub(pattern, "\n", html, flags=re.S)
 
@@ -454,10 +456,276 @@ status_js = """
 </script>
 """
 
+
+header_css = """
+<style id="dport-top-header-layout-v3">
+/* Keep the connection controls compact and pushed to the far right. */
+#dport-top-device-shell-v3{
+    box-sizing:border-box !important;
+    width:280px !important;
+    min-width:280px !important;
+    max-width:280px !important;
+}
+#dport-top-device-shell-v3 select,
+#dport-top-device-shell-v3 [role="combobox"]{
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    box-sizing:border-box !important;
+}
+@media (min-width:1800px){
+    #dport-top-device-shell-v3{
+        width:300px !important;
+        min-width:300px !important;
+        max-width:300px !important;
+    }
+}
+@media (max-width:999px){
+    #dport-top-device-shell-v3{
+        width:240px !important;
+        min-width:240px !important;
+        max-width:240px !important;
+    }
+}
+#dport-top-notice-v3{
+    position:fixed !important;
+    z-index:3500 !important;
+    box-sizing:border-box !important;
+    margin:0 !important;
+    padding:0 !important;
+    pointer-events:auto !important;
+}
+#dport-top-notice-v3,
+#dport-top-notice-v3 > *{
+    max-width:100% !important;
+    box-sizing:border-box !important;
+}
+</style>
+"""
+
+header_js = """
+<script id="dport-top-header-layout-script-v3">
+(function(){
+    function textOf(el){
+        return String((el && (el.innerText || el.textContent)) || '')
+            .replace(/\\s+/g,' ')
+            .trim();
+    }
+
+    function rect(el){
+        return el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+    }
+
+    function area(el){
+        var r=rect(el);
+        return r ? Math.max(0,r.width)*Math.max(0,r.height) : 0;
+    }
+
+    function findDeviceControl(){
+        var selects=Array.prototype.slice.call(document.querySelectorAll('select'));
+        var matches=selects.filter(function(el){
+            var t=textOf(el);
+            var opts=Array.prototype.slice.call(el.options || [])
+                .map(function(o){return textOf(o);}).join(' ');
+            return /USB\\s*:/i.test(t+' '+opts) && /iOS/i.test(t+' '+opts);
+        });
+        if(matches.length){
+            return matches.sort(function(a,b){return area(a)-area(b);})[0];
+        }
+
+        var all=Array.prototype.slice.call(document.querySelectorAll('body *'));
+        var fallback=all.filter(function(el){
+            var t=textOf(el), r=rect(el);
+            return r && r.width>120 && r.height>25 &&
+                /USB\\s*:/i.test(t) && /iOS/i.test(t);
+        });
+        return fallback.sort(function(a,b){return area(a)-area(b);})[0] || null;
+    }
+
+    function findDeviceShell(control){
+        if(!control) return null;
+        var cur=control;
+        for(var i=0;i<9 && cur;i++,cur=cur.parentElement){
+            var t=textOf(cur), r=rect(cur);
+            if(r && r.width>180 && r.height>30 &&
+                /USB\\s*:/i.test(t) &&
+                /重新整理/i.test(t) &&
+                /離開/i.test(t)){
+                return cur;
+            }
+        }
+        return control.parentElement || control;
+    }
+
+    function findNoticeTextNode(){
+        var all=Array.prototype.slice.call(document.querySelectorAll('body *'));
+        var hits=all.filter(function(el){
+            if(el.id==='dport-top-notice-v3') return false;
+            var t=textOf(el), r=rect(el);
+            return r && r.width>120 && r.height>20 &&
+                /請先連接裝置/i.test(t) &&
+                /再進行模擬定位/i.test(t);
+        });
+        return hits.sort(function(a,b){return area(a)-area(b);})[0] || null;
+    }
+
+    function findNoticeCard(node){
+        if(!node) return null;
+
+        /* The previous status-overlay pass may already have moved the real
+           card into #dport-map-status-overlay. Pull that existing card out
+           rather than creating a duplicate. */
+        var overlay=document.getElementById('dport-map-status-overlay');
+        if(overlay){
+            var candidates=Array.prototype.slice.call(overlay.children || []);
+            var existing=candidates.find(function(el){
+                var t=textOf(el);
+                return /請先連接裝置/i.test(t);
+            });
+            if(existing) return existing;
+        }
+
+        var cur=node;
+        var best=node;
+        for(var i=0;i<7 && cur;i++,cur=cur.parentElement){
+            var t=textOf(cur), r=rect(cur);
+            if(!r) continue;
+            if(/請先連接裝置/i.test(t) &&
+                r.width>=220 && r.width<=700 &&
+                r.height>=45 && r.height<=300){
+                best=cur;
+            } else if(best!==node){
+                break;
+            }
+        }
+        return best;
+    }
+
+    function compactDevice(device){
+        if(!device) return;
+        device.id='dport-top-device-shell-v3';
+        device.style.setProperty('width','280px','important');
+        device.style.setProperty('min-width','280px','important');
+        device.style.setProperty('max-width','280px','important');
+        device.style.setProperty('flex','0 0 280px','important');
+
+        var select=device.querySelector('select');
+        if(select){
+            select.style.setProperty('width','100%','important');
+            select.style.setProperty('max-width','100%','important');
+            select.style.setProperty('min-width','0','important');
+        }
+
+        var p=device.parentElement;
+        var p2=p ? p.parentElement : null;
+        [p,p2].forEach(function(host){
+            if(!host) return;
+            var cs=getComputedStyle(host);
+            if(cs.display==='flex' || cs.display==='inline-flex'){
+                host.style.setProperty('justify-content','flex-end','important');
+            }
+        });
+    }
+
+    function moveNoticeBesideDevice(notice,device){
+        if(!notice || !device) return false;
+
+        notice.id='dport-top-notice-v3';
+
+        /* Reparent the existing notification. DOM event handlers stay attached
+           when a node is moved, so device/status behavior is preserved. */
+        if(notice.parentElement !== document.body){
+            document.body.appendChild(notice);
+        }
+
+        var dr=rect(device);
+        if(!dr || dr.width<=0 || dr.height<=0) return false;
+
+        var deviceWidth=dr.width;
+        var gap=12;
+        var available=Math.max(160,dr.left-gap-8);
+        var preferred=320;
+
+        var noticeWidth=Math.min(preferred,available);
+        if(window.innerWidth>=1800){
+            noticeWidth=Math.min(350,available);
+        }
+
+        /* Preserve the required left-of-device arrangement. On narrower
+           windows the notification contracts instead of jumping elsewhere. */
+        if(noticeWidth<160) noticeWidth=Math.max(120,available);
+
+        var left=Math.max(8,dr.left-gap-noticeWidth);
+        var top=Math.max(8,dr.top);
+
+        notice.style.setProperty('position','fixed','important');
+        notice.style.setProperty('left',left+'px','important');
+        notice.style.setProperty('top',top+'px','important');
+        notice.style.setProperty('width',noticeWidth+'px','important');
+        notice.style.setProperty('max-width',noticeWidth+'px','important');
+
+        if(dr.bottom<0 || dr.top>window.innerHeight){
+            notice.style.setProperty('visibility','hidden','important');
+        }else{
+            notice.style.setProperty('visibility','visible','important');
+        }
+
+        return true;
+    }
+
+    function arrange(){
+        var control=findDeviceControl();
+        var device=findDeviceShell(control);
+        var node=findNoticeTextNode();
+        var notice=findNoticeCard(node);
+
+        if(!device || !notice) return false;
+
+        compactDevice(device);
+        moveNoticeBesideDevice(notice,device);
+        return true;
+    }
+
+    function follow(){
+        var device=document.getElementById('dport-top-device-shell-v3');
+        var notice=document.getElementById('dport-top-notice-v3');
+        if(device && notice){
+            moveNoticeBesideDevice(notice,device);
+        }else{
+            arrange();
+        }
+    }
+
+    function boot(){
+        arrange();
+        [200,500,1000,1800,3000].forEach(function(ms){
+            setTimeout(arrange,ms);
+        });
+    }
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',boot,{once:true});
+    }else{
+        boot();
+    }
+    window.addEventListener('load',follow);
+    window.addEventListener('resize',follow);
+    window.addEventListener('scroll',follow,{passive:true});
+})();
+</script>
+"""
+
 if "</body>" in html:
-    html = html.replace("</body>", css + favorites_js + status_js + "\n</body>", 1)
+    html = html.replace("</body>", css + favorites_js + status_js + header_css + header_js + "\n</body>", 1)
 else:
-    html += css + favorites_js + status_js
+    html += css + favorites_js + status_js + header_css + header_js
+
+path.write_text(html, encoding="utf-8")
+
+print("DPort final UI polish v8 applied successfully.")
+print("Favorite X: bottom-right inside card; 30px hit target + 18px visual chip.")
+print("Favorite buttons: dark blue-gray, subtle hover.")
+print("Status notification: top-right inside map frame, constrained and readable.")
 
 path.write_text(html, encoding="utf-8")
 
