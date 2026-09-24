@@ -14,11 +14,12 @@ ui = map_file.read_text(encoding="utf-8")
 
 # ---------- Python backend: enable Wi-Fi and list Wi-Fi devices ----------
 state_pattern = re.compile(
-    r'''(?m)^(\s*)try:\s*\n\1    info\["wifiState"\]\s*=\s*await client\.get_enable_wifi_connections\(\)\s*\n\1except Exception:\s*\n\1    info\["wifiState"\]\s*=\s*False\s*$'''
+    r'''(?m)^(\s*)try:\s*\n\1    info\[\"wifiState\"\]\s*=\s*await client\.get_enable_wifi_connections\(\)\s*\n\1except Exception:\s*\n\1    info\[\"wifiState\"\]\s*=\s*False\s*$'''
 )
 state_repl = r'''\1try:
 \1    info["wifiState"] = await client.get_enable_wifi_connections()
 \1    if not info["wifiState"]:
+\1        logger.info("Wi-Fi lockdown is off; enabling it over USB.")
 \1        await client.set_enable_wifi_connections(True)
 \1        await asyncio.sleep(1.0)
 \1        info["wifiState"] = await client.get_enable_wifi_connections()
@@ -38,7 +39,7 @@ network_repl = r'''\1# Discover paired iPhones through Apple's normal mobdev2 Bo
 \1        udid=None,
 \1        pair_records=get_home_folder(),
 \1        only_paired=True,
-\1        timeout=min(float(timeout), 3.0),
+\1        timeout=min(float(timeout), 5.0),
 \1    ):
 \1        try:
 \1            info = dict(network_lockdown.short_info)
