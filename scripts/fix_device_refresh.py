@@ -858,6 +858,96 @@ text += r'''
 }
 </style>
 '''
+
+# FINAL VISUAL OVERRIDE
+# The clear/delete controls must look exactly like the existing "複製座標"
+# control. Clone its rendered button properties at runtime instead of inventing
+# another red/gray palette.
+text += r'''
+<style id="dport-exact-copy-button-appearance">
+/* Favorite X: visible box is 5x5, placed in the top-right corner. */
+.geoport-fav-card{position:relative !important;}
+.geoport-fav-open{padding-right:10px !important;}
+.geoport-fav-name.long,
+.geoport-fav-name.xlong{
+    padding-right:0 !important;
+}
+.geoport-fav-delete{
+    position:absolute !important;
+    top:5px !important;
+    right:5px !important;
+    width:5px !important;
+    min-width:5px !important;
+    max-width:5px !important;
+    height:5px !important;
+    min-height:5px !important;
+    max-height:5px !important;
+    margin:0 !important;
+    padding:0 !important;
+    border-radius:2px !important;
+    background:rgba(143,59,59,.58) !important;
+    border:1px solid rgba(223,158,158,.68) !important;
+    color:#f6eded !important;
+    font-size:5px !important;
+    font-weight:700 !important;
+    line-height:4px !important;
+    text-align:center !important;
+    box-shadow:none !important;
+    z-index:10 !important;
+    overflow:visible !important;
+}
+
+/* Keep the rest of the Favorite card visually unchanged. */
+.geoport-fav-open:hover{
+    background:#36415a !important;
+    border-color:#9ab3ff !important;
+}
+</style>
+
+<script id="dport-copy-button-style-sync">
+(function(){
+    function copyRenderedButtonAppearance(source, target){
+        if(!source || !target) return;
+        var cs=getComputedStyle(source);
+        var props=[
+            'appearance','background','background-color','background-image',
+            'border','border-width','border-style','border-color','border-radius',
+            'box-shadow','color','font','font-family','font-size','font-weight',
+            'line-height','letter-spacing','text-align','text-transform',
+            'padding','padding-top','padding-right','padding-bottom','padding-left',
+            'min-width','min-height','height','outline','text-shadow','opacity'
+        ];
+        props.forEach(function(p){
+            var v=cs.getPropertyValue(p);
+            if(v) target.style.setProperty(p,v,'important');
+        });
+    }
+
+    function sync(){
+        var source=document.getElementById('geoport-copy-coordinates');
+        if(!source) return;
+        var ids=[
+            'geoport-clear-coordinates',
+            'geoport-recent-delete-selected'
+        ];
+        ids.forEach(function(id){
+            var target=document.getElementById(id);
+            if(target) copyRenderedButtonAppearance(source,target);
+        });
+
+        document.querySelectorAll('.geoport-recent-clear, .geoport-fav-clear-all')
+            .forEach(function(target){
+                copyRenderedButtonAppearance(source,target);
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded',sync);
+    window.addEventListener('load',sync);
+    setTimeout(sync,300);
+    setTimeout(sync,1000);
+})();
+</script>
+'''
 path.write_text(text, encoding='utf-8')
 print("6.9.1 favorites/location polish applied.")
 print("- Reverse geocoding runs faster via parallel lookups.")
