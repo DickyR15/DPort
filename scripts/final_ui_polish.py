@@ -1322,6 +1322,380 @@ if "</body>" in html:
 else:
     html += header_v9_css + header_v9_js
 
+
+# DPort Header v11 — final visual layout
+# Deterministic responsive header:
+# DPort brand -> GPX -> transient notification -> device -> refresh/connect -> exit.
+# The notification column is created only while a toast is visible.
+header_v11 = r"""
+<style id="dport-top-header-final-v11">
+@media (min-width:1400px){
+  body.dport-layout-ultrawide .dport-hero{
+    display:grid !important;
+    grid-template-columns:minmax(230px,.78fr) minmax(460px,1.65fr) minmax(450px,1.30fr) 72px !important;
+    column-gap:12px !important;
+    align-items:center !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    padding:9px 12px !important;
+    box-sizing:border-box !important;
+    overflow:visible !important;
+  }
+
+  body.dport-layout-ultrawide.dport-header-toast-visible .dport-hero{
+    grid-template-columns:minmax(230px,.78fr) minmax(460px,1.65fr) minmax(250px,.82fr) minmax(450px,1.30fr) 72px !important;
+  }
+
+  body.dport-layout-ultrawide .dport-brand{
+    grid-column:1 !important; grid-row:1 !important;
+    width:100% !important; min-width:0 !important; max-width:none !important;
+    height:72px !important; min-height:72px !important; max-height:72px !important;
+    margin:0 !important; padding:0 !important;
+    display:flex !important; align-items:center !important;
+    overflow:hidden !important; box-sizing:border-box !important;
+  }
+  body.dport-layout-ultrawide .dport-brand-icon{
+    width:58px !important;height:58px !important;
+    min-width:58px !important;min-height:58px !important;
+    flex:0 0 58px !important;
+  }
+  body.dport-layout-ultrawide .dport-brand-text{
+    min-width:0 !important; max-width:calc(100% - 68px) !important;
+    overflow:hidden !important;
+  }
+  body.dport-layout-ultrawide .dport-title{
+    font-size:24px !important; line-height:1 !important;
+    white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important;
+  }
+  body.dport-layout-ultrawide .dport-subtitle,
+  body.dport-layout-ultrawide .dport-caption,
+  body.dport-layout-ultrawide #dport-pm3-status{
+    white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important;
+  }
+
+  body.dport-layout-ultrawide .dport-header-center{display:contents !important}
+  body.dport-layout-ultrawide .dport-standard-device-slot{display:none !important}
+
+  /* GPX: title row first, four data boxes second. Nothing may overlap. */
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot{
+    grid-column:2 !important; grid-row:1 !important;
+    width:100% !important; min-width:0 !important; max-width:none !important;
+    height:72px !important; min-height:72px !important; max-height:72px !important;
+    margin:0 !important; padding:0 !important; overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{
+    display:grid !important;
+    grid-template-rows:22px 44px !important;
+    row-gap:3px !important;
+    width:100% !important; height:72px !important;
+    min-height:72px !important; max-height:72px !important;
+    padding:4px 8px !important; margin:0 !important;
+    box-sizing:border-box !important; overflow:hidden !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-head{
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) auto auto !important;
+    align-items:center !important; gap:6px !important;
+    height:22px !important; min-height:22px !important; max-height:22px !important;
+    margin:0 !important; padding:0 !important; overflow:hidden !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-section-kicker{font-size:8px !important;line-height:1 !important}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-section-title{
+    font-size:13px !important;line-height:15px !important;min-width:0 !important;
+    white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-status-pill{
+    max-width:110px !important;padding:2px 6px !important;font-size:8px !important;
+    line-height:12px !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-wrap{
+    display:flex !important;align-items:center !important;gap:4px !important;min-width:0 !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-label{font-size:8px !important;white-space:nowrap !important}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-select{
+    width:94px !important;min-width:94px !important;max-width:94px !important;
+    height:24px !important;min-height:24px !important;padding:2px 18px 2px 6px !important;font-size:9px !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{
+    display:grid !important;grid-template-columns:repeat(4,minmax(0,1fr)) !important;
+    gap:6px !important;width:100% !important;height:44px !important;
+    min-height:44px !important;max-height:44px !important;
+    margin:0 !important;padding:0 !important;transform:none !important;overflow:hidden !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item{
+    width:100% !important;height:44px !important;min-height:44px !important;max-height:44px !important;
+    padding:5px 7px !important;margin:0 !important;box-sizing:border-box !important;
+    border-radius:8px !important;overflow:hidden !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item span{
+    display:block !important;max-width:100% !important;font-size:8px !important;line-height:10px !important;
+    white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item strong{
+    display:block !important;max-width:100% !important;margin-top:2px !important;font-size:11px !important;line-height:14px !important;
+    white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;
+  }
+
+  /* No notification: there is NO reserved notification column. */
+  body.dport-layout-ultrawide .dport-hero-notifications{
+    display:block !important;
+    width:0 !important;height:0 !important;min-width:0 !important;min-height:0 !important;
+    max-width:0 !important;max-height:0 !important;margin:0 !important;padding:0 !important;
+    overflow:visible !important;
+  }
+  body.dport-layout-ultrawide .dport-hero-notifications .toast{display:none !important}
+  body.dport-layout-ultrawide.dport-header-toast-visible .dport-hero-notifications{
+    grid-column:3 !important;grid-row:1 !important;
+    width:100% !important;height:60px !important;min-width:0 !important;min-height:60px !important;
+    max-width:none !important;max-height:60px !important;
+    align-self:center !important;box-sizing:border-box !important;
+  }
+  body.dport-layout-ultrawide.dport-header-toast-visible .dport-hero-notifications .toast.show{
+    display:block !important;width:100% !important;height:60px !important;
+    min-height:60px !important;max-height:60px !important;
+    margin:0 !important;padding:0 !important;border-radius:9px !important;overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+  body.dport-layout-ultrawide.dport-header-toast-visible .dport-hero-notifications .toast-header{
+    height:24px !important;min-height:24px !important;max-height:24px !important;
+    padding:3px 8px !important;font-size:10px !important;line-height:18px !important;
+    box-sizing:border-box !important;overflow:hidden !important;
+  }
+  body.dport-layout-ultrawide.dport-header-toast-visible .dport-hero-notifications .toast-body{
+    height:36px !important;min-height:36px !important;max-height:36px !important;
+    padding:6px 8px !important;font-size:11px !important;line-height:22px !important;font-weight:700 !important;
+    white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;
+    box-sizing:border-box !important;
+  }
+
+  /* Device: widest practical region; selector gets priority over tiny buttons. */
+  body.dport-layout-ultrawide .dport-ultra-device-slot{
+    grid-column:3 !important;grid-row:1 !important;
+    width:100% !important;min-width:0 !important;max-width:none !important;
+    height:72px !important;min-height:72px !important;max-height:72px !important;
+    margin:0 !important;padding:0 !important;overflow:hidden !important;box-sizing:border-box !important;
+  }
+  body.dport-layout-ultrawide.dport-header-toast-visible .dport-ultra-device-slot{
+    grid-column:4 !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{
+    width:100% !important;height:72px !important;min-height:72px !important;max-height:72px !important;
+    min-width:0 !important;max-width:none !important;margin:0 !important;padding:7px 8px !important;
+    box-sizing:border-box !important;overflow:hidden !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-title{margin:0 0 4px !important}
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-section-kicker{font-size:8px !important;line-height:1 !important}
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-mini-title{font-size:12px !important;line-height:1.05 !important;font-weight:800 !important}
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body{
+    display:flex !important;align-items:center !important;flex-direction:row !important;flex-wrap:nowrap !important;
+    gap:7px !important;width:100% !important;min-width:0 !important;max-width:none !important;margin:0 !important;padding:0 !important;overflow:hidden !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body > form{
+    flex:1 1 auto !important;width:auto !important;min-width:0 !important;max-width:none !important;margin:0 !important;padding:0 !important;overflow:hidden !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3,
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row{
+    width:100% !important;min-width:0 !important;margin:0 !important;padding:0 !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row{
+    display:flex !important;align-items:center !important;flex-wrap:nowrap !important;gap:7px !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form > .mb-3 > .row > .col{
+    flex:1 1 auto !important;min-width:0 !important;width:auto !important;max-width:none !important;margin:0 !important;padding:0 !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot #device{
+    width:100% !important;min-width:0 !important;max-width:100% !important;height:40px !important;
+    padding:6px 28px 6px 10px !important;margin:0 !important;box-sizing:border-box !important;font-size:12.5px !important;font-weight:800 !important;
+    white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot #refresh-device{
+    flex:0 0 82px !important;width:82px !important;min-width:82px !important;max-width:82px !important;
+    height:40px !important;padding:5px 4px !important;margin:0 !important;font-size:11px !important;white-space:nowrap !important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-device-slot #connect,
+  body.dport-layout-ultrawide .dport-ultra-device-slot #disconnect{
+    flex:0 0 90px !important;width:90px !important;min-width:90px !important;max-width:90px !important;
+    height:40px !important;padding:5px 5px !important;margin:0 !important;font-size:11px !important;white-space:nowrap !important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-actions{
+    grid-column:4 !important;grid-row:1 !important;
+    display:flex !important;align-items:center !important;justify-content:flex-end !important;
+    width:72px !important;min-width:72px !important;max-width:72px !important;height:72px !important;
+    margin:0 !important;padding:0 !important;box-sizing:border-box !important;
+  }
+  body.dport-layout-ultrawide.dport-header-toast-visible .dport-hero-actions{grid-column:5 !important}
+  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{
+    width:72px !important;min-width:72px !important;max-width:72px !important;height:40px !important;
+    padding:5px 7px !important;margin:0 !important;font-size:12px !important;white-space:nowrap !important;
+  }
+}
+
+@media (min-width:1400px) and (max-width:1799px){
+  body.dport-layout-ultrawide .dport-hero{
+    grid-template-columns:minmax(210px,.70fr) minmax(400px,1.45fr) minmax(420px,1.35fr) 70px !important;
+    column-gap:10px !important;
+  }
+  body.dport-layout-ultrawide.dport-header-toast-visible .dport-hero{
+    grid-template-columns:minmax(210px,.70fr) minmax(400px,1.45fr) minmax(230px,.75fr) minmax(420px,1.35fr) 70px !important;
+  }
+  body.dport-layout-ultrawide .dport-title{font-size:21px !important}
+}
+
+@media (max-width:1399px){
+  body.dport-layout-ultrawide .dport-hero{
+    display:flex !important;align-items:center !important;flex-wrap:wrap !important;
+    gap:10px !important;overflow:visible !important;
+  }
+  body.dport-layout-ultrawide .dport-brand{flex:1 1 100% !important}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot,
+  body.dport-layout-ultrawide .dport-ultra-device-slot{flex:1 1 100% !important}
+}
+</style>
+"""
+
+header_v11_js = r"""
+<script id="dport-top-header-final-v11-script">
+(function(){
+  function isUltra(){
+    return !!(document.body && document.body.classList.contains('dport-layout-ultrawide'));
+  }
+
+  function target(){
+    return document.querySelector('.dport-hero-notifications');
+  }
+
+  function visibleToast(){
+    var t=target();
+    if(!t) return null;
+    var list=Array.prototype.slice.call(t.querySelectorAll('.toast'));
+    for(var i=list.length-1;i>=0;i--){
+      if(list[i].classList.contains('show')) return list[i];
+    }
+    return null;
+  }
+
+  function syncHeaderState(){
+    if(!isUltra()) return;
+    var t=visibleToast();
+    document.body.classList.toggle('dport-header-toast-visible',!!t);
+  }
+
+  function installQueue(){
+    if(!isUltra() || typeof window.displayToast!=='function') return;
+    var current=window.displayToast;
+    if(current.__dportToastQueueV11) return;
+
+    /* v10 wrapped the original function; bypass that wrapper if present. */
+    var base=current.__dportToastQueueOriginal || current;
+    var queue=[];
+    var busy=false;
+
+    function finish(toast){
+      if(!toast || toast.__dportV11Finished) return;
+      toast.__dportV11Finished=true;
+      if(toast.__dportV11Observer){
+        try{toast.__dportV11Observer.disconnect();}catch(e){}
+      }
+      busy=false;
+      syncHeaderState();
+      pump();
+    }
+
+    function waitForToast(){
+      var tries=0;
+      function check(){
+        syncHeaderState();
+        var toast=visibleToast();
+        if(!toast){
+          if(++tries<30){setTimeout(check,50);return;}
+          busy=false;pump();return;
+        }
+        toast.__dportV11Finished=false;
+        if(window.MutationObserver){
+          var observer=new MutationObserver(function(){
+            var hidden=!toast.classList.contains('show') ||
+              getComputedStyle(toast).display==='none' ||
+              toast.getAttribute('aria-hidden')==='true';
+            if(hidden) finish(toast);
+            else syncHeaderState();
+          });
+          observer.observe(toast,{attributes:true,attributeFilter:['class','style','aria-hidden']});
+          toast.__dportV11Observer=observer;
+        }
+        toast.addEventListener('hidden.bs.toast',function(){finish(toast);},{once:true});
+        setTimeout(function(){finish(toast);},7000);
+      }
+      setTimeout(check,40);
+    }
+
+    function pump(){
+      if(busy || !queue.length) return;
+      busy=true;
+      var item=queue.shift();
+      try{
+        base.apply(item.context,item.args);
+      }catch(e){
+        busy=false;
+        setTimeout(pump,0);
+        return;
+      }
+      waitForToast();
+    }
+
+    window.displayToast=function(){
+      queue.push({context:this,args:Array.prototype.slice.call(arguments)});
+      pump();
+    };
+    window.displayToast.__dportToastQueueV11=true;
+    window.displayToast.__dportToastQueueOriginal=base;
+  }
+
+  function cleanupAndSync(){
+    if(!isUltra()) return;
+    document.querySelectorAll('.dport-persistent-notification').forEach(function(el){el.remove();});
+    syncHeaderState();
+    installQueue();
+  }
+
+  function boot(){
+    cleanupAndSync();
+    [100,300,700,1500].forEach(function(ms){
+      setTimeout(function(){cleanupAndSync();},ms);
+    });
+
+    if(window.MutationObserver && !window.__dportHeaderV11Observer){
+      var observer=new MutationObserver(function(){
+        syncHeaderState();
+      });
+      observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','aria-hidden']});
+      window.__dportHeaderV11Observer=observer;
+    }
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',boot,{once:true});
+  }else{
+    boot();
+  }
+  window.addEventListener('load',boot);
+  window.addEventListener('resize',syncHeaderState);
+})();
+</script>
+"""
+
+# Ensure any older notification label is never emitted by the final UI layer.
+html = html.replace("（GitHub 最新正式版）","（最新）")
+
+# Insert v11 after all previous generated header layers, making it the final CSS/JS authority.
+if "</body>" in html:
+    html = html.replace("</body>", header_v11 + header_v11_js + "\n</body>", 1)
+else:
+    html += header_v11 + header_v11_js
+
+
 path.write_text(html, encoding="utf-8")
 
 print("DPort final UI polish v10 applied successfully.")
@@ -1330,3 +1704,4 @@ print("Notification: Bootstrap toast only; no persistent notification card.")
 print("Device selector: widened to keep iPhone list readable.")
 print("GPX: compact typography and four readable information cells.")
 print("Version label: shown only after the update check reports the current release.")
+
