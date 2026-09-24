@@ -96,6 +96,92 @@ if network_hits == 0:
 # Ensure all mobdev2 calls use pymobiledevice3's automatic host pair-record sources.
 src = src.replace("pair_records=get_home_folder(),\n", "")
 
+# Allow USB and Wi-Fi/Network connection types through the common connect route.
+usb_guard = re.compile(
+    r'''(?s)    if connection_type != "USB":\n        logger\.warning\(f"USB-ONLY build: rejecting non-USB connection type: \{connection_type\}"\)\n        return jsonify\(\{"error": "USB-only mode: please connect the iPhone by USB\."\}\), 400\n\n'''
+)
+src, usb_guard_hits = usb_guard.subn(
+    '''    if connection_type not in ("USB", "Network", "Manual"):\n        logger.warning(f"Unsupported connection type: {connection_type}")\n        return jsonify({"error": f"Unsupported connection type: {connection_type}"}), 400\n\n''',
+    src,
+    count=0,
+)
+
+network_guard = re.compile(
+    r'''(?s)    if connection_type == "Network":\n        check_pair_record\(udid\)\n        if pair_record is None:\n            logger\.error\("Network: No Remote Pair Record Found\. Please connect once by USB first\."\)\n            return jsonify\(\{"Error": "No Pair Record Found"\}\)\n        return connect_wifi\(data\)'''
+)
+src, network_guard_hits = network_guard.subn(
+    '''    if connection_type == "Network":\n        return connect_wifi(data)''',
+    src,
+    count=0,
+)
+
+manual_guard = re.compile(
+    r'''(?s)    if connection_type == "Manual":\n        check_pair_record\(udid\)\n        if pair_record is None:\n            return jsonify\(\{"Error": "No Pair Record Found"\}\)\n        return connect_wifi\(data\)'''
+)
+src, manual_guard_hits = manual_guard.subn(
+    '''    if connection_type == "Manual":\n        return connect_wifi(data)''',
+    src,
+    count=0,
+)
+
+# Keep USB/Wi-Fi selection stable across background / force refreshes.
+clear_marker = """        deviceDropdown.innerHTML = '';
+        connectionDropdown.innerHTML = '';
+"""
+if clear_marker not in ui:
+    raise SystemExit("populateDeviceList clear marker not found")
+ui = ui.replace(clear_marker, """        const previousOption = deviceDropdown.options[deviceDropdown.selectedIndex];
+        const previousKey = previousOption ? (previousOption.dataset.dportKey || '') : '';
+
+        deviceDropdown.innerHTML = '';
+        connectionDropdown.innerHTML = '';
+""", 1)
+
+option_marker = """                    option.value = JSON.stringify(deviceInfo);
+
+                    devicesInfo[udid] = devicesInfo[udid] || {};
+"""
+if option_marker not in ui:
+    raise SystemExit("device option marker not found")
+ui = ui.replace(option_marker, """                    option.value = JSON.stringify(deviceInfo);
+                    option.dataset.dportKey = optionKey;
+
+                    devicesInfo[udid] = devicesInfo[udid] || {};
+""", 1)
+
+restore_marker = """        if (requestSerial !== deviceListRequestSerial) return false;
+        deviceDropdown.devicesInfo = devicesInfo;
+"""
+if restore_marker not in ui:
+    raise SystemExit("device restore marker not found")
+ui = ui.replace(restore_marker, """        if (requestSerial !== deviceListRequestSerial) return false;
+
+        if (previousKey) {
+            const restoredIndex = Array.from(deviceDropdown.options).findIndex(function(opt){
+                return (opt.dataset && opt.dataset.dportKey) === previousKey;
+            });
+            if (restoredIndex >= 0) {
+                deviceDropdown.selectedIndex = restoredIndex;
+            }
+        }
+
+        deviceDropdown.devicesInfo = devicesInfo;
+""", 1)
+
+# Ensure the Wi-Fi tunnel also uses pymobiledevice3 automatic host pair-record
+# discovery rather than a hard-coded path.
+src = src.replace('pair_records=get_home_folder(),
+', '')
+
+main.write_text(src, encoding="utf-8")
+map_file.write_text(ui, encoding="utf-8")
+
+print(f"Wi-Fi connect guard hits: {usb_guard_hits}")
+print(f"Network legacy guard hits: {network_guard_hits}")
+print(f"Manual legacy guard hits: {manual_guard_hits}")
+print("Wi-Fi tunnel pair-record override removed.")
+print("USB/Wi-Fi selection is preserved across list refresh.")
+
 # ---------- UI ----------
 # ---------- UI: explicit connection-state refresh behavior ----------
 legacy_refresh = re.compile(
