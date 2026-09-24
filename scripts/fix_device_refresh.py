@@ -441,7 +441,7 @@ text += r'''
     align-items:center;
     justify-content:flex-start;
     text-align:left;
-    padding:9px 43px 9px 13px !important;
+    padding:8px 35px 8px 12px !important;
     overflow:hidden;
     box-shadow:none !important;
 }
@@ -457,32 +457,51 @@ text += r'''
     width:100%;
     font-size:16px !important;
     font-weight:700 !important;
-    line-height:1.25;
+    line-height:1.2;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
     color:#fff !important;
 }
+.geoport-fav-name.long{
+    font-size:14px !important;
+    line-height:1.18;
+    white-space:normal;
+    overflow:hidden;
+    text-overflow:clip;
+    display:-webkit-box;
+    -webkit-box-orient:vertical;
+    -webkit-line-clamp:2;
+    word-break:break-word;
+}
+.geoport-fav-name.xlong{
+    font-size:13px !important;
+    line-height:1.15;
+}
 .geoport-fav-detail{display:none !important;}
 .geoport-fav-delete{
     position:absolute;
     top:50%;
-    right:7px;
+    right:6px;
     transform:translateY(-50%);
-    width:30px;
-    height:30px;
+    width:22px;
+    height:22px;
     padding:0 !important;
-    border:1px solid #ffaaaa !important;
-    border-radius:8px !important;
-    background:#a33b3b !important;
-    color:#fff !important;
-    font-size:18px !important;
-    line-height:28px !important;
+    border:1px solid #69758b !important;
+    border-radius:6px !important;
+    background:rgba(86,96,116,.38) !important;
+    color:#c8d0df !important;
+    font-size:14px !important;
+    line-height:20px !important;
     font-weight:700 !important;
     cursor:pointer;
+    opacity:.86;
 }
 .geoport-fav-delete:hover{
-    background:#b74646 !important;
+    border-color:#a7b1c5 !important;
+    background:rgba(110,120,142,.58) !important;
+    color:#ffffff !important;
+    opacity:1;
 }
 .geoport-fav-empty{
     grid-column:1 / -1;
@@ -693,8 +712,11 @@ text += r'''
             open.title='前往 '+String(item.name || '未命名位置');
 
             var name=document.createElement('span');
+            const favNameText = String(item.name || '未命名位置');
             name.className='geoport-fav-name';
-            name.textContent=String(item.name || '未命名位置');
+            if (favNameText.length > 16) name.classList.add('long');
+            if (favNameText.length > 28) name.classList.add('xlong');
+            name.textContent=favNameText;
 
             open.appendChild(name);
             open.onclick=function(){
