@@ -187,3 +187,110 @@ print(f"Refresh background scripts removed: {legacy_count}")
 print("Wi-Fi tunnel pair-record overrides removed.")
 print("Wi-Fi parsing no longer references a closed/out-of-scope device object.")
 print("USB/Wi-Fi selection preservation enabled.")
+
+
+# ---------- Wi-Fi connection repair ----------
+# The discovery UI is now working. Repair the actual iOS 17.4+/26 tunnel path:
+# use the selected Wi-Fi address, let pymobiledevice3 resolve host pair records,
+# and do not return "connected" until RSD data is really available.
+
+c = src
+
+c = re.sub(
+    r'''(?s)            try:
+                devices = get_wifi_with_retry\(\)
+                logger\.info\(f"Connect Wifi Devices: \{devices\}"\)
+                logger\.info\(f"Wifi Address:  \{wifi_address\}"\)
+            except RuntimeError as e:
+                error_message = str\(e\)
+                logger\.error\(f"Error: \{error_message\}"\)
+                return jsonify\(\{'error': 'No Devices Found', 'details': error_message\}, 404\)\s*''',
+    '''            logger.info(f"Selected Wi-Fi address: {wifi_address}")
+            logger.info(f"Selected Wi-Fi port: {wifi_port}")
+            if not wifi_address:
+                return jsonify({
+                    'error': 'Wi-Fi 裝置沒有有效的 IP 位址，請重新整理裝置清單。'
+                }), 400
+''',
+    c,
+)
+
+c = re.sub(
+    r'''(?s)            if not check_rsd_data\(\):
+                logger\.error\("RSD Data is None, Perhaps the tunnel isn't established"\)
+            else:
+                rsd_data = rsd_host, rsd_port
+                logger\.info\(f"RSD Data: \{rsd_data\}"\)
+
+            rsd_data_map\.setdefault\(udid, \{\}\)\[connection_type\] = \{"host": rsd_host, "port": rsd_port\}
+            logger\.info\(f"Device Connection Map: \{rsd_data_map\}"\)
+            return jsonify\(\{'rsd_data': rsd_data\}\)
+''',
+    '''            if not check_rsd_data() or rsd_host is None or rsd_port is None:
+                logger.error("Wi-Fi RSD tunnel was not established.")
+                return jsonify({
+                    'error': 'Wi-Fi tunnel 建立失敗',
+                    'details': f'mobdev2/CoreDeviceProxy did not provide RSD data for {udid}.'
+                }), 502
+
+            rsd_data = rsd_host, rsd_port
+            logger.info(f"RSD Data: {rsd_data}")
+            rsd_data_map.setdefault(udid, {})[connection_type] = {
+                "host": rsd_host,
+                "port": rsd_port
+            }
+            logger.info(f"Device Connection Map: {rsd_data_map}")
+            return jsonify({'rsd_data': rsd_data})
+''',
+    c,
+)
+
+# The source currently has no explicit pair_records override after step 5.
+# Match the selected Wi-Fi IP when possible; fall back to the first paired
+# mobdev2 candidate if Windows reports a canonicalized address.
+c = re.sub(
+    r'''(?s)        async for ip, candidate in get_mobdev2_lockdowns\(
+            udid=udid,
+            only_paired=True,
+            timeout=timeout,
+        \):
+            logger\.info\(f"mobdev2 tunnel candidate: \{ip\}, udid=\{candidate\.udid\}"\)
+            wifi_address = str\(ip\)
+            lockdown = candidate
+            break
+''',
+    '''        fallback = None
+        async for ip, candidate in get_mobdev2_lockdowns(
+            udid=udid,
+            only_paired=True,
+            timeout=timeout,
+        ):
+            logger.info(
+                f"mobdev2 tunnel candidate: {ip}, udid={candidate.udid}, "
+                f"selected_wifi={wifi_address}"
+            )
+            if fallback is None:
+                fallback = (str(ip), candidate)
+            if wifi_address and str(ip) == str(wifi_address):
+                lockdown = candidate
+                break
+            await candidate.close()
+
+        if lockdown is None and fallback is not None:
+            wifi_address, lockdown = fallback
+''',
+    c,
+)
+
+# Remove the known out-of-scope variable from the old diagnostic helper.
+c = c.replace(
+    "                        f\"mobdev2 device: ip={ip}, udid={device_udid}, iOS={product}, paired={getattr(device, 'paired', None)}\"",
+    "                        f\"mobdev2 device: ip={ip}, udid={device_udid}, iOS={product}\"",
+)
+
+if "Selected Wi-Fi address:" not in c:
+    raise SystemExit("Wi-Fi connect repair was not applied.")
+if "fallback = None" not in c:
+    raise SystemExit("Wi-Fi tunnel repair was not applied.")
+
+src = c
