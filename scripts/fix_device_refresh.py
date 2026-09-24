@@ -8,9 +8,9 @@ if not path.exists():
 text = path.read_text(encoding="utf-8")
 original = text
 
-# The refresh button must only be disabled while the application is actively
-# connected. Remove the historical background timer that re-disabled it from
-# stale isDeviceConnected state after the USB cable was removed.
+# ---------------------------------------------------------------------------
+# 1. Device refresh button fix
+# ---------------------------------------------------------------------------
 legacy_pattern = re.compile(
     r'''\s*<script>\s*\(function\(\)\{\s*
         function\s+syncDeviceRefreshButton\(\)\s*\{.*?
@@ -23,24 +23,19 @@ legacy_pattern = re.compile(
 )
 text, legacy_removed = legacy_pattern.subn("\n", text)
 
-# Manual refresh is intentionally blocked while an active connection exists.
-# After refresh finishes, the button must not be left disabled based on stale
-# state.
 text = text.replace(
     "button.disabled = (typeof isDeviceConnected !== 'undefined' && isDeviceConnected);",
     "button.disabled = false;",
 )
 
-# Make the physical USB removal handler the authoritative place that restores
-# Refresh.
 handler_pattern = re.compile(
     r'''(function\s+handleUsbCableRemoved\(\)\s*\{.*?
         if\s*\(spinnerElement\)\s*spinnerElement\.style\.display\s*=\s*'none';)''',
     re.S | re.X,
 )
 if "refreshButtonAfterUsbRemoval.disabled = false;" not in text:
-    def handler_repl(m):
-        return m.group(1) + """
+    def handler_repl(match):
+        return match.group(1) + """
     var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
     if (refreshButtonAfterUsbRemoval) {
         refreshButtonAfterUsbRemoval.disabled = false;
@@ -55,19 +50,9 @@ text = text.replace(
     'title="重新讀取 USB / Wi-Fi 裝置清單"',
 )
 
-path.write_text(text, encoding="utf-8")
-
-print(f"legacy refresh timer removed: {legacy_removed}")
-print(f"USB removal handler patched: {handler_hits}")
-print(f"changed: {text != original}")
-
-if legacy_removed == 0 and handler_hits == 0 and "button.disabled = false;" not in text:
-    raise SystemExit("Refresh state patch did not find expected source patterns.")
-
-
-# ==================== DPort 6.9.1 location/favorites improvements ====================
-
-# 1) Normal map click should select a point and reverse-geocode it.
+# ---------------------------------------------------------------------------
+# 2. Normal map-click -> coordinate + reverse geocode
+# ---------------------------------------------------------------------------
 map_click_old = """    // DPort: ordinary map clicks are inert. Drawing mode is the only mode
     // where a map click is allowed to add a route point.
     map.on('click', function(event){
@@ -75,8 +60,9 @@ map_click_old = """    // DPort: ordinary map clicks are inert. Drawing mode is 
             handleMapClick(event);
         }
     });"""
-map_click_new = """    // Normal map clicks select a location and trigger place-name lookup.
-    // Drawing mode retains its existing route-point behavior.
+
+map_click_new = """    // Normal map clicks select a coordinate and identify the place.
+    // Drawing mode keeps the existing route-point behavior.
     map.on('click', function(event){
         if (typeof isDrawingMode !== 'undefined' && isDrawingMode) {
             handleMapClick(event);
@@ -100,13 +86,15 @@ map_click_new = """    // Normal map clicks select a location and trigger place-
             geoportStatus('正在辨識地點……', false);
         }
     });"""
-map_click_hits = text.count(map_click_old)
-if map_click_hits:
-    text = text.replace(map_click_old, map_click_new, 1)
 
-# 2) Resolve the place name again at the time a favorite is saved. This avoids
-# the race where the user clicks the map and immediately saves before the
-# asynchronous reverse-geocode request has finished.
+if map_click_old in text:
+    text = text.replace(map_click_old, map_click_new, 1)
+elif "Normal map clicks select a coordinate and identify the place." not in text:
+    raise SystemExit("Expected map click handler was not found.")
+
+# ---------------------------------------------------------------------------
+# 3. Favorite place-name resolver
+# ---------------------------------------------------------------------------
 reverse_marker = "function geoportScheduleReverseGeocode(lat,lng){"
 resolver = """async function geoportResolvePlaceNameForCoordinates(lat,lng){
     const cached=geoportGetCurrentPlaceNameForCoordinates(lat,lng);
@@ -144,10 +132,12 @@ resolver = """async function geoportResolvePlaceNameForCoordinates(lat,lng){
 """
 if "async function geoportResolvePlaceNameForCoordinates" not in text:
     if reverse_marker not in text:
-        raise SystemExit("Reverse geocode function marker not found.")
+        raise SystemExit("Reverse geocode function marker was not found.")
     text = text.replace(reverse_marker, resolver + reverse_marker, 1)
 
-# 3) Replace the favorite renderer with a compact card grid.
+# ---------------------------------------------------------------------------
+# 4. Favorites UI: 2 columns normally, 3 on wide screens, 6 visible slots
+# ---------------------------------------------------------------------------
 fav_render_old = """function geoportRenderFavorites(){
     const box=document.getElementById('geoport-favorites'); if(!box) return;
     const items=geoportGetFavorites(); box.innerHTML='';
@@ -160,6 +150,7 @@ fav_render_old = """function geoportRenderFavorites(){
         d.onclick=()=>{const a=geoportGetFavorites();a.splice(i,1);geoportSetFavorites(a);geoportRenderFavorites()}; box.appendChild(d);
     });
 }"""
+
 fav_render_new = """function geoportRenderFavorites(){
     const box=document.getElementById('geoport-favorites'); if(!box) return;
     const items=geoportGetFavorites(); box.innerHTML='';
@@ -217,12 +208,12 @@ fav_render_new = """function geoportRenderFavorites(){
         box.appendChild(card);
     });
 }"""
-fav_render_hits = text.count(fav_render_old)
-if fav_render_hits == 0:
-    raise SystemExit("Favorite renderer not found.")
-text=text.replace(fav_render_old,fav_render_new,1)
 
-# 4) Use the resolved place name as the default Favorite name.
+if fav_render_old in text:
+    text = text.replace(fav_render_old, fav_render_new, 1)
+elif "geoport-fav-card" not in text:
+    raise SystemExit("Favorite renderer was not found.")
+
 fav_save_old = """async function geoportSaveFavorite(){
     const c=geoportParseCoordinates(document.getElementById('coordinates').value);
     if(!c){dportUiAlert('請輸入緯度與經度。');return;}
@@ -235,6 +226,7 @@ fav_save_old = """async function geoportSaveFavorite(){
     if(!cleanName){dportUiAlert('地點名稱不可空白。');return;}
     const a=geoportGetFavorites().filter(x=>!(x.lat===c.lat&&x.lng===c.lng)); a.unshift({name:cleanName,lat:c.lat,lng:c.lng}); geoportSetFavorites(a); geoportRenderFavorites();
 }"""
+
 fav_save_new = """async function geoportSaveFavorite(){
     const c=geoportParseCoordinates(document.getElementById('coordinates').value);
     if(!c){dportUiAlert('請輸入緯度與經度。');return;}
@@ -259,29 +251,36 @@ fav_save_new = """async function geoportSaveFavorite(){
     geoportSetFavorites(a);
     geoportRenderFavorites();
 }"""
-if fav_save_old not in text:
-    raise SystemExit("Favorite save routine not found.")
-text=text.replace(fav_save_old,fav_save_new,1)
 
-# 5) Never show the misleading "已定位" button state after a successful
-# simulation; the same coordinate can be sent again at any time.
-text=text.replace(
+if fav_save_old in text:
+    text = text.replace(fav_save_old, fav_save_new, 1)
+elif "geoportResolvePlaceNameForCoordinates(c.lat,c.lng)" not in text:
+    raise SystemExit("Favorite save routine was not found.")
+
+# ---------------------------------------------------------------------------
+# 5. Repeatable positioning: never present success as "已定位"
+# ---------------------------------------------------------------------------
+text = text.replace(
     "geoportStatus('已定位', true);",
-    "geoportStatus('定位成功，可再次定位', true);"
-)
-text=text.replace(
-    "const isLocated = /即時定位已啟用|已定位/.test(text);",
-    "const isLocated = false; // 定位成功後按鈕維持「定位」，允許重複定位"
+    "geoportStatus('定位成功，可再次定位', true);",
 )
 
-# 6) Show favorite count in the section header.
+text = text.replace(
+    "const isLocated = /即時定位已啟用|已定位/.test(text);",
+    "const isLocated = false; // 定位成功後仍可再次定位",
+)
+
+# ---------------------------------------------------------------------------
+# 6. Favorites count
+# ---------------------------------------------------------------------------
 title_old = '<div class="geoport-favorites-title">我的最愛位置</div>'
 title_new = '<div class="geoport-favorites-title">我的最愛位置 <span id="geoport-fav-count" class="geoport-fav-count">0/20</span></div>'
 if title_old in text:
-    text=text.replace(title_old,title_new,1)
+    text = text.replace(title_old, title_new, 1)
 
-# 7) Replace the old plain list styling with a compact click-friendly grid:
-# 2 columns by default, 3 columns on wider screens, exactly 6 visible cards.
+# ---------------------------------------------------------------------------
+# 7. Favorites CSS
+# ---------------------------------------------------------------------------
 css_old = '.geoport-fav-list{padding:9px 11px !important;border:1.5px solid #aaa}'
 css_new = """.geoport-fav-list{
     display:grid !important;
@@ -365,14 +364,18 @@ css_new = """.geoport-fav-list{
     .geoport-fav-open{min-height:60px;padding-left:10px !important}
     .geoport-fav-name{font-size:15px !important}
 }"""
+
 if '.geoport-fav-card{' not in text:
     if css_old not in text:
-        raise SystemExit("Favorite CSS block not found.")
-    text=text.replace(css_old,css_new,1)
+        raise SystemExit("Favorite CSS block was not found.")
+    text = text.replace(css_old, css_new, 1)
 
 path.write_text(text, encoding="utf-8")
-print(f"Map click restored: {map_click_hits}")
-print(f"Favorite renderer replaced: {fav_render_hits}")
-print("Favorite name resolver added.")
-print("Repeat positioning state fixed.")
-print("Favorite UI changed to 6-slot grid with scrollbar after overflow.")
+
+print(f"legacy refresh timer removed: {legacy_removed}")
+print(f"USB removal handler patched: {handler_hits}")
+print("6.9.1 location/favorites UI improvements applied.")
+print("- Map click restores coordinate picking + reverse geocoding")
+print("- Favorite name resolves automatically before save")
+print("- Favorite list shows 6 slots in a compact grid and scrolls after overflow")
+print("- Successful simulation keeps the button label as 定位 for repeat use")
