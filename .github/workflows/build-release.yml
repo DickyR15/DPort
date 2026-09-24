@@ -157,6 +157,11 @@ jobs:
         run: |
           python scripts/final_ui_polish.py
 
+      - name: Enable SHA-aware same-version updater
+        shell: pwsh
+        run: |
+          python scripts/patch_sha_update_support.py
+
       - name: Validate source
         shell: pwsh
         run: |
