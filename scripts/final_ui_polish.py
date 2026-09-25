@@ -1159,6 +1159,164 @@ html += r'''
 </script>
 '''
 
+
+# ==================== DPort definitive location / GPX event fix ====================
+# Use the actual DOM IDs from src/templates/map.html instead of inferred
+# selectors. Long place names must never change the sidebar width, and the GPX
+# speed <select> must be a hard Leaflet interaction boundary.
+html += r'''
+<style id="dport-definitive-location-gpx-fix">
+/* Actual location-name element in the current template. */
+.geoport-current-place-row{
+    display:flex!important;
+    align-items:center!important;
+    gap:6px!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+    overflow:hidden!important;
+}
+.geoport-current-place-label{
+    flex:0 0 auto!important;
+    white-space:nowrap!important;
+}
+#geoport-current-place{
+    display:block!important;
+    flex:1 1 auto!important;
+    width:auto!important;
+    min-width:0!important;
+    max-width:100%!important;
+    overflow:hidden!important;
+    white-space:nowrap!important;
+    text-overflow:ellipsis!important;
+    box-sizing:border-box!important;
+}
+.geoport-status-card{
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+    overflow:hidden!important;
+}
+
+/* Actual GPX speed control in the current template. */
+#dport-gpx-speed-select,
+.dport-gpx-speed-wrap,
+.dport-gpx-speed-wrap select{
+    position:relative!important;
+    z-index:5000!important;
+    pointer-events:auto!important;
+    touch-action:manipulation!important;
+    user-select:none!important;
+}
+#dport-gpx-speed-select{
+    display:block!important;
+    width:132px!important;
+    min-width:132px!important;
+    max-width:132px!important;
+    overflow:hidden!important;
+    white-space:nowrap!important;
+}
+</style>
+
+<script id="dport-definitive-location-gpx-fix-script">
+(function(){
+    function protectSpeedSelect(){
+        var select=document.getElementById('dport-gpx-speed-select');
+        var wrap=document.querySelector('.dport-gpx-speed-wrap');
+        var els=[];
+        if(wrap) els.push(wrap);
+        if(select) els.push(select);
+
+        els.forEach(function(el){
+            if(!el || el.dataset.dportLeafletHardStop==='1') return;
+            el.dataset.dportLeafletHardStop='1';
+
+            [
+                'click','dblclick','mousedown','mouseup',
+                'pointerdown','pointerup','touchstart','touchend',
+                'contextmenu','wheel'
+            ].forEach(function(type){
+                el.addEventListener(type,function(ev){
+                    ev.stopPropagation();
+                },true);
+            });
+
+            /* Leaflet's own DOM helpers are more robust than only native
+               bubbling control, especially when the map has handlers on the
+               container. */
+            try{
+                if(window.L && L.DomEvent){
+                    if(L.DomEvent.disableClickPropagation){
+                        L.DomEvent.disableClickPropagation(el);
+                    }
+                    if(L.DomEvent.disableScrollPropagation){
+                        L.DomEvent.disableScrollPropagation(el);
+                    }
+                }
+            }catch(e){}
+        });
+    }
+
+    function constrainPlace(){
+        var row=document.querySelector('.geoport-current-place-row');
+        var name=document.getElementById('geoport-current-place');
+
+        if(row){
+            row.style.setProperty('width','100%','important');
+            row.style.setProperty('min-width','0','important');
+            row.style.setProperty('max-width','100%','important');
+            row.style.setProperty('overflow','hidden','important');
+            row.style.setProperty('box-sizing','border-box','important');
+        }
+
+        if(name){
+            name.style.setProperty('min-width','0','important');
+            name.style.setProperty('max-width','100%','important');
+            name.style.setProperty('overflow','hidden','important');
+            name.style.setProperty('white-space','nowrap','important');
+            name.style.setProperty('text-overflow','ellipsis','important');
+
+            var parent=name.parentElement;
+            if(parent){
+                parent.style.setProperty('min-width','0','important');
+                parent.style.setProperty('max-width','100%','important');
+                parent.style.setProperty('overflow','hidden','important');
+            }
+
+            name.title=String(name.textContent||'').trim();
+        }
+    }
+
+    function apply(){
+        protectSpeedSelect();
+        constrainPlace();
+    }
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',apply,{once:true});
+    }else{
+        apply();
+    }
+    window.addEventListener('load',apply);
+    window.addEventListener('resize',apply);
+
+    if(window.MutationObserver && document.body){
+        var observer=new MutationObserver(function(){
+            protectSpeedSelect();
+            constrainPlace();
+        });
+        observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+    }
+
+    [50,150,400,1000,2500].forEach(function(ms){
+        setTimeout(apply,ms);
+    });
+})();
+</script>
+'''
+
 path.write_text(html, encoding="utf-8")
 
 print("DPort final header rebuilt from one authoritative layout.")
