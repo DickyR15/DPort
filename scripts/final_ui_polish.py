@@ -598,6 +598,86 @@ body > div.toast-container{
         return false;
     }
 
+
+    function deviceListHasPhone(){
+        var select=document.getElementById('device');
+        if(!select) return false;
+
+        var options=Array.prototype.slice.call(select.options||[]);
+        return options.some(function(option){
+            var value=String(option.value||'').trim();
+            var label=String(option.textContent||'').trim();
+
+            if(!value) return false;
+            if(/請選擇|選擇裝置|找不到裝置|沒有裝置|無裝置/i.test(label)) return false;
+
+            // A real iPhone/USB device option normally contains USB / iPhone / iOS.
+            // Keep this permissive so it also works with custom device labels.
+            return true;
+        });
+    }
+
+    function clearStaleDisconnectStatus(){
+        if(!deviceListHasPhone()) return;
+
+        var stalePhrases=[
+            '裝置已中斷連接，重新插入 USB 後會自動出現在裝置清單。',
+            '裝置已中斷連接'
+        ];
+
+        var nodes=document.querySelectorAll('body *');
+        for(var i=0;i<nodes.length;i++){
+            var el=nodes[i];
+            if(!el || el.children.length>0) continue;
+
+            var text=String(el.textContent||'').trim();
+            if(!text) continue;
+
+            var stale=false;
+            for(var j=0;j<stalePhrases.length;j++){
+                if(text===stalePhrases[j] || text.indexOf(stalePhrases[j])>=0){
+                    stale=true;
+                    break;
+                }
+            }
+
+            if(!stale) continue;
+
+            try{
+                el.textContent='';
+                el.setAttribute('aria-hidden','true');
+                el.style.setProperty('display','none','important');
+            }catch(e){}
+        }
+    }
+
+    function watchDeviceEnumeration(){
+        var select=document.getElementById('device');
+
+        if(select && !select.dataset.dportStatusReconnectWatch){
+            select.dataset.dportStatusReconnectWatch='1';
+
+            var observer=new MutationObserver(function(){
+                if(deviceListHasPhone()){
+                    clearStaleDisconnectStatus();
+                }
+            });
+
+            observer.observe(select,{childList:true,subtree:true});
+        }
+
+        if(!window.__dportReconnectStatusObserver && document.body && window.MutationObserver){
+            var bodyObserver=new MutationObserver(function(){
+                clearStaleDisconnectStatus();
+            });
+
+            bodyObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
+            window.__dportReconnectStatusObserver=bodyObserver;
+        }
+
+        clearStaleDisconnectStatus();
+    }
+
     function enableManualRefresh(){
         var btn=document.getElementById('refresh-device');
         if(!btn) return;
