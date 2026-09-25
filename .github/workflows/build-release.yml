@@ -80,21 +80,18 @@ jobs:
             throw 'Source restore failed: src/main.py is missing.'
           }
 
-      - name: Normalize DPort version to 6.9.0
+      - name: Inspect source version
         shell: pwsh
         run: |
-          $v = '6.9.0'
-          Set-Content -LiteralPath 'src/dport_version.py' -Value ('DPORT_VERSION="{0}"' -f $v) -Encoding utf8
-
-          $map = 'src/templates/map.html'
-          if (-not (Test-Path $map)) { throw "UI template not found: $map" }
-          $html = Get-Content -LiteralPath $map -Raw
-          $html = $html -replace '6\.9\.1', '6.9.0'
-          $html = $html -replace 'DPort v?6\.9\.1', 'DPort v6.9.0'
-          Set-Content -LiteralPath $map -Value $html -Encoding utf8
-
-          Write-Host 'Build version normalized to DPort 6.9.0.'
-          Write-Host 'Map UI version references normalized from 6.9.1 to 6.9.0.'
+          $raw = Get-Content -LiteralPath 'src/dport_version.py' -Raw
+          if ($raw -notmatch 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') {
+            throw 'DPORT_VERSION not found in restored source.'
+          }
+          $sourceVersion = $Matches[1]
+          if ($sourceVersion -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Invalid DPort version: $sourceVersion"
+          }
+          Write-Host "Restored source DPort version: $sourceVersion"
       - name: Remove legacy version badge
         shell: pwsh
         run: |
@@ -114,34 +111,20 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          # DPort 目前固定以 6.9.0 發行；Tag / 手動輸入不再改變產品版本。
-          $v = '6.9.0'
+          if ('${{ github.ref_type }}' -eq 'tag') {
+            $v = '${{ github.ref_name }}'.TrimStart('v')
+          } elseif ('${{ github.event_name }}' -eq 'workflow_dispatch' -and '${{ inputs.version }}' -ne '') {
+            $v = '__INPUTVERSION__'
+          } else {
+            $raw = Get-Content -LiteralPath 'src/dport_version.py' -Raw
+            if ($raw -notmatch 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') {
+              throw 'DPORT_VERSION not found in source.'
+            }
+            $v = $Matches[1]
+          }
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid DPort version: $v" }
           "version=$v" >> $env:GITHUB_OUTPUT
           Set-Content src/dport_version.py ('DPORT_VERSION="{0}"' -f $v) -Encoding utf8
-          $parts = $v.Split('.') | ForEach-Object { [int]$_ }
-          $vi = @(
-            '# UTF-8',
-            'VSVersionInfo(',
-            '  ffi=FixedFileInfo(',
-            "    filevers=($($parts[0]),$($parts[1]),$($parts[2]),0),",
-            "    prodvers=($($parts[0]),$($parts[1]),$($parts[2]),0),",
-            '    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)',
-            '  ),',
-            "  kids=[StringFileInfo([StringTable('040404B0',[",
-            "    StringStruct('CompanyName','Dicky'),",
-            "    StringStruct('FileDescription','DPort'),",
-            "    StringStruct('FileVersion','$v'),",
-            "    StringStruct('InternalName','DPort-$v'),",
-            "    StringStruct('LegalCopyright','Dicky'),",
-            "    StringStruct('OriginalFilename','DPort-$v.exe'),",
-            "    StringStruct('ProductName','DPort'),",
-            "    StringStruct('ProductVersion','$v'),",
-            "    StringStruct('Comments','Dicky')])]),",
-            '    VarFileInfo([VarStruct(''Translation'',[0x0404,1200])])]',
-            ')'
-          ) -join [Environment]::NewLine
-          $vi | Set-Content version_info.generated.txt -Encoding utf8
-
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -349,12 +332,6 @@ jobs:
           if (-not (Test-Path $exe)) { throw "Missing release asset: $exe" }
           if (-not (Test-Path $sha)) { throw "Missing checksum: $sha" }
 
-          # Remove the previous 6.9.1 Release/tag so DPort only exposes 6.9.0 as the current release.
-          gh release view v6.9.1 --repo "${{ github.repository }}" *> $null
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host 'Removing obsolete v6.9.1 Release and tag.'
-            gh release delete v6.9.1 --repo "${{ github.repository }}" --yes --cleanup-tag
-          }
 
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -eq 0) {
