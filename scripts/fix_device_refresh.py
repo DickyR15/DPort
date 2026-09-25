@@ -368,22 +368,22 @@ path.write_text(text, encoding="utf-8")
 
 print(f"legacy refresh timer removed: {legacy_removed}")
 print(f"USB removal handler patched: {handler_hits}")
-print("6.9.1 location/favorites UI improvements applied.")
+print("6.9.0 location/favorites UI improvements applied.")
 print("- Map click restores coordinate picking + reverse geocoding")
 print("- Favorite name resolves automatically before save")
 print("- Favorite list shows 6 slots in a compact grid and scrolls after overflow")
 print("- Successful simulation keeps the location button reusable")
 
 
-# ==================== DPort 6.9.1 speed / favorites polish ====================
+# ==================== DPort 6.9.0 speed / favorites polish ====================
 
-# The first 6.9.1 pass waited for reverse-geocoding before showing the Favorite
+# The first 6.9.0 pass waited for reverse-geocoding before showing the Favorite
 # prompt. Keep saving instant: create the Favorite immediately and let the
 # place-name lookup finish in the background. Only replace the temporary name
 # if the user has not manually changed it.
 text += r'''
 <style>
-/* DPort 6.9.1 Favorite palette: match the main blue/red controls and keep
+/* DPort 6.9.0 Favorite palette: match the main blue/red controls and keep
    contrast strong in dark mode. */
 .geoport-favorites-title{
     display:flex;
@@ -769,7 +769,7 @@ text=text.replace(
 )
 
 
-# Final DPort 6.9.1 action styling.
+# Final DPort 6.9.0 action styling.
 # Match the subdued semi-transparent red used by the existing recent-location
 # delete action. Keep this override scoped so the rest of the dark UI is intact.
 text += r'''
@@ -949,7 +949,7 @@ text += r'''
 </script>
 '''
 path.write_text(text, encoding='utf-8')
-print("6.9.1 favorites/location polish applied.")
+print("6.9.0 favorites/location polish applied.")
 print("- Reverse geocoding runs faster via parallel lookups.")
 print("- Favorite saving no longer waits for place-name recognition.")
 print("- Favorites show names only, six visible cards, with clearer DPort colors.")
