@@ -164,6 +164,11 @@ jobs:
           $expected = $line.Trim().Substring('pymobiledevice3=='.Length).Trim()
           if ($pm3 -ne $expected) { throw "Expected pymobiledevice3 $expected, got $pm3" }
 
+      - name: Remove same-version SHA auto-update
+        shell: pwsh
+        run: |
+          python scripts/disable_same_version_sha_update.py
+
       - name: Fix device refresh state
         shell: pwsh
         run: |
@@ -178,6 +183,11 @@ jobs:
         shell: pwsh
         run: |
           python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
+          $updater = Get-Content -LiteralPath 'src/dport_release_updater.py' -Raw
+          foreach ($forbidden in @('_current_exe_sha256','_read_release_sha256','current_sha256','latest_sha256','same_version_build')) {
+            if ($updater.Contains($forbidden)) { throw "Forbidden same-version SHA updater token remains: $forbidden" }
+          }
+          Write-Host 'Updater validation passed: version-only update detection.'
 
       - name: Validate final header layout
         shell: pwsh
