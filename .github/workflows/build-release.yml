@@ -369,3 +369,5 @@ jobs:
           }
 
           Write-Host "Published DPort v$v to GitHub Releases."
+
+# DPort release policy: current stable is 6.9.0; next release is 6.9.1.
