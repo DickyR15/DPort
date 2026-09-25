@@ -44,7 +44,7 @@ header_css = r"""
   No notification column.
 */
 @media (min-width:1600px){
-  body.dport-layout-ultrawide .dport-hero{
+  .dport-hero{
     display:grid!important;
     grid-template-columns:clamp(300px,19vw,340px) minmax(600px,1fr) clamp(560px,31vw,680px) 82px!important;
     column-gap:14px!important;
@@ -63,168 +63,168 @@ header_css = r"""
   }
 
   /* No header notifications. All reminders remain in the left green status area. */
-  body.dport-layout-ultrawide .dport-hero-notifications{
+  .dport-hero-notifications{
     display:none!important;
     width:0!important;height:0!important;min-width:0!important;min-height:0!important;
     max-width:0!important;max-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;
   }
 
-  body.dport-layout-ultrawide .dport-brand{
+  .dport-brand{
     grid-column:1!important;grid-row:1!important;
     display:flex!important;align-items:center!important;
     width:100%!important;min-width:0!important;max-width:none!important;
     height:86px!important;min-height:86px!important;max-height:86px!important;
     margin:0!important;padding:0!important;overflow:hidden!important;box-sizing:border-box!important;
   }
-  body.dport-layout-ultrawide .dport-brand-icon{
+  .dport-brand-icon{
     flex:0 0 84px!important;
     width:84px!important;height:84px!important;
     min-width:84px!important;min-height:84px!important;
     max-width:84px!important;max-height:84px!important;
     border-radius:16px!important;
   }
-  body.dport-layout-ultrawide .dport-brand-text{
+  .dport-brand-text{
     min-width:0!important;
     max-width:calc(100% - 100px)!important;
     margin-left:14px!important;
     overflow:hidden!important;
   }
-  body.dport-layout-ultrawide .dport-title{
+  .dport-title{
     font-size:30px!important;line-height:1.05!important;font-weight:850!important;
     white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
-  body.dport-layout-ultrawide .dport-subtitle{
+  .dport-subtitle{
     margin-top:5px!important;font-size:12px!important;line-height:1.2!important;
     white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
-  body.dport-layout-ultrawide .dport-caption,
-  body.dport-layout-ultrawide #dport-pm3-status{
-    margin-top:3px!important;font-size:10px!important;line-height:1.15!important;
+  .dport-caption,
+  #dport-pm3-status{
+    margin-top:3px!important;font-size:10.5px!important;line-height:1.15!important;
     white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
 
-  body.dport-layout-ultrawide .dport-header-center{display:contents!important;min-width:0!important}
-  body.dport-layout-ultrawide .dport-standard-device-slot{display:none!important}
+  .dport-header-center{display:contents!important;min-width:0!important}
+  .dport-standard-device-slot{display:none!important}
 
   /* GPX: visual priority second only to brand. */
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot{
+  .dport-ultra-gpx-slot{
     grid-column:2!important;grid-row:1!important;
     width:100%!important;min-width:0!important;max-width:none!important;
     height:86px!important;min-height:86px!important;max-height:86px!important;
     margin:0!important;padding:0!important;overflow:hidden!important;box-sizing:border-box!important;
     justify-self:stretch!important;align-self:center!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot > *{
+  .dport-ultra-gpx-slot > *{
     width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{
+  .dport-ultra-gpx-slot .dport-gpx-card{
     display:block!important;width:100%!important;height:86px!important;min-height:86px!important;max-height:86px!important;
     min-width:0!important;max-width:none!important;margin:0!important;padding:6px 9px!important;
     box-sizing:border-box!important;overflow:hidden!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-head{
+  .dport-ultra-gpx-slot .dport-gpx-head{
     display:grid!important;grid-template-columns:minmax(0,1fr) auto auto!important;
     align-items:center!important;gap:9px!important;width:100%!important;min-width:0!important;max-width:none!important;
     height:28px!important;min-height:28px!important;max-height:28px!important;margin:0!important;padding:0!important;overflow:hidden!important;
     box-sizing:border-box!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-head > *{
+  .dport-ultra-gpx-slot .dport-gpx-head > *{
     min-width:0!important;max-width:100%!important;box-sizing:border-box!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-section-kicker{
+  .dport-ultra-gpx-slot .dport-section-kicker{
     font-size:9px!important;line-height:1!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-section-title{
+  .dport-ultra-gpx-slot .dport-section-title{
     font-size:18px!important;line-height:19px!important;font-weight:850!important;
     min-width:0!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-status-pill{
+  .dport-ultra-gpx-slot .dport-gpx-status-pill{
     max-width:135px!important;min-width:0!important;padding:3px 8px!important;
     font-size:9px!important;line-height:14px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-wrap{
+  .dport-ultra-gpx-slot .dport-gpx-speed-wrap{
     display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:5px!important;min-width:0!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-label{
+  .dport-ultra-gpx-slot .dport-gpx-speed-label{
     font-size:9px!important;white-space:nowrap!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-select{
+  .dport-ultra-gpx-slot .dport-gpx-speed-select{
     width:118px!important;min-width:118px!important;max-width:118px!important;height:30px!important;min-height:30px!important;
     padding:3px 22px 3px 8px!important;font-size:10.5px!important;box-sizing:border-box!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{
+  .dport-ultra-gpx-slot .dport-gpx-grid{
     display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:7px!important;
     width:100%!important;min-width:0!important;max-width:none!important;
     height:45px!important;min-height:45px!important;max-height:45px!important;
     margin:5px 0 0!important;padding:0!important;overflow:hidden!important;box-sizing:border-box!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item{
+  .dport-ultra-gpx-slot .dport-gpx-item{
     width:100%!important;min-width:0!important;height:45px!important;min-height:45px!important;max-height:45px!important;
     margin:0!important;padding:6px 8px!important;border-radius:9px!important;box-sizing:border-box!important;overflow:hidden!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item span{
+  .dport-ultra-gpx-slot .dport-gpx-item span{
     display:block!important;max-width:100%!important;font-size:9px!important;line-height:10px!important;
     white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item strong{
+  .dport-ultra-gpx-slot .dport-gpx-item strong{
     display:block!important;max-width:100%!important;margin-top:2px!important;font-size:13px!important;line-height:16px!important;
     font-weight:800!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
 
   /* Device block: complete phone selector first, then Refresh + Connect. */
-  body.dport-layout-ultrawide .dport-ultra-device-slot{
+  .dport-ultra-device-slot{
     grid-column:3!important;grid-row:1!important;
     width:100%!important;min-width:0!important;max-width:none!important;
     height:86px!important;min-height:86px!important;max-height:86px!important;
     display:block!important;margin:0!important;padding:0!important;overflow:hidden!important;box-sizing:border-box!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{
+  .dport-ultra-device-slot .dport-connection-panel{
     width:100%!important;height:86px!important;min-height:86px!important;max-height:86px!important;min-width:0!important;max-width:none!important;
     margin:0!important;padding:8px 9px!important;box-sizing:border-box!important;overflow:hidden!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-title{margin:0 0 5px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-section-kicker{font-size:9px!important;line-height:1!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-mini-title{font-size:15px!important;line-height:1.05!important;font-weight:850!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body{
+  .dport-ultra-device-slot .dport-connection-title{margin:0 0 5px!important}
+  .dport-ultra-device-slot .dport-section-kicker{font-size:9px!important;line-height:1!important}
+  .dport-ultra-device-slot .dport-mini-title{font-size:15px!important;line-height:1.05!important;font-weight:850!important}
+  .dport-ultra-device-slot .dport-connection-body{
     display:flex!important;flex-direction:row!important;align-items:center!important;flex-wrap:nowrap!important;gap:8px!important;
     width:100%!important;min-width:0!important;max-width:100%!important;margin:0!important;padding:0!important;overflow:hidden!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body>form{
+  .dport-ultra-device-slot .dport-connection-body>form{
     flex:1 1 auto!important;width:auto!important;min-width:0!important;max-width:none!important;margin:0!important;padding:0!important;overflow:hidden!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form>.mb-3,
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form>.mb-3>.row{
+  .dport-ultra-device-slot .dport-connection-body form>.mb-3,
+  .dport-ultra-device-slot .dport-connection-body form>.mb-3>.row{
     width:100%!important;min-width:0!important;margin:0!important;padding:0!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form>.mb-3>.row{
+  .dport-ultra-device-slot .dport-connection-body form>.mb-3>.row{
     display:flex!important;align-items:center!important;flex-wrap:nowrap!important;gap:8px!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form>.mb-3>.row>.col{
+  .dport-ultra-device-slot .dport-connection-body form>.mb-3>.row>.col{
     flex:1 1 auto!important;width:auto!important;min-width:0!important;max-width:none!important;margin:0!important;padding:0!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot #device{
+  .dport-ultra-device-slot #device{
     display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;height:46px!important;min-height:46px!important;
     margin:0!important;padding:6px 30px 6px 12px!important;box-sizing:border-box!important;font-size:14px!important;font-weight:800!important;
     line-height:1.15!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot #refresh-device{
+  .dport-ultra-device-slot #refresh-device{
     flex:0 0 90px!important;width:90px!important;min-width:90px!important;max-width:90px!important;height:46px!important;min-height:46px!important;
     margin:0!important;padding:5px 4px!important;font-size:12.5px!important;line-height:1!important;white-space:nowrap!important;box-sizing:border-box!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot #connect,
-  body.dport-layout-ultrawide .dport-ultra-device-slot #disconnect{
+  .dport-ultra-device-slot #connect,
+  .dport-ultra-device-slot #disconnect{
     flex:0 0 100px!important;width:100px!important;min-width:100px!important;max-width:100px!important;height:46px!important;min-height:46px!important;
     margin:0!important;padding:5px 6px!important;font-size:12.5px!important;line-height:1!important;white-space:nowrap!important;box-sizing:border-box!important;
   }
 
   /* Exit is aligned to the exact same 46px control height as Connect. */
-  body.dport-layout-ultrawide .dport-hero-actions{
+  .dport-hero-actions{
     grid-column:4!important;grid-row:1!important;
     display:flex!important;align-items:center!important;justify-content:flex-end!important;align-self:center!important;
     width:82px!important;min-width:82px!important;max-width:82px!important;height:86px!important;
     margin:0!important;padding:0!important;box-sizing:border-box!important;
   }
-  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{
+  .dport-hero-actions #exit-btn{
     align-self:center!important;
     width:82px!important;min-width:82px!important;max-width:82px!important;height:46px!important;min-height:46px!important;
     margin:0!important;padding:5px 8px!important;font-size:12.5px!important;line-height:1!important;white-space:nowrap!important;box-sizing:border-box!important;
@@ -232,60 +232,60 @@ header_css = r"""
 }
 
 @media (min-width:1400px) and (max-width:1599px){
-  body.dport-layout-ultrawide .dport-hero{
+  .dport-hero{
     grid-template-columns:240px minmax(430px,1fr) 510px 70px!important;
     column-gap:10px!important;height:88px!important;min-height:88px!important;max-height:88px!important;padding:7px 10px!important;
   }
-  body.dport-layout-ultrawide .dport-brand{height:72px!important;min-height:72px!important;max-height:72px!important}
-  body.dport-layout-ultrawide .dport-brand-icon{
+  .dport-brand{height:72px!important;min-height:72px!important;max-height:72px!important}
+  .dport-brand-icon{
     flex-basis:72px!important;width:72px!important;height:72px!important;min-width:72px!important;min-height:72px!important;
     max-width:72px!important;max-height:72px!important;
   }
-  body.dport-layout-ultrawide .dport-title{font-size:22px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot{height:74px!important;min-height:74px!important;max-height:74px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{height:74px!important;min-height:74px!important;max-height:74px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot{height:74px!important;min-height:74px!important;max-height:74px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{height:74px!important;min-height:74px!important;max-height:74px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{height:40px!important;min-height:40px!important;max-height:40px!important;margin-top:4px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item{height:40px!important;min-height:40px!important;max-height:40px!important}
-  body.dport-layout-ultrawide .dport-hero-actions{height:74px!important;min-height:74px!important;max-height:74px!important;width:70px!important;min-width:70px!important;max-width:70px!important}
-  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{width:70px!important;min-width:70px!important;max-width:70px!important;height:42px!important;min-height:42px!important}
+  .dport-title{font-size:22px!important}
+  .dport-ultra-device-slot{height:74px!important;min-height:74px!important;max-height:74px!important}
+  .dport-ultra-device-slot .dport-connection-panel{height:74px!important;min-height:74px!important;max-height:74px!important}
+  .dport-ultra-gpx-slot{height:74px!important;min-height:74px!important;max-height:74px!important}
+  .dport-ultra-gpx-slot .dport-gpx-card{height:74px!important;min-height:74px!important;max-height:74px!important}
+  .dport-ultra-gpx-slot .dport-gpx-grid{height:40px!important;min-height:40px!important;max-height:40px!important;margin-top:4px!important}
+  .dport-ultra-gpx-slot .dport-gpx-item{height:40px!important;min-height:40px!important;max-height:40px!important}
+  .dport-hero-actions{height:74px!important;min-height:74px!important;max-height:74px!important;width:70px!important;min-width:70px!important;max-width:70px!important}
+  .dport-hero-actions #exit-btn{width:70px!important;min-width:70px!important;max-width:70px!important;height:42px!important;min-height:42px!important}
 }
 
 @media (min-width:2200px){
-  body.dport-layout-ultrawide .dport-hero{
+  .dport-hero{
     grid-template-columns:330px minmax(760px,1fr) 640px 84px!important;
     column-gap:16px!important;height:104px!important;min-height:104px!important;max-height:104px!important;padding:8px 16px!important;
   }
-  body.dport-layout-ultrawide .dport-brand{height:90px!important;min-height:90px!important;max-height:90px!important}
-  body.dport-layout-ultrawide .dport-brand-icon{
+  .dport-brand{height:90px!important;min-height:90px!important;max-height:90px!important}
+  .dport-brand-icon{
     flex-basis:88px!important;width:88px!important;height:88px!important;min-width:88px!important;min-height:88px!important;
     max-width:88px!important;max-height:88px!important;
   }
-  body.dport-layout-ultrawide .dport-title{font-size:29px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot,
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{height:92px!important;min-height:92px!important;max-height:92px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{height:53px!important;min-height:53px!important;max-height:53px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item{height:53px!important;min-height:53px!important;max-height:53px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot{height:92px!important;min-height:92px!important;max-height:92px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{height:92px!important;min-height:92px!important;max-height:92px!important}
-  body.dport-layout-ultrawide .dport-hero-actions{height:92px!important;min-height:92px!important;max-height:92px!important;width:84px!important;min-width:84px!important;max-width:84px!important}
-  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{width:84px!important;min-width:84px!important;max-width:84px!important;height:48px!important;min-height:48px!important}
+  .dport-title{font-size:29px!important}
+  .dport-ultra-gpx-slot,
+  .dport-ultra-gpx-slot .dport-gpx-card{height:92px!important;min-height:92px!important;max-height:92px!important}
+  .dport-ultra-gpx-slot .dport-gpx-grid{height:53px!important;min-height:53px!important;max-height:53px!important}
+  .dport-ultra-gpx-slot .dport-gpx-item{height:53px!important;min-height:53px!important;max-height:53px!important}
+  .dport-ultra-device-slot{height:92px!important;min-height:92px!important;max-height:92px!important}
+  .dport-ultra-device-slot .dport-connection-panel{height:92px!important;min-height:92px!important;max-height:92px!important}
+  .dport-hero-actions{height:92px!important;min-height:92px!important;max-height:92px!important;width:84px!important;min-width:84px!important;max-width:84px!important}
+  .dport-hero-actions #exit-btn{width:84px!important;min-width:84px!important;max-width:84px!important;height:48px!important;min-height:48px!important}
 }
 
 @media (max-width:1399px){
-  body.dport-layout-ultrawide .dport-hero{
+  .dport-hero{
     display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:10px!important;
     min-height:0!important;height:auto!important;max-height:none!important;overflow:visible!important;
   }
-  body.dport-layout-ultrawide .dport-brand{flex:1 1 100%!important;width:auto!important;min-width:0!important;max-width:100%!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot,
-  body.dport-layout-ultrawide .dport-ultra-device-slot{flex:1 1 100%!important;width:100%!important;min-width:0!important;max-width:100%!important}
+  .dport-brand{flex:1 1 100%!important;width:auto!important;min-width:0!important;max-width:100%!important}
+  .dport-ultra-gpx-slot,
+  .dport-ultra-device-slot{flex:1 1 100%!important;width:100%!important;min-width:0!important;max-width:100%!important}
 }
 
 /* 1100-1599px desktop: keep the approved single-row composition and readable text. */
 @media (min-width:1100px) and (max-width:1599px){
-  body.dport-layout-ultrawide .dport-hero{
+  .dport-hero{
     display:grid!important;
     grid-template-columns:270px minmax(460px,1fr) 500px 74px!important;
     column-gap:10px!important;
@@ -302,92 +302,92 @@ header_css = r"""
     position:relative!important;
     z-index:3000!important;
   }
-  body.dport-layout-ultrawide .dport-hero-notifications{display:none!important;width:0!important;height:0!important}
-  body.dport-layout-ultrawide .dport-brand{
+  .dport-hero-notifications{display:none!important;width:0!important;height:0!important}
+  .dport-brand{
     grid-column:1!important;grid-row:1!important;
     width:100%!important;min-width:0!important;max-width:none!important;
     height:82px!important;min-height:82px!important;max-height:82px!important;
     display:flex!important;align-items:center!important;
   }
-  body.dport-layout-ultrawide .dport-brand-icon{
+  .dport-brand-icon{
     flex:0 0 82px!important;width:82px!important;height:82px!important;\n    min-width:82px!important;min-height:82px!important;max-width:82px!important;max-height:82px!important;
     border-radius:15px!important;
   }
-  body.dport-layout-ultrawide .dport-brand-text{
-    min-width:0!important;max-width:calc(100% - 84px)!important;
-    margin-left:12px!important;overflow:hidden!important;
+  .dport-brand-text{
+    min-width:0!important;max-width:calc(100% - 90px)!important;
+    margin-left:14px!important;overflow:hidden!important;
   }
-  body.dport-layout-ultrawide .dport-title{
+  .dport-title{
     font-size:28px!important;line-height:1.05!important;font-weight:850!important;
     white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
-  body.dport-layout-ultrawide .dport-subtitle{
+  .dport-subtitle{
     margin-top:5px!important;font-size:12.5px!important;line-height:1.2!important;
     white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
-  body.dport-layout-ultrawide .dport-caption,
-  body.dport-layout-ultrawide #dport-pm3-status{
+  .dport-caption,
+  #dport-pm3-status{
     margin-top:3px!important;font-size:11px!important;line-height:1.15!important;
     white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
-  body.dport-layout-ultrawide .dport-header-center{display:contents!important}
-  body.dport-layout-ultrawide .dport-standard-device-slot{display:none!important}
+  .dport-header-center{display:contents!important}
+  .dport-standard-device-slot{display:none!important}
 
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot{
+  .dport-ultra-gpx-slot{
     grid-column:2!important;grid-row:1!important;display:block!important;width:100%!important;min-width:0!important;max-width:none!important;
     height:76px!important;min-height:76px!important;max-height:76px!important;
     justify-self:stretch!important;align-self:center!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot > *,
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card,
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-head,
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{
+  .dport-ultra-gpx-slot > *,
+  .dport-ultra-gpx-slot .dport-gpx-card,
+  .dport-ultra-gpx-slot .dport-gpx-head,
+  .dport-ultra-gpx-slot .dport-gpx-grid{
     width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{
+  .dport-ultra-gpx-slot .dport-gpx-card{
     height:76px!important;min-height:76px!important;max-height:76px!important;padding:5px 8px!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-section-kicker{font-size:9.5px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-section-title{
+  .dport-ultra-gpx-slot .dport-section-kicker{font-size:9.5px!important}
+  .dport-ultra-gpx-slot .dport-section-title{
     font-size:18px!important;line-height:19px!important;font-weight:850!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-label{font-size:8.5px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-select{
+  .dport-ultra-gpx-slot .dport-gpx-speed-label{font-size:8.5px!important}
+  .dport-ultra-gpx-slot .dport-gpx-speed-select{
     width:108px!important;min-width:108px!important;max-width:108px!important;height:27px!important;min-height:27px!important;font-size:11.5px!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{
+  .dport-ultra-gpx-slot .dport-gpx-grid{
     display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:6px!important;
     height:44px!important;min-height:44px!important;max-height:44px!important;margin:4px 0 0!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item{
+  .dport-ultra-gpx-slot .dport-gpx-item{
     height:44px!important;min-height:44px!important;max-height:44px!important;padding:5px 7px!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item span{font-size:10px!important;line-height:11px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item strong{font-size:14px!important;line-height:16px!important}
+  .dport-ultra-gpx-slot .dport-gpx-item span{font-size:10px!important;line-height:11px!important}
+  .dport-ultra-gpx-slot .dport-gpx-item strong{font-size:14px!important;line-height:16px!important}
 
-  body.dport-layout-ultrawide .dport-ultra-device-slot{
+  .dport-ultra-device-slot{
     grid-column:3!important;grid-row:1!important;width:100%!important;min-width:0!important;max-width:none!important;
     height:82px!important;min-height:82px!important;max-height:82px!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{
+  .dport-ultra-device-slot .dport-connection-panel{
     width:100%!important;height:82px!important;min-height:82px!important;max-height:82px!important;padding:7px 8px!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-section-kicker{font-size:8.5px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-mini-title{font-size:14px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot #device{height:42px!important;min-height:42px!important;font-size:13px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot #refresh-device{
+  .dport-ultra-device-slot .dport-section-kicker{font-size:8.5px!important}
+  .dport-ultra-device-slot .dport-mini-title{font-size:14px!important}
+  .dport-ultra-device-slot #device{height:42px!important;min-height:42px!important;font-size:13px!important}
+  .dport-ultra-device-slot #refresh-device{
     width:88px!important;min-width:88px!important;max-width:88px!important;height:46px!important;min-height:46px!important;font-size:13px!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot #connect,
-  body.dport-layout-ultrawide .dport-ultra-device-slot #disconnect{
+  .dport-ultra-device-slot #connect,
+  .dport-ultra-device-slot #disconnect{
     width:96px!important;min-width:96px!important;max-width:96px!important;height:46px!important;min-height:46px!important;font-size:13px!important;
   }
-  body.dport-layout-ultrawide .dport-hero-actions{
+  .dport-hero-actions{
     grid-column:4!important;grid-row:1!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;
     width:72px!important;min-width:72px!important;max-width:72px!important;height:82px!important;min-height:82px!important;max-height:82px!important;
   }
-  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{
-    width:72px!important;min-width:72px!important;max-width:72px!important;height:42px!important;min-height:42px!important;
+  .dport-hero-actions #exit-btn{
+    width:74px!important;min-width:74px!important;max-width:74px!important;height:46px!important;min-height:46px!important;
     margin:0!important;align-self:center!important;font-size:12px!important;
   }
 }
