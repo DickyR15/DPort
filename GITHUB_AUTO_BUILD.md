@@ -37,7 +37,7 @@ GitHub Actions 會在 Windows Runner：
 
 ## 使用者自動更新
 
-DPort 會檢查同一個 Repository 的最新正式 Release，下載新的完整 DPort EXE，驗證 SHA-256，關閉舊程序，替換 EXE，再自動重新啟動。相同版本 6.9.0 若 Release EXE 的 SHA-256 發生變化，也會視為有新的修正版並執行更新。
+DPort 會檢查同一個 Repository 的最新正式 Release；只有當正式 Release 版本高於目前版本時才會進行更新。下載新的完整 DPort EXE 後仍會驗證 SHA-256，驗證成功才會替換舊版並自動重新啟動。同版本重新建置不會觸發自動更新。
 
 因此使用者不需要 Python、pip、PyInstaller 或另外安裝 pymobiledevice3。
 
