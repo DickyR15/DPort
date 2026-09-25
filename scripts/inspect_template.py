@@ -1,20 +1,33 @@
 from pathlib import Path
-import re
+t=Path("src/templates/map.html").read_text(encoding="utf-8", errors="replace")
 
-t=Path("src/templates/map.html").read_text(encoding="utf-8",errors="replace")
-def out(label,s):
-    print(label, s[:5000].encode("unicode_escape").decode("ascii"))
+def out(label, s):
+    print(label)
+    print(s[:7000].encode("unicode_escape").decode("ascii"))
 
-for term in ["dport-gpx-speed-select","dport-gpx-speed-wrap","dport-gpx-speed","addEventListener('change'","addEventListener("change"","change', function","change", function"]:
-    print("\nTERM",term.encode("unicode_escape").decode("ascii"),"COUNT",t.count(term))
+for term in [
+    "dport-gpx-speed-select",
+    "dport-gpx-speed-wrap",
+    "dport-gpx-speed",
+    "dport-gpx-card",
+    "change",
+]:
+    print("\nTERM", term.encode("unicode_escape").decode("ascii"), "COUNT", t.count(term))
     pos=0
     n=0
-    while True:
+    while n < 20:
         i=t.find(term,pos)
-        if i<0 or n>=12: break
-        out(f"--- {i} ---",t[max(0,i-1800):i+3500])
-        pos=i+len(term); n+=1
+        if i < 0:
+            break
+        out(f"--- {i} ---", t[max(0,i-1600):i+5000])
+        pos=i+len(term)
+        n+=1
 
-print("\nMAP CLICK CONTEXTS")
-for m in re.finditer(r"map\\.on\\(['\"]click['\"][\\s\\S]{0,5000}",t):
-    out(f"--- {m.start()} ---",t[m.start():m.end()])
+print("\nMAP CLICK HANDLERS")
+start=0
+while True:
+    i=t.find("map.on('click'", start)
+    if i<0:
+        break
+    out(f"--- {i} ---", t[i:i+7000])
+    start=i+12
