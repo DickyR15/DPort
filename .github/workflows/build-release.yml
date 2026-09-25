@@ -80,11 +80,6 @@ jobs:
             throw 'Source restore failed: src/main.py is missing.'
           }
 
-      - name: Inspect template structure
-        shell: pwsh
-        run: |
-          python scripts/inspect_template.py
-
       - name: Normalize DPort version to 6.9.0
         shell: pwsh
         run: |
