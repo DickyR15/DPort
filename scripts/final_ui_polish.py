@@ -295,7 +295,9 @@ header_css = r"""
     width:100%!important;
     min-width:0!important;
     max-width:100%!important;
-    height:96px!important;\n    min-height:96px!important;\n    max-height:96px!important;
+    height:96px!important;
+    min-height:96px!important;
+    max-height:96px!important;
     padding:7px 10px!important;
     box-sizing:border-box!important;
     overflow:hidden!important;
@@ -310,7 +312,8 @@ header_css = r"""
     display:flex!important;align-items:center!important;
   }
   .dport-brand-icon{
-    flex:0 0 82px!important;width:82px!important;height:82px!important;\n    min-width:82px!important;min-height:82px!important;max-width:82px!important;max-height:82px!important;
+    flex:0 0 82px!important;width:82px!important;height:82px!important;
+    min-width:82px!important;min-height:82px!important;max-width:82px!important;max-height:82px!important;
     border-radius:15px!important;
   }
   .dport-brand-text{
@@ -391,7 +394,163 @@ header_css = r"""
     margin:0!important;align-self:center!important;font-size:12px!important;
   }
 }
+
+  /* Brand metadata: caption + live update result share one line. */
+  .dport-brand-meta-row{
+    display:flex!important;
+    align-items:center!important;
+    flex-wrap:nowrap!important;
+    gap:8px!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    margin:0!important;
+    padding:0!important;
+    overflow:hidden!important;
+  }
+  .dport-brand-meta-row .dport-caption{
+    flex:0 1 auto!important;
+    min-width:0!important;
+    max-width:100%!important;
+    margin:0!important;
+    font-size:11px!important;
+    line-height:1.15!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  .dport-brand-meta-row #dport-pm3-status{
+    flex:0 0 auto!important;
+    min-width:0!important;
+    max-width:46%!important;
+    display:inline-block!important;
+    margin:0!important;
+    padding:0!important;
+    font-size:11px!important;
+    line-height:1.15!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    vertical-align:baseline!important;
+  }
+
+  /* GPX speed control: never collapse the label or the km/h value. */
+  .dport-ultra-gpx-slot .dport-gpx-speed-wrap{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-end!important;
+    flex:0 0 auto!important;
+    min-width:max-content!important;
+    gap:6px!important;
+  }
+  .dport-ultra-gpx-slot .dport-gpx-speed-label{
+    display:inline-block!important;
+    flex:0 0 auto!important;
+    width:auto!important;
+    min-width:max-content!important;
+    font-size:10px!important;
+    line-height:1!important;
+    white-space:nowrap!important;
+    overflow:visible!important;
+  }
+  .dport-ultra-gpx-slot .dport-gpx-speed-select{
+    flex:0 0 auto!important;
+    width:132px!important;
+    min-width:132px!important;
+    max-width:132px!important;
+    height:30px!important;
+    min-height:30px!important;
+    padding:3px 24px 3px 8px!important;
+    font-size:11px!important;
+    line-height:1.1!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+  }
+
 </style>
+
+<script id="dport-header-brand-version-final">
+(function(){
+  function findExactText(root,text){
+    var nodes=root.querySelectorAll('*');
+    var best=null;
+    for(var i=0;i<nodes.length;i++){
+      var el=nodes[i];
+      if((el.textContent||'').trim()===text){
+        if(!best || el.children.length<best.children.length) best=el;
+      }
+    }
+    return best;
+  }
+
+  function arrangeBrandMeta(){
+    var brand=document.querySelector('.dport-brand');
+    var caption=document.querySelector('.dport-brand .dport-caption') ||
+                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+    var status=document.querySelector('.dport-brand #dport-pm3-status') ||
+                document.getElementById('dport-pm3-status');
+    if(!brand || !caption || !status) return false;
+
+    var parent=caption.parentElement;
+    if(!parent) return false;
+
+    var row=brand.querySelector('.dport-brand-meta-row');
+    if(!row){
+      row=document.createElement('div');
+      row.className='dport-brand-meta-row';
+      row.setAttribute('data-dport-final','brand-meta');
+
+      var captionIndex=Array.prototype.indexOf.call(parent.children,caption);
+      if(captionIndex<0) captionIndex=parent.children.length-1;
+
+      parent.insertBefore(row,caption);
+      row.appendChild(caption);
+      row.appendChild(status);
+    }else{
+      if(caption.parentElement!==row) row.appendChild(caption);
+      if(status.parentElement!==row) row.appendChild(status);
+    }
+    return true;
+  }
+
+  function fixSpeed(){
+    var wrap=document.querySelector('.dport-ultra-gpx-slot .dport-gpx-speed-wrap');
+    if(!wrap) return false;
+    var label=wrap.querySelector('.dport-gpx-speed-label');
+    var select=wrap.querySelector('.dport-gpx-speed-select');
+    if(label){
+      label.style.setProperty('display','inline-block','important');
+      label.style.setProperty('flex','0 0 auto','important');
+      label.style.setProperty('min-width','max-content','important');
+      label.style.setProperty('white-space','nowrap','important');
+    }
+    if(select){
+      select.style.setProperty('display','block','important');
+      select.style.setProperty('flex','0 0 132px','important');
+      select.style.setProperty('width','132px','important');
+      select.style.setProperty('min-width','132px','important');
+      select.style.setProperty('max-width','132px','important');
+      select.style.setProperty('font-size','11px','important');
+      return true;
+    }
+    return false;
+  }
+
+  function apply(){
+    arrangeBrandMeta();
+    fixSpeed();
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',apply,{once:true});
+  }else{
+    apply();
+  }
+  window.addEventListener('load',apply);
+  window.addEventListener('resize',apply);
+  [100,300,700,1200].forEach(function(ms){setTimeout(apply,ms);});
+})();
+</script>
 """
 
 if "</body>" in html:
