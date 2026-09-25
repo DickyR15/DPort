@@ -621,7 +621,10 @@ body > div.toast-container{
                 if(name==='handleUsbCableConnected'){
                     setTimeout(function(){
                         enableManualRefresh();
-                        greenStatus(message);
+                        clearStaleDisconnectReminder();
+                        if(!isActuallyConnected()){
+                            greenStatus(message);
+                        }
                     },250);
                 }else{
                     setTimeout(function(){
@@ -635,6 +638,54 @@ body > div.toast-container{
             wrapped.__dportManualRefreshOriginal=original;
             window[name]=wrapped;
         }catch(e){}
+    }
+
+
+    function isActuallyConnected(){
+        try{
+            if(typeof isDeviceConnected!=='undefined' && isDeviceConnected===true) return true;
+        }catch(e){}
+
+        var disconnect=document.getElementById('disconnect');
+        if(disconnect && disconnect.disabled===false) return true;
+
+        var connect=document.getElementById('connect');
+        if(connect && connect.dataset && connect.dataset.connected==='true') return true;
+
+        return false;
+    }
+
+    function clearStaleDisconnectReminder(){
+        if(!isActuallyConnected()) return;
+
+        var exact='裝置已中斷連接，重新插入 USB 後會自動出現在裝置清單。';
+        var nodes=document.querySelectorAll('body *');
+
+        for(var i=0;i<nodes.length;i++){
+            var el=nodes[i];
+            var txt=String(el.textContent||'').trim();
+            if(txt!==exact) continue;
+
+            try{
+                el.textContent='';
+                el.setAttribute('aria-hidden','true');
+                el.style.setProperty('display','none','important');
+            }catch(e){}
+        }
+    }
+
+    function watchConnectionState(){
+        clearStaleDisconnectReminder();
+
+        if(window.__dportUsbStatusObserver) return;
+        if(!window.MutationObserver) return;
+
+        var observer=new MutationObserver(function(){
+            clearStaleDisconnectReminder();
+        });
+
+        observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+        window.__dportUsbStatusObserver=observer;
     }
 
     function redirectLegacyToast(){
@@ -652,6 +703,8 @@ body > div.toast-container{
     function boot(){
         enableManualRefresh();
         redirectLegacyToast();
+        watchConnectionState();
+        clearStaleDisconnectReminder();
 
         // Only observe native USB callbacks. No polling and no automatic
         // refresh are performed here.
@@ -662,10 +715,11 @@ body > div.toast-container{
         wrapUsbEvent('handleUsbCableRemoved','USB 已拔除');
 
         // Keep Refresh available after startup too.
-        [500,1500,3000].forEach(function(ms){
+        [500,1000,2000,3000,5000].forEach(function(ms){
             setTimeout(function(){
                 enableManualRefresh();
                 redirectLegacyToast();
+                clearStaleDisconnectReminder();
             },ms);
         });
     }
@@ -676,7 +730,14 @@ body > div.toast-container{
         boot();
     }
 
-    window.addEventListener('load',boot);
+    window.addEventListener('load',function(){
+        boot();
+        watchConnectionState();
+        clearStaleDisconnectReminder();
+        [500,1200,2500].forEach(function(ms){
+            setTimeout(clearStaleDisconnectReminder,ms);
+        });
+    });
 })();
 </script>
 '''
