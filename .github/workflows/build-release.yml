@@ -199,7 +199,7 @@ jobs:
             }
           }
 
-          if (([regex]::Matches($html, 'id="dport-header-final-v1"')).Count -ne 1) {
+          if (([regex]::Matches($html, 'id="dport-header-final-v2"')).Count -ne 1) {
             throw 'Expected exactly one final DPort header style block.'
           }
 
