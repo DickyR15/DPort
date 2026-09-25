@@ -1317,6 +1317,105 @@ html += r'''
 </script>
 '''
 
+
+# ==================== DPort definitive map/UI interaction guard ====================
+# The GPX speed selector lives in the page header, but its interaction can still
+# bubble into Leaflet's map click handler in some Chromium/Bootstrap combinations.
+# Guard the actual map click handler itself so UI controls can never create/move a
+# map coordinate. This is intentionally source-level, not another event-bubble hack.
+needle = "map.on('click', function(event){"
+if needle in html:
+    html = html.replace(
+        needle,
+        """map.on('click', function(event){
+        // Header / UI controls are not map-coordinate input.
+        const originalEvent = event && event.originalEvent;
+        const target = originalEvent && originalEvent.target;
+        if (target && target.closest && target.closest(
+            '.dport-ultra-gpx-slot, .dport-gpx-speed-wrap, select, button, input, textarea, label'
+        )) {
+            return;
+        }
+""",
+        1,
+    )
+else:
+    raise SystemExit("Expected Leaflet map click handler was not found; refusing to guess.")
+
+# Long place names must be constrained by the actual left location row.
+html += r'''
+<style id="dport-definitive-location-row-final">
+/* Actual "地點：" row in src/templates/map.html. */
+.geoport-status-card,
+.geoport-current-place-row,
+.geoport-current-place-label,
+#geoport-current-place{
+    min-width:0!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+}
+
+.geoport-status-card{
+    width:100%!important;
+    overflow:hidden!important;
+}
+
+.geoport-current-place-row{
+    width:100%!important;
+    display:flex!important;
+    flex:1 1 100%!important;
+    align-items:center!important;
+    gap:6px!important;
+    overflow:hidden!important;
+}
+
+.geoport-current-place-label{
+    flex:0 0 auto!important;
+    white-space:nowrap!important;
+}
+
+#geoport-current-place{
+    flex:1 1 0%!important;
+    width:0!important;
+    max-width:none!important;
+    overflow:hidden!important;
+    white-space:nowrap!important;
+    text-overflow:ellipsis!important;
+    display:block!important;
+    cursor:help!important;
+}
+
+#geoport-current-place[title]:hover{
+    text-decoration:underline dotted!important;
+    text-underline-offset:2px!important;
+}
+</style>
+
+<script id="dport-long-place-title-final">
+(function(){
+    function syncPlaceTitle(){
+        var el=document.getElementById('geoport-current-place');
+        if(!el) return;
+        var text=String(el.textContent||'').replace(/\s+/g,' ').trim();
+        if(text && text!=='尚未辨識地點'){
+            el.title=text;
+        }else{
+            el.removeAttribute('title');
+        }
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',syncPlaceTitle,{once:true});
+    }else{
+        syncPlaceTitle();
+    }
+    window.addEventListener('load',syncPlaceTitle);
+    if(window.MutationObserver){
+        var obs=new MutationObserver(syncPlaceTitle);
+        obs.observe(document.body,{subtree:true,childList:true,characterData:true});
+    }
+})();
+</script>
+'''
 path.write_text(html, encoding="utf-8")
 
 print("DPort final header rebuilt from one authoritative layout.")
