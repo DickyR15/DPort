@@ -564,7 +564,7 @@ else:
 # existing Refresh button and retry with a short back-off instead of requiring
 # the user to manually click Refresh several times. This only refreshes while
 # no device is present and DPort is not already connected.
-text += r'''
+html += r'''
 <style id="dport-usb-reconnect-notifications">
 /* All legacy Toast notifications are removed from the lower-left UI. */
 body > .toast-container,
