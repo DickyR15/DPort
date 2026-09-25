@@ -1016,6 +1016,149 @@ body > div.toast-container{
 </script>
 '''
 
+
+# ==================== DPort location / GPX interaction polish ====================
+# 1) A reverse-geocoded place name must never change the width of the left panel.
+#    Truncate visually with an ellipsis and expose the full value on hover.
+# 2) GPX speed controls are UI controls, not map controls. Stop their pointer
+#    events from bubbling into Leaflet so selecting a speed can never pan/zoom
+#    the map to the click position.
+html += r'''
+<style id="dport-location-gpx-interaction-final">
+/* Long place-name row: never push the sidebar wider than its grid column. */
+.dport-location-name,
+.geoport-location-name,
+.geoport-place-name,
+#geoport-place-name{
+    display:block!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+    overflow:hidden!important;
+    white-space:nowrap!important;
+    text-overflow:ellipsis!important;
+}
+
+.dport-location-name *,
+.geoport-location-name *,
+.geoport-place-name *,
+#geoport-place-name *{
+    max-width:100%!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+}
+
+.dport-location-name,
+.geoport-location-name,
+.geoport-place-name,
+#geoport-place-name{
+    flex:1 1 auto!important;
+}
+
+/* GPX speed selector gets its own interaction boundary. */
+.dport-gpx-speed-wrap,
+.dport-gpx-speed-select,
+.dport-gpx-speed-wrap select{
+    touch-action:manipulation!important;
+    user-select:none!important;
+}
+
+.dport-gpx-speed-wrap{
+    position:relative!important;
+    z-index:4000!important;
+}
+</style>
+
+<script id="dport-location-gpx-interaction-final-script">
+(function(){
+    function findPlaceNameElements(){
+        var all=document.querySelectorAll('body *');
+        var found=[];
+
+        for(var i=0;i<all.length;i++){
+            var el=all[i];
+            if(!el || el.children.length>3) continue;
+
+            var text=String(el.textContent||'').replace(/\s+/g,' ').trim();
+            if(text.length<8 || text.length>220) continue;
+
+            if(/^地點\s*[:：]/.test(text)){
+                found.push(el);
+            }
+        }
+        return found;
+    }
+
+    function constrainPlaceName(){
+        var found=findPlaceNameElements();
+
+        found.forEach(function(el){
+            try{
+                el.classList.add('dport-location-name');
+                el.title=String(el.textContent||'').replace(/\s+/g,' ').trim();
+
+                var parent=el.parentElement;
+                for(var level=0; parent && level<4; level++,parent=parent.parentElement){
+                    parent.style.setProperty('min-width','0','important');
+                    parent.style.setProperty('max-width','100%','important');
+                    parent.style.setProperty('box-sizing','border-box','important');
+                    parent.style.setProperty('overflow','hidden','important');
+                }
+            }catch(e){}
+        });
+    }
+
+    function protectGpxControls(){
+        var wraps=document.querySelectorAll(
+            '.dport-gpx-speed-wrap, .dport-gpx-speed-select, .dport-gpx-speed-wrap select'
+        );
+
+        wraps.forEach(function(el){
+            if(el.dataset.dportLeafletShield==='1') return;
+            el.dataset.dportLeafletShield='1';
+
+            [
+                'mousedown','mouseup','click','dblclick',
+                'pointerdown','pointerup',
+                'touchstart','touchend',
+                'wheel','contextmenu'
+            ].forEach(function(type){
+                el.addEventListener(type,function(event){
+                    event.stopPropagation();
+                },false);
+            });
+        });
+    }
+
+    function apply(){
+        constrainPlaceName();
+        protectGpxControls();
+    }
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',apply,{once:true});
+    }else{
+        apply();
+    }
+
+    window.addEventListener('load',apply);
+    window.addEventListener('resize',apply);
+
+    if(window.MutationObserver){
+        var observer=new MutationObserver(function(){
+            apply();
+        });
+        observer.observe(document.body,{childList:true,subtree:true});
+    }
+
+    [200,700,1500,3000].forEach(function(ms){
+        setTimeout(apply,ms);
+    });
+})();
+</script>
+'''
+
 path.write_text(html, encoding="utf-8")
 
 print("DPort final header rebuilt from one authoritative layout.")
