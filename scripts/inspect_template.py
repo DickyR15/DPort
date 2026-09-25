@@ -13,4 +13,4 @@ for pat in [r'<[^>]+id=["\']device["\'][^>]*>',
     print("PATTERN",pat)
     for m in list(re.finditer(pat,t,re.I))[:20]:
         print("----",m.start())
-        print(t[max(0,m.start()-500):m.end()+1500].replace("\n"," ")[:3000])
+        print(repr(t[max(0,m.start()-500):m.end()+1500].replace("\n"," ")[:3000]))
