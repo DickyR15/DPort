@@ -179,6 +179,34 @@ jobs:
         run: |
           python scripts/final_ui_polish.py
 
+      - name: Sync clean 6.9.0 source package
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          $sourceRoot = Join-Path $env:RUNNER_TEMP 'dport-source\DPort-6.9.0'
+          if (-not (Test-Path $sourceRoot)) { throw "Restored source root missing: $sourceRoot" }
+
+          $sourceSrc = Join-Path $sourceRoot 'src'
+          if (Test-Path $sourceSrc) { Remove-Item $sourceSrc -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $sourceSrc | Out-Null
+          Copy-Item -Path 'src\*' -Destination $sourceSrc -Recurse -Force
+
+          $tmpZip = Join-Path $env:RUNNER_TEMP 'DPort-source-6.9.0.cleaned.zip'
+          if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force }
+
+          Compress-Archive -Path (Join-Path $sourceRoot '*') -DestinationPath $tmpZip -CompressionLevel Optimal -Force
+          Copy-Item -LiteralPath $tmpZip -Destination 'DPort-source-6.9.0.zip' -Force
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add DPort-source-6.9.0.zip
+          if (-not (git diff --cached --quiet)) {
+            git commit -m 'chore: sync clean DPort 6.9.0 source package [skip ci]'
+            git push origin HEAD:main
+          } else {
+            Write-Host 'Source package already matches the cleaned build source.'
+          }
+
       - name: Validate source
         shell: pwsh
         run: |
