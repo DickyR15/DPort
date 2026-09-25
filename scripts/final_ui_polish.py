@@ -37,21 +37,32 @@ css = "\n<style id=\"dport-final-ui-polish-v8\">\n:root{\n    --dport-panel:#2a3
 favorites_js = "\n<script id=\"dport-final-favorites-render-v8\">\n(function(){\n    function renderFavorites(){\n        var box=document.getElementById('geoport-favorites');\n        if(!box || typeof geoportGetFavorites!=='function') return;\n        var items=geoportGetFavorites() || [];\n        box.innerHTML='';\n\n        var count=document.getElementById('geoport-fav-count');\n        if(count) count.textContent=items.length + '/20';\n\n        if(!items.length){\n            box.innerHTML='<div class=\"geoport-fav-empty\">還沒有儲存的位置</div>';\n            return;\n        }\n\n        items.forEach(function(item,index){\n            var card=document.createElement('div');\n            card.className='geoport-fav-card';\n\n            var open=document.createElement('button');\n            open.type='button';\n            open.className='geoport-fav-open';\n            open.title='前往 ' + String(item.name || '未命名位置');\n\n            var name=document.createElement('span');\n            name.className='geoport-fav-name';\n            var text=String(item.name || '未命名位置');\n            if(text.length > 16) name.classList.add('long');\n            if(text.length > 28) name.classList.add('xlong');\n            name.textContent=text;\n\n            open.appendChild(name);\n            open.onclick=function(){\n                geoportSetMapOnlyCoordinates(item.lat,item.lng);\n                geoportMoveActiveMarker(item.lat,item.lng,15);\n                if(typeof geoportStatus==='function'){\n                    geoportStatus('已載入最愛位置',false);\n                }\n            };\n\n            var del=document.createElement('button');\n            del.type='button';\n            del.className='geoport-fav-delete';\n            del.textContent='×';\n            del.title='刪除 ' + text;\n            del.setAttribute('aria-label','刪除 ' + text);\n            del.onclick=function(event){\n                event.preventDefault();\n                event.stopPropagation();\n                var next=geoportGetFavorites() || [];\n                next.splice(index,1);\n                geoportSetFavorites(next);\n                renderFavorites();\n            };\n\n            card.appendChild(open);\n            card.appendChild(del);\n            box.appendChild(card);\n        });\n    }\n\n    window.geoportRenderFavorites=renderFavorites;\n\n    function init(){\n        renderFavorites();\n    }\n\n    if(document.readyState==='loading'){\n        document.addEventListener('DOMContentLoaded',init,{once:true});\n    }else{\n        init();\n    }\n})();\n</script>\n"
 status_js = "\n<script id=\"dport-map-status-overlay-script\">\n(function(){\n    function findStatusCard(){\n        var found=[];\n        document.querySelectorAll('body *').forEach(function(el){\n            if(!el || el.id==='dport-map-status-overlay') return;\n            var t=(el.innerText||'').replace(/\\\\s+/g,' ').trim();\n            if(\n                (t.indexOf('準備就緒')>=0 || t.indexOf('定位套用失敗')>=0 ||\n                 t.indexOf('定位成功')>=0 || t.indexOf('目前尚未偵測')>=0) &&\n                (t.indexOf('USB')>=0 || t.indexOf('裝置')>=0 || t.indexOf('座標')>=0)\n            ){\n                var r=el.getBoundingClientRect();\n                if(r.width>=140 && r.height>=28 && r.width<=700 && r.height<=280){\n                    found.push(el);\n                }\n            }\n        });\n        found.sort(function(a,b){\n            var ra=a.getBoundingClientRect(), rb=b.getBoundingClientRect();\n            return (ra.width*ra.height)-(rb.width*rb.height);\n        });\n        return found[0] || null;\n    }\n\n    function getMapFrame(){\n        var selectors=['.leaflet-container','#map','.map-container'];\n        for(var i=0;i<selectors.length;i++){\n            var map=document.querySelector(selectors[i]);\n            if(!map) continue;\n            var r=map.getBoundingClientRect();\n            if(r.width>=250 && r.height>=180) return map;\n        }\n        return null;\n    }\n\n    function mount(){\n        if(document.getElementById('dport-map-status-overlay')) return true;\n        var map=getMapFrame();\n        var source=findStatusCard();\n        if(!map || !source) return false;\n\n        var holder=document.createElement('div');\n        holder.id='dport-map-status-overlay';\n        map.appendChild(holder);\n        holder.appendChild(source);\n        return true;\n    }\n\n    function ensure(){\n        if(mount()) return;\n        [200,500,1000,1800,3000].forEach(function(ms){\n            setTimeout(mount,ms);\n        });\n    }\n\n    if(document.readyState==='loading'){\n        document.addEventListener('DOMContentLoaded',ensure,{once:true});\n    }else{\n        ensure();\n    }\n    window.addEventListener('load',ensure);\n})();\n</script>\n"
 header_css = r"""
-<style id="dport-header-final-v1">
-/* Approved visual reference: Brand -> GPX -> Device -> Refresh -> Connect -> Exit. */
+<style id="dport-header-final-v2">
+/*
+  DPort Header final visual reference:
+  Brand -> GPX -> Device -> Refresh -> Connect -> Exit.
+  No notification column.
+*/
 @media (min-width:1600px){
   body.dport-layout-ultrawide .dport-hero{
     display:grid!important;
-    grid-template-columns:clamp(270px,18vw,320px) minmax(600px,1fr) clamp(520px,30vw,650px) 80px!important;
+    grid-template-columns:clamp(300px,19vw,340px) minmax(600px,1fr) clamp(560px,31vw,680px) 82px!important;
     column-gap:14px!important;
+    row-gap:0!important;
     align-items:center!important;
     justify-content:start!important;
-    width:100%!important;min-width:0!important;max-width:100%!important;
-    height:86px!important;min-height:86px!important;max-height:86px!important;
-    padding:8px 14px!important;box-sizing:border-box!important;overflow:hidden!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    height:100px!important;
+    min-height:100px!important;
+    max-height:100px!important;
+    padding:8px 14px!important;
+    box-sizing:border-box!important;
+    overflow:hidden!important;
   }
 
-  /* Notifications are never part of the Header. */
+  /* No header notifications. All reminders remain in the left green status area. */
   body.dport-layout-ultrawide .dport-hero-notifications{
     display:none!important;
     width:0!important;height:0!important;min-width:0!important;min-height:0!important;
@@ -62,19 +73,24 @@ header_css = r"""
     grid-column:1!important;grid-row:1!important;
     display:flex!important;align-items:center!important;
     width:100%!important;min-width:0!important;max-width:none!important;
-    height:72px!important;min-height:72px!important;max-height:72px!important;
+    height:86px!important;min-height:86px!important;max-height:86px!important;
     margin:0!important;padding:0!important;overflow:hidden!important;box-sizing:border-box!important;
   }
   body.dport-layout-ultrawide .dport-brand-icon{
-    flex:0 0 78px!important;width:78px!important;height:78px!important;
-    min-width:78px!important;min-height:78px!important;max-width:78px!important;max-height:78px!important;
-    border-radius:15px!important;
+    flex:0 0 84px!important;
+    width:84px!important;height:84px!important;
+    min-width:84px!important;min-height:84px!important;
+    max-width:84px!important;max-height:84px!important;
+    border-radius:16px!important;
   }
   body.dport-layout-ultrawide .dport-brand-text{
-    min-width:0!important;max-width:calc(100% - 84px)!important;margin-left:14px!important;overflow:hidden!important;
+    min-width:0!important;
+    max-width:calc(100% - 100px)!important;
+    margin-left:14px!important;
+    overflow:hidden!important;
   }
   body.dport-layout-ultrawide .dport-title{
-    font-size:28px!important;line-height:1.05!important;font-weight:850!important;
+    font-size:30px!important;line-height:1.05!important;font-weight:850!important;
     white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
   body.dport-layout-ultrawide .dport-subtitle{
@@ -90,74 +106,64 @@ header_css = r"""
   body.dport-layout-ultrawide .dport-header-center{display:contents!important;min-width:0!important}
   body.dport-layout-ultrawide .dport-standard-device-slot{display:none!important}
 
-  /* GPX: clear title row + clearly readable four information cards. */
+  /* GPX: visual priority second only to brand. */
   body.dport-layout-ultrawide .dport-ultra-gpx-slot{
-    grid-column:2!important;grid-row:1!important;display:block!important;
+    grid-column:2!important;grid-row:1!important;
     width:100%!important;min-width:0!important;max-width:none!important;
-    height:76px!important;min-height:76px!important;max-height:76px!important;
+    height:86px!important;min-height:86px!important;max-height:86px!important;
     margin:0!important;padding:0!important;overflow:hidden!important;box-sizing:border-box!important;
+    justify-self:stretch!important;align-self:center!important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot > *{
+    width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important;
   }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{
-    display:block!important;
-    width:100%!important;height:76px!important;min-height:76px!important;max-height:76px!important;
-    min-width:0!important;max-width:none!important;margin:0!important;padding:4px 8px!important;
+    display:block!important;width:100%!important;height:86px!important;min-height:86px!important;max-height:86px!important;
+    min-width:0!important;max-width:none!important;margin:0!important;padding:6px 9px!important;
     box-sizing:border-box!important;overflow:hidden!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card > *{
-    width:100%!important;
-    min-width:0!important;
-    max-width:none!important;
-    box-sizing:border-box!important;
-  }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-head{
-    display:grid!important;
-    grid-template-columns:minmax(0,1fr) auto auto!important;
-    align-items:center!important;
-    gap:8px!important;
-    width:100%!important;min-width:0!important;max-width:none!important;
-    height:24px!important;min-height:24px!important;max-height:24px!important;
-    margin:0!important;padding:0!important;overflow:hidden!important;
+    display:grid!important;grid-template-columns:minmax(0,1fr) auto auto!important;
+    align-items:center!important;gap:9px!important;width:100%!important;min-width:0!important;max-width:none!important;
+    height:28px!important;min-height:28px!important;max-height:28px!important;margin:0!important;padding:0!important;overflow:hidden!important;
     box-sizing:border-box!important;
   }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-head > *{
-    min-width:0!important;
-    max-width:100%!important;
-    box-sizing:border-box!important;
+    min-width:0!important;max-width:100%!important;box-sizing:border-box!important;
   }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-section-kicker{
-    font-size:8px!important;line-height:1!important;letter-spacing:.03em!important;
+    font-size:9px!important;line-height:1!important;
   }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-section-title{
-    font-size:17px!important;line-height:18px!important;font-weight:850!important;
+    font-size:18px!important;line-height:19px!important;font-weight:850!important;
     min-width:0!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-status-pill{
-    max-width:120px!important;min-width:0!important;padding:2px 7px!important;font-size:8.5px!important;line-height:13px!important;
-    white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
+    max-width:135px!important;min-width:0!important;padding:3px 8px!important;
+    font-size:9px!important;line-height:14px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-wrap{
-    display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:4px!important;min-width:0!important;
+    display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:5px!important;min-width:0!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-label{font-size:8px!important;white-space:nowrap!important}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-label{
+    font-size:9px!important;white-space:nowrap!important;
+  }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-speed-select{
-    width:108px!important;min-width:108px!important;max-width:108px!important;height:26px!important;
-    min-height:26px!important;padding:3px 20px 3px 7px!important;font-size:9.5px!important;box-sizing:border-box!important;
+    width:118px!important;min-width:118px!important;max-width:118px!important;height:30px!important;min-height:30px!important;
+    padding:3px 22px 3px 8px!important;font-size:10.5px!important;box-sizing:border-box!important;
   }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{
-    display:grid!important;
-    grid-template-columns:repeat(4,minmax(0,1fr))!important;
-    gap:7px!important;
+    display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:7px!important;
     width:100%!important;min-width:0!important;max-width:none!important;
-    height:47px!important;min-height:47px!important;max-height:47px!important;
-    margin:4px 0 0!important;padding:0!important;overflow:hidden!important;
-    box-sizing:border-box!important;
+    height:45px!important;min-height:45px!important;max-height:45px!important;
+    margin:5px 0 0!important;padding:0!important;overflow:hidden!important;box-sizing:border-box!important;
   }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item{
-    width:100%!important;min-width:0!important;height:47px!important;min-height:47px!important;max-height:47px!important;
-    margin:0!important;padding:6px 7px!important;border-radius:8px!important;box-sizing:border-box!important;overflow:hidden!important;
+    width:100%!important;min-width:0!important;height:45px!important;min-height:45px!important;max-height:45px!important;
+    margin:0!important;padding:6px 8px!important;border-radius:9px!important;box-sizing:border-box!important;overflow:hidden!important;
   }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item span{
-    display:block!important;max-width:100%!important;font-size:8.5px!important;line-height:10px!important;
+    display:block!important;max-width:100%!important;font-size:9px!important;line-height:10px!important;
     white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item strong{
@@ -165,21 +171,22 @@ header_css = r"""
     font-weight:800!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
 
-  /* Device gets the widest useful area. */
+  /* Device block: complete phone selector first, then Refresh + Connect. */
   body.dport-layout-ultrawide .dport-ultra-device-slot{
-    grid-column:3!important;grid-row:1!important;display:block!important;width:100%!important;
-    min-width:0!important;max-width:none!important;height:76px!important;min-height:76px!important;max-height:76px!important;
-    margin:0!important;padding:0!important;overflow:hidden!important;box-sizing:border-box!important;
+    grid-column:3!important;grid-row:1!important;
+    width:100%!important;min-width:0!important;max-width:none!important;
+    height:86px!important;min-height:86px!important;max-height:86px!important;
+    display:block!important;margin:0!important;padding:0!important;overflow:hidden!important;box-sizing:border-box!important;
   }
   body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{
-    width:100%!important;height:76px!important;min-height:76px!important;max-height:76px!important;min-width:0!important;
-    max-width:100%!important;margin:0!important;padding:7px 8px!important;box-sizing:border-box!important;overflow:hidden!important;
+    width:100%!important;height:86px!important;min-height:86px!important;max-height:86px!important;min-width:0!important;max-width:none!important;
+    margin:0!important;padding:8px 9px!important;box-sizing:border-box!important;overflow:hidden!important;
   }
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-title{margin:0 0 4px!important}
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-title{margin:0 0 5px!important}
   body.dport-layout-ultrawide .dport-ultra-device-slot .dport-section-kicker{font-size:9px!important;line-height:1!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-mini-title{font-size:14px!important;line-height:1.05!important;font-weight:800!important}
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-mini-title{font-size:15px!important;line-height:1.05!important;font-weight:850!important}
   body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body{
-    display:flex!important;flex-direction:row!important;align-items:center!important;flex-wrap:nowrap!important;gap:7px!important;
+    display:flex!important;flex-direction:row!important;align-items:center!important;flex-wrap:nowrap!important;gap:8px!important;
     width:100%!important;min-width:0!important;max-width:100%!important;margin:0!important;padding:0!important;overflow:hidden!important;
   }
   body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body>form{
@@ -190,87 +197,80 @@ header_css = r"""
     width:100%!important;min-width:0!important;margin:0!important;padding:0!important;
   }
   body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form>.mb-3>.row{
-    display:flex!important;align-items:center!important;flex-wrap:nowrap!important;gap:7px!important;
+    display:flex!important;align-items:center!important;flex-wrap:nowrap!important;gap:8px!important;
   }
   body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-body form>.mb-3>.row>.col{
     flex:1 1 auto!important;width:auto!important;min-width:0!important;max-width:none!important;margin:0!important;padding:0!important;
   }
   body.dport-layout-ultrawide .dport-ultra-device-slot #device{
     display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;height:46px!important;min-height:46px!important;
-    margin:0!important;padding:6px 30px 6px 10px!important;box-sizing:border-box!important;font-size:14px!important;font-weight:800!important;line-height:1.1!important;
-    white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
+    margin:0!important;padding:6px 30px 6px 12px!important;box-sizing:border-box!important;font-size:14px!important;font-weight:800!important;
+    line-height:1.15!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
   }
   body.dport-layout-ultrawide .dport-ultra-device-slot #refresh-device{
-    flex:0 0 90px!important;width:90px!important;min-width:90px!important;max-width:90px!important;height:42px!important;min-height:42px!important;
+    flex:0 0 90px!important;width:90px!important;min-width:90px!important;max-width:90px!important;height:46px!important;min-height:46px!important;
     margin:0!important;padding:5px 4px!important;font-size:12.5px!important;line-height:1!important;white-space:nowrap!important;box-sizing:border-box!important;
   }
   body.dport-layout-ultrawide .dport-ultra-device-slot #connect,
   body.dport-layout-ultrawide .dport-ultra-device-slot #disconnect{
-    flex:0 0 98px!important;width:98px!important;min-width:98px!important;max-width:98px!important;height:42px!important;min-height:42px!important;
-    margin:0!important;padding:5px 6px!important;font-size:11.5px!important;line-height:1!important;white-space:nowrap!important;box-sizing:border-box!important;
+    flex:0 0 100px!important;width:100px!important;min-width:100px!important;max-width:100px!important;height:46px!important;min-height:46px!important;
+    margin:0!important;padding:5px 6px!important;font-size:12.5px!important;line-height:1!important;white-space:nowrap!important;box-sizing:border-box!important;
   }
 
-  /* Exit matches Connect in height and sits on the same visual baseline. */
+  /* Exit is aligned to the exact same 46px control height as Connect. */
   body.dport-layout-ultrawide .dport-hero-actions{
-    grid-column:4!important;grid-row:1!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;
-    width:78px!important;min-width:78px!important;max-width:78px!important;height:76px!important;margin:0!important;padding:0!important;box-sizing:border-box!important;
-  }
-  body.dport-layout-ultrawide .dport-hero-actions{
-    align-items:center!important;
-    align-self:center!important;
+    grid-column:4!important;grid-row:1!important;
+    display:flex!important;align-items:center!important;justify-content:flex-end!important;align-self:center!important;
+    width:82px!important;min-width:82px!important;max-width:82px!important;height:86px!important;
+    margin:0!important;padding:0!important;box-sizing:border-box!important;
   }
   body.dport-layout-ultrawide .dport-hero-actions #exit-btn{
     align-self:center!important;
-    width:78px!important;min-width:78px!important;max-width:78px!important;height:46px!important;min-height:46px!important;
+    width:82px!important;min-width:82px!important;max-width:82px!important;height:46px!important;min-height:46px!important;
     margin:0!important;padding:5px 8px!important;font-size:12.5px!important;line-height:1!important;white-space:nowrap!important;box-sizing:border-box!important;
   }
 }
 
 @media (min-width:1400px) and (max-width:1599px){
   body.dport-layout-ultrawide .dport-hero{
-    grid-template-columns:220px minmax(390px,1fr) 500px 66px!important;
-    column-gap:9px!important;height:80px!important;min-height:80px!important;max-height:80px!important;padding:7px 10px!important;
+    grid-template-columns:240px minmax(430px,1fr) 510px 70px!important;
+    column-gap:10px!important;height:88px!important;min-height:88px!important;max-height:88px!important;padding:7px 10px!important;
   }
-  body.dport-layout-ultrawide .dport-brand{height:62px!important;min-height:62px!important;max-height:62px!important}
+  body.dport-layout-ultrawide .dport-brand{height:72px!important;min-height:72px!important;max-height:72px!important}
   body.dport-layout-ultrawide .dport-brand-icon{
-    flex-basis:62px!important;width:62px!important;height:62px!important;min-width:62px!important;min-height:62px!important;
-    max-width:62px!important;max-height:62px!important;
+    flex-basis:72px!important;width:72px!important;height:72px!important;min-width:72px!important;min-height:72px!important;
+    max-width:72px!important;max-height:72px!important;
   }
-  body.dport-layout-ultrawide .dport-title{font-size:20px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot{height:68px!important;min-height:68px!important;max-height:68px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{height:68px!important;min-height:68px!important;max-height:68px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot{height:68px!important;min-height:68px!important;max-height:68px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{height:68px!important;min-height:68px!important;max-height:68px!important;grid-template-rows:23px 39px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{height:39px!important;min-height:39px!important;max-height:39px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item{height:39px!important;min-height:39px!important;max-height:39px!important}
-  body.dport-layout-ultrawide .dport-hero-actions{height:68px!important;min-height:68px!important;max-height:68px!important;width:66px!important;min-width:66px!important;max-width:66px!important}
-  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{width:66px!important;min-width:66px!important;max-width:66px!important;height:40px!important;min-height:40px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot #device{height:40px!important;min-height:40px!important;font-size:12px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot #refresh-device{height:40px!important;min-height:40px!important;width:82px!important;min-width:82px!important;max-width:82px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot #connect,
-  body.dport-layout-ultrawide .dport-ultra-device-slot #disconnect{height:40px!important;min-height:40px!important;width:88px!important;min-width:88px!important;max-width:88px!important}
+  body.dport-layout-ultrawide .dport-title{font-size:22px!important}
+  body.dport-layout-ultrawide .dport-ultra-device-slot{height:74px!important;min-height:74px!important;max-height:74px!important}
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{height:74px!important;min-height:74px!important;max-height:74px!important}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot{height:74px!important;min-height:74px!important;max-height:74px!important}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{height:74px!important;min-height:74px!important;max-height:74px!important}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{height:40px!important;min-height:40px!important;max-height:40px!important;margin-top:4px!important}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item{height:40px!important;min-height:40px!important;max-height:40px!important}
+  body.dport-layout-ultrawide .dport-hero-actions{height:74px!important;min-height:74px!important;max-height:74px!important;width:70px!important;min-width:70px!important;max-width:70px!important}
+  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{width:70px!important;min-width:70px!important;max-width:70px!important;height:42px!important;min-height:42px!important}
 }
 
 @media (min-width:2200px){
   body.dport-layout-ultrawide .dport-hero{
-    grid-template-columns:290px minmax(720px,1fr) 640px 80px!important;
-    column-gap:14px!important;padding:9px 14px!important;height:90px!important;min-height:90px!important;max-height:90px!important;
+    grid-template-columns:330px minmax(760px,1fr) 640px 84px!important;
+    column-gap:16px!important;height:104px!important;min-height:104px!important;max-height:104px!important;padding:8px 16px!important;
   }
-  body.dport-layout-ultrawide .dport-brand{height:76px!important;min-height:76px!important;max-height:76px!important}
+  body.dport-layout-ultrawide .dport-brand{height:90px!important;min-height:90px!important;max-height:90px!important}
   body.dport-layout-ultrawide .dport-brand-icon{
-    flex-basis:78px!important;width:78px!important;height:78px!important;min-width:78px!important;min-height:78px!important;
-    max-width:78px!important;max-height:78px!important;
+    flex-basis:88px!important;width:88px!important;height:88px!important;min-width:88px!important;min-height:88px!important;
+    max-width:88px!important;max-height:88px!important;
   }
-  body.dport-layout-ultrawide .dport-title{font-size:25px!important}
+  body.dport-layout-ultrawide .dport-title{font-size:29px!important}
   body.dport-layout-ultrawide .dport-ultra-gpx-slot,
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{height:80px!important;min-height:80px!important;max-height:80px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{grid-template-rows:25px 50px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{height:50px!important;min-height:50px!important;max-height:50px!important}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item{height:50px!important;min-height:50px!important;max-height:50px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot{height:80px!important;min-height:80px!important;max-height:80px!important}
-  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{height:80px!important;min-height:80px!important;max-height:80px!important}
-  body.dport-layout-ultrawide .dport-hero-actions{height:80px!important;min-height:80px!important;max-height:80px!important;width:80px!important;min-width:80px!important;max-width:80px!important}
-  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{width:80px!important;min-width:80px!important;max-width:80px!important;height:44px!important;min-height:44px!important}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{height:92px!important;min-height:92px!important;max-height:92px!important}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{height:53px!important;min-height:53px!important;max-height:53px!important}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item{height:53px!important;min-height:53px!important;max-height:53px!important}
+  body.dport-layout-ultrawide .dport-ultra-device-slot{height:92px!important;min-height:92px!important;max-height:92px!important}
+  body.dport-layout-ultrawide .dport-ultra-device-slot .dport-connection-panel{height:92px!important;min-height:92px!important;max-height:92px!important}
+  body.dport-layout-ultrawide .dport-hero-actions{height:92px!important;min-height:92px!important;max-height:92px!important;width:84px!important;min-width:84px!important;max-width:84px!important}
+  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{width:84px!important;min-width:84px!important;max-width:84px!important;height:48px!important;min-height:48px!important}
 }
 
 @media (max-width:1399px){
@@ -282,25 +282,6 @@ header_css = r"""
   body.dport-layout-ultrawide .dport-ultra-gpx-slot,
   body.dport-layout-ultrawide .dport-ultra-device-slot{flex:1 1 100%!important;width:100%!important;min-width:0!important;max-width:100%!important}
 }
-  /* GPX fills the entire center column instead of shrink-to-fit. */
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot{justify-self:stretch!important;}
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot > *{
-    width:100%!important;
-    min-width:0!important;
-    max-width:none!important;
-    box-sizing:border-box!important;
-  }
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card,
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-head,
-  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{
-    width:100%!important;
-    min-width:0!important;
-    max-width:none!important;
-  }
-
-  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{
-    align-self:center!important;
-  }
 </style>
 """
 
