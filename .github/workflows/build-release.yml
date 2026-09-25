@@ -224,7 +224,7 @@ jobs:
             throw 'Final header does not contain the expected Brand / GPX / Device / Exit layout.'
           }
 
-          if ($html -notmatch '#device{display:block!important[^}]*width:100%') {
+          if ($html -notmatch '#device\{[^}]*display:block!important[^}]*width:100%!important') {
             throw 'Device selector width rule is missing.'
           }
 
