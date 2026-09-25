@@ -804,6 +804,253 @@ body > div.toast-container,
 </script>
 '''
 
+
+# ==================== DPort USB reconnect optimization ====================
+# Re-enumerating an iPhone can take several seconds after the cable is
+# reinserted. Reuse the existing Refresh action with a bounded retry window.
+# Also redirect legacy toast notifications to the existing left green status
+# area so the lower-left notification panel is never used.
+html += r'''
+<style id="dport-usb-reconnect-final">
+/* The lower-left toast/notification UI is intentionally disabled. */
+.toast-container,
+.toast-container.show,
+body > .toast-container,
+body > div.toast-container{
+    display:none!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+}
+
+/* Keep the green status area visually above map content. */
+.dport-status,
+#dport-status,
+.geoport-status,
+#geoport-status{
+    position:relative;
+    z-index:3200!important;
+}
+</style>
+
+<script id="dport-usb-reconnect-final-script">
+(function(){
+    var retryTimer=null;
+    var retryStep=0;
+    var retryActive=false;
+    var backgroundTimer=null;
+    var refreshLockedUntil=0;
+
+    function isConnected(){
+        try{
+            if(typeof isDeviceConnected!=='undefined' && isDeviceConnected===true) return true;
+        }catch(e){}
+        return false;
+    }
+
+    function deviceSelect(){
+        return document.getElementById('device');
+    }
+
+    function hasDevice(){
+        var select=deviceSelect();
+        if(!select) return false;
+        var options=Array.prototype.slice.call(select.options||[]);
+        return options.some(function(opt){
+            var value=String(opt.value||'').trim();
+            var label=String(opt.textContent||'').trim();
+            if(!value) return false;
+            if(/請選擇|選擇裝置|找不到|沒有裝置|無裝置/i.test(label)) return false;
+            return true;
+        });
+    }
+
+    function greenStatus(message){
+        try{
+            if(typeof geoportStatus==='function'){
+                geoportStatus(String(message||''),false);
+                return true;
+            }
+        }catch(e){}
+        return false;
+    }
+
+    function refreshOnce(){
+        var now=Date.now();
+        if(now<refreshLockedUntil || isConnected()) return false;
+
+        var btn=document.getElementById('refresh-device');
+        if(!btn) return false;
+
+        try{
+            refreshLockedUntil=now+850;
+            btn.disabled=false;
+            btn.removeAttribute('aria-disabled');
+            btn.click();
+            return true;
+        }catch(e){
+            return false;
+        }
+    }
+
+    function stopRetry(){
+        retryActive=false;
+        retryStep=0;
+        if(retryTimer){
+            clearTimeout(retryTimer);
+            retryTimer=null;
+        }
+    }
+
+    function startRetry(reason){
+        if(isConnected() || hasDevice() || retryActive) return;
+
+        retryActive=true;
+        retryStep=0;
+
+        // Covers the usual Windows USB/usbmux enumeration delay without
+        // hammering the device bridge.
+        var delays=[0,700,1500,2600,4200,6500,9000,12000,16000];
+
+        function next(){
+            if(isConnected() || hasDevice() || retryStep>=delays.length){
+                if(hasDevice()){
+                    greenStatus('USB 裝置已重新偵測');
+                }else if(!isConnected()){
+                    greenStatus('USB 裝置仍在辨識中，將持續自動偵測');
+                }
+                stopRetry();
+                scheduleBackground();
+                return;
+            }
+
+            var delay=delays[retryStep++];
+            retryTimer=setTimeout(function(){
+                retryTimer=null;
+                if(retryStep===1){
+                    greenStatus('正在偵測 USB 裝置…');
+                }
+                refreshOnce();
+                setTimeout(next,220);
+            },delay);
+        }
+
+        next();
+    }
+
+    function scheduleBackground(){
+        if(backgroundTimer) return;
+        backgroundTimer=setTimeout(function(){
+            backgroundTimer=null;
+            if(!isConnected() && !hasDevice()){
+                refreshOnce();
+                scheduleBackground();
+            }
+        },8000);
+    }
+
+    function watchDeviceList(){
+        var select=deviceSelect();
+        if(!select || select.dataset.dportUsbReconnectWatch==='1') return;
+        select.dataset.dportUsbReconnectWatch='1';
+
+        var observer=new MutationObserver(function(){
+            if(hasDevice()){
+                greenStatus('USB 裝置已重新偵測');
+                stopRetry();
+            }else if(!isConnected()){
+                scheduleBackground();
+            }
+        });
+
+        observer.observe(select,{childList:true,subtree:true});
+    }
+
+    function watchRefresh(){
+        var btn=document.getElementById('refresh-device');
+        if(!btn || btn.dataset.dportUsbReconnectWatch==='1') return;
+        btn.dataset.dportUsbReconnectWatch='1';
+
+        btn.addEventListener('click',function(){
+            setTimeout(function(){
+                if(!isConnected() && !hasDevice()){
+                    startRetry('manual-refresh');
+                }
+            },350);
+        },true);
+    }
+
+    function redirectLegacyToast(){
+        if(typeof window.displayToast!=='function') return;
+        if(window.displayToast.__dportStatusOnlyFinal) return;
+
+        window.displayToast=function(message){
+            var msg=String(message==null?'':message).trim();
+            if(!msg) return;
+            greenStatus(msg);
+        };
+        window.displayToast.__dportStatusOnlyFinal=true;
+    }
+
+    function wrapReconnectCallbacks(){
+        [
+            'handleUsbCableRemoved',
+            'handleUsbCableConnected',
+            'refreshDeviceList',
+            'refreshDevices',
+            'scanDevices'
+        ].forEach(function(name){
+            try{
+                if(typeof window[name]!=='function') return;
+                if(window[name].__dportUsbReconnectFinal) return;
+
+                var original=window[name];
+                var wrapped=function(){
+                    var result=original.apply(this,arguments);
+                    setTimeout(function(){
+                        if(!isConnected()) startRetry(name);
+                    },250);
+                    return result;
+                };
+
+                wrapped.__dportUsbReconnectFinal=true;
+                wrapped.__dportUsbReconnectOriginal=original;
+                window[name]=wrapped;
+            }catch(e){}
+        });
+    }
+
+    function boot(){
+        redirectLegacyToast();
+        watchDeviceList();
+        watchRefresh();
+        wrapReconnectCallbacks();
+
+        // Initial scan plus delayed retries for the physical reconnect case:
+        // unplug -> Windows clears usbmux -> plug in -> device enumerates.
+        setTimeout(function(){
+            if(!isConnected() && !hasDevice()) startRetry('startup');
+        },500);
+
+        [1200,3000,6000,10000,15000].forEach(function(ms){
+            setTimeout(function(){
+                redirectLegacyToast();
+                watchDeviceList();
+                watchRefresh();
+            },ms);
+        });
+    }
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',boot,{once:true});
+    }else{
+        boot();
+    }
+
+    window.addEventListener('load',boot);
+})();
+</script>
+'''
+
 path.write_text(html, encoding="utf-8")
 
 print("DPort final header rebuilt from one authoritative layout.")
