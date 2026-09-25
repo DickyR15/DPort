@@ -220,8 +220,8 @@ jobs:
             throw 'Header notification area is not fully removed.'
           }
 
-                    if ($html -notmatch 'grid-template-columns:clamp\(270px,18vw,320px\) minmax\(600px,1fr\) clamp\(520px,30vw,650px\) 80px') {
-            throw 'Final header does not contain the expected visual-reference Brand / GPX / Device / Exit layout.'
+                    if ($html -notmatch 'grid-template-columns:clamp\(300px,19vw,340px\) minmax\(600px,1fr\) clamp\(560px,31vw,680px\) 82px') {
+            throw 'Final header does not contain the expected enlarged Brand / GPX / Device / Exit layout.'
           }
 
           if ($html -notmatch '#device\{[^}]*display:block!important[^}]*width:100%!important') {
