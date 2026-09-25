@@ -379,11 +379,11 @@ header_css = r"""
   .dport-ultra-device-slot .dport-mini-title{font-size:14px!important}
   .dport-ultra-device-slot #device{height:42px!important;min-height:42px!important;font-size:13px!important}
   .dport-ultra-device-slot #refresh-device{
-    width:88px!important;min-width:88px!important;max-width:88px!important;height:46px!important;min-height:46px!important;font-size:13px!important;
+    width:88px!important;min-width:88px!important;max-width:88px!important;height:46px!important;min-height:46px!important;font-size:14px!important;
   }
   .dport-ultra-device-slot #connect,
   .dport-ultra-device-slot #disconnect{
-    width:96px!important;min-width:96px!important;max-width:96px!important;height:46px!important;min-height:46px!important;font-size:13px!important;
+    width:96px!important;min-width:96px!important;max-width:96px!important;height:46px!important;min-height:46px!important;font-size:14px!important;
   }
   .dport-hero-actions{
     grid-column:4!important;grid-row:1!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;
@@ -817,6 +817,200 @@ body > div.toast-container{
         [500,1200,2500].forEach(function(ms){
             setTimeout(clearStaleDisconnectReminder,ms);
         });
+    });
+})();
+</script>
+'''
+
+
+# ==================== DPort unified status / device UX ====================
+# One green status message only. No stacked toast panels. Dialogs/prompts are
+# intentionally left alone because they require direct user interaction.
+html += r'''
+<style id="dport-unified-status-final">
+.toast-container,
+.toast-container.show,
+body > .toast-container,
+body > div.toast-container{
+    display:none!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+}
+
+#geoport-status,
+.geoport-status,
+#dport-status,
+.dport-status{
+    position:relative!important;
+    z-index:3200!important;
+    min-height:1.2em!important;
+    overflow:hidden!important;
+    transition:opacity .18s ease!important;
+}
+</style>
+
+<script id="dport-unified-status-final-script">
+(function(){
+    var hideTimer=null;
+    var originalStatus=null;
+    var installing=false;
+
+    function statusElement(){
+        return document.getElementById('geoport-status') ||
+               document.getElementById('dport-status') ||
+               document.querySelector('.geoport-status,.dport-status');
+    }
+
+    function clearStatusVisual(){
+        var el=statusElement();
+        if(!el) return;
+        try{
+            el.textContent='';
+            el.style.removeProperty('display');
+            el.style.removeProperty('opacity');
+        }catch(e){}
+    }
+
+    function armHide(message){
+        if(hideTimer) clearTimeout(hideTimer);
+        var msg=String(message||'').trim();
+        var delay=4500;
+        if(/請按「重新整理」|USB/.test(msg)) delay=8000;
+        if(/定位成功|已辨識地點/.test(msg)) delay=4000;
+
+        hideTimer=setTimeout(function(){
+            var el=statusElement();
+            if(!el) return;
+            try{
+                el.style.setProperty('opacity','0','important');
+                setTimeout(function(){
+                    var current=statusElement();
+                    if(current && String(current.textContent||'').trim()===msg){
+                        current.textContent='';
+                        current.style.removeProperty('opacity');
+                    }
+                },200);
+            }catch(e){}
+        },delay);
+    }
+
+    function install(){
+        if(installing) return;
+        installing=true;
+
+        try{
+            if(typeof window.geoportStatus==='function' &&
+               !window.geoportStatus.__dportUnifiedStatusFinal){
+
+                originalStatus=window.geoportStatus;
+
+                var wrapped=function(message){
+                    var args=Array.prototype.slice.call(arguments);
+                    var msg=String(message==null?'':message).trim();
+
+                    if(hideTimer) clearTimeout(hideTimer);
+
+                    if(!msg){
+                        clearStatusVisual();
+                        return;
+                    }
+
+                    var result;
+                    try{
+                        result=originalStatus.apply(this,args);
+                    }catch(e){}
+
+                    // Always collapse the status area to one text message.
+                    var el=statusElement();
+                    if(el){
+                        try{
+                            el.textContent=msg;
+                            el.style.setProperty('opacity','1','important');
+                            el.style.removeProperty('display');
+                        }catch(e){}
+                    }
+
+                    armHide(msg);
+                    return result;
+                };
+
+                wrapped.__dportUnifiedStatusFinal=true;
+                wrapped.__dportUnifiedStatusOriginal=originalStatus;
+                window.geoportStatus=wrapped;
+            }
+        }catch(e){
+            // Leave the original implementation untouched if the page is
+            // still initializing.
+        }
+
+        try{
+            if(typeof window.displayToast==='function' &&
+               !window.displayToast.__dportStatusOnlyFinal){
+
+                window.displayToast=function(message){
+                    var msg=String(message==null?'':message).trim();
+                    if(!msg) return;
+                    if(typeof window.geoportStatus==='function'){
+                        window.geoportStatus(msg,false);
+                    }
+                };
+
+                window.displayToast.__dportStatusOnlyFinal=true;
+            }
+        }catch(e){}
+
+        installing=false;
+    }
+
+    function updateDeviceTooltip(){
+        var select=document.getElementById('device');
+        if(!select) return false;
+
+        var option=select.options && select.selectedIndex>=0 ?
+            select.options[select.selectedIndex] : null;
+
+        var label=option ? String(option.textContent||'').trim() : '';
+        if(label && !/請選擇|選擇裝置|沒有裝置|找不到裝置|無裝置/i.test(label)){
+            select.title=label;
+        }else{
+            select.removeAttribute('title');
+        }
+        return true;
+    }
+
+    function watchDeviceList(){
+        var select=document.getElementById('device');
+        if(!select || select.dataset.dportTooltipWatch==='1') return;
+
+        select.dataset.dportTooltipWatch='1';
+        updateDeviceTooltip();
+
+        select.addEventListener('change',updateDeviceTooltip);
+
+        if(window.MutationObserver){
+            var observer=new MutationObserver(updateDeviceTooltip);
+            observer.observe(select,{childList:true,subtree:true});
+        }
+    }
+
+    function boot(){
+        install();
+        watchDeviceList();
+        var el=statusElement();
+        if(el){
+            el.style.setProperty('z-index','3200','important');
+        }
+    }
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',boot,{once:true});
+    }else{
+        boot();
+    }
+
+    window.addEventListener('load',boot);
+    [100,500,1200,2500,5000].forEach(function(ms){
+        setTimeout(boot,ms);
     });
 })();
 </script>
