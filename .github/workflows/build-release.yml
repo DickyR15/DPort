@@ -194,7 +194,7 @@ jobs:
           $tmpZip = Join-Path $env:RUNNER_TEMP 'DPort-source-6.9.0.cleaned.zip'
           if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force }
 
-          Compress-Archive -Path (Join-Path $sourceRoot '*') -DestinationPath $tmpZip -CompressionLevel Optimal -Force
+          Compress-Archive -Path $sourceRoot -DestinationPath $tmpZip -CompressionLevel Optimal -Force
           Copy-Item -LiteralPath $tmpZip -Destination 'DPort-source-6.9.0.zip' -Force
 
           git config user.name 'github-actions[bot]'
