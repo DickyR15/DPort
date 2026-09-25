@@ -102,10 +102,13 @@ jobs:
           if (-not (Test-Path $map)) { throw "UI template not found: $map" }
           $html = Get-Content -LiteralPath $map -Raw
           $old = '<span class="dport-version-badge">6.9.0</span>'
-          if (-not $html.Contains($old)) { throw 'Legacy 6.9.0 version badge was not found.' }
-          $html = $html.Replace($old, '')
-          Set-Content -LiteralPath $map -Value $html -Encoding utf8
-          Write-Host 'Removed legacy 6.9.0 version badge from map.html.'
+          if ($html.Contains($old)) {
+            $html = $html.Replace($old, '')
+            Set-Content -LiteralPath $map -Value $html -Encoding utf8
+            Write-Host 'Removed legacy 6.9.0 version badge from map.html.'
+          } else {
+            Write-Host 'No legacy 6.9.0 version badge present; continuing.'
+          }
 
       - name: Resolve version
         id: version
