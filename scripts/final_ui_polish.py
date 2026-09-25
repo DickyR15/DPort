@@ -42,7 +42,7 @@ header_css = r"""
 @media (min-width:1400px){
   body.dport-layout-ultrawide .dport-hero{
     display:grid!important;
-    grid-template-columns:clamp(220px,16%,280px) minmax(420px,1fr) clamp(460px,32%,620px) 72px!important;
+    grid-template-columns:clamp(250px,17%,300px) minmax(440px,1fr) clamp(500px,34%,660px) 84px!important;
     column-gap:12px!important;
     row-gap:0!important;
     align-items:center!important;
@@ -90,7 +90,7 @@ header_css = r"""
   }
 
   body.dport-layout-ultrawide .dport-brand-icon{
-    flex:0 0 58px!important;
+    flex:0 0 68px!important;
     width:58px!important;
     height:58px!important;
     min-width:58px!important;
@@ -105,7 +105,7 @@ header_css = r"""
   }
 
   body.dport-layout-ultrawide .dport-title{
-    font-size:21px!important;
+    font-size:23px!important;
     line-height:1.05!important;
     font-weight:800!important;
     white-space:nowrap!important;
@@ -115,7 +115,7 @@ header_css = r"""
 
   body.dport-layout-ultrawide .dport-subtitle{
     margin-top:3px!important;
-    font-size:10px!important;
+    font-size:10.5px!important;
     line-height:1.15!important;
     white-space:nowrap!important;
     overflow:hidden!important;
@@ -125,7 +125,7 @@ header_css = r"""
   body.dport-layout-ultrawide .dport-caption,
   body.dport-layout-ultrawide #dport-pm3-status{
     margin-top:2px!important;
-    font-size:8.7px!important;
+    font-size:9px!important;
     line-height:1.12!important;
     white-space:nowrap!important;
     overflow:hidden!important;
@@ -160,7 +160,7 @@ header_css = r"""
 
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{
     display:grid!important;
-    grid-template-rows:23px 39px!important;
+    grid-template-rows:24px 43px!important;
     row-gap:3px!important;
     width:100%!important;
     height:68px!important;
@@ -451,7 +451,7 @@ header_css = r"""
     max-width:72px!important;
     height:40px!important;
     min-height:40px!important;
-    margin:0!important;
+    margin:0 0 1px!important;
     padding:5px 8px!important;
     font-size:12px!important;
     white-space:nowrap!important;
@@ -461,7 +461,7 @@ header_css = r"""
 
 @media (min-width:1800px) and (max-width:2199px){
   body.dport-layout-ultrawide .dport-hero{
-    grid-template-columns:250px minmax(520px,1fr) 520px 72px!important;
+    grid-template-columns:270px minmax(520px,1fr) 560px 84px!important;
     column-gap:12px!important;
   }
   body.dport-layout-ultrawide .dport-brand{
