@@ -42,7 +42,7 @@ header_css = r"""
 @media (min-width:1600px){
   body.dport-layout-ultrawide .dport-hero{
     display:grid!important;
-    grid-template-columns:clamp(260px,18vw,320px) minmax(520px,1fr) clamp(520px,31vw,680px) 78px!important;
+    grid-template-columns:clamp(270px,18vw,320px) minmax(0,1fr) clamp(560px,32vw,680px) 80px!important;
     column-gap:14px!important;
     align-items:center!important;
     justify-content:start!important;
@@ -257,6 +257,25 @@ header_css = r"""
   body.dport-layout-ultrawide .dport-ultra-gpx-slot,
   body.dport-layout-ultrawide .dport-ultra-device-slot{flex:1 1 100%!important;width:100%!important;min-width:0!important;max-width:100%!important}
 }
+  /* GPX fills the entire center column instead of shrink-to-fit. */
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot{justify-self:stretch!important;}
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot > *{
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+    box-sizing:border-box!important;
+  }
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card,
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-head,
+  body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-grid{
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+  }
+
+  body.dport-layout-ultrawide .dport-hero-actions #exit-btn{
+    align-self:center!important;
+  }
 </style>
 """
 
