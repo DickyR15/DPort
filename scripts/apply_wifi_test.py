@@ -411,6 +411,236 @@ ui = re.sub(
 ui = re.sub(r'^\s*dportStartPm3StatusPolling\(\);\s*\n?', '', ui, flags=re.M)
 ui = re.sub(r'\s*<div id="dport-pm3-status"[^>]*>.*?</div>', '', ui, count=1, flags=re.S)
 
+
+# Stabilize device-list transitions without changing the existing production UI
+# structure beyond the specific USB/Wi-Fi race fixes.
+
+# USB auto-detect compares only USB options. Network/Wi-Fi must never make the
+# USB watcher think that the device set changed.
+ui = re.sub(
+    r"const displayedIds = Array\.from\(deviceDropdown\.options\)\s*"
+    r"\.map\(function\(option\)\{\s*"
+    r"try \{\s*"
+    r"const info = JSON\.parse\(option\.value \|\| '\{\}'\);\s*"
+    r"return String\(info\.Identifier \|\| ''\);\s*"
+    r"\}\s*catch \(e\) \{\s*return '';\s*\}\s*"
+    r"\}\)\s*\.filter\(Boolean\)\s*\.sort\(\);",
+    """const displayedIds = Array.from(deviceDropdown.options)
+            .map(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    if (String(info.ConnectionType || '').toUpperCase() !== 'USB') return '';
+                    return String(info.Identifier || '');
+                } catch (e) {
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .sort();""",
+    ui,
+    count=1,
+)
+
+# An empty USB presence snapshot must never clear a visible Network/Wi-Fi entry.
+ui = re.sub(
+    r"if \(rawIds\.length === 0\) \{.*?"
+    r"var connectionDropdown = document\.getElementById\('connection'\);.*?"
+    r"return;\s*\}",
+    """if (rawIds.length === 0) {
+            deviceReinsertRetryCount = 0;
+            deviceReinsertRetryUntil = 0;
+            deviceAutoRefreshSignature = '';
+            deviceAutoRefreshScheduled = false;
+
+            if (deviceDropdown && deviceDropdown.options.length > 0) {
+                const hasNetwork = Array.from(deviceDropdown.options).some(function(option){
+                    try {
+                        const info = JSON.parse(option.value || '{}');
+                        return String(info.ConnectionType || '').toUpperCase() === 'NETWORK';
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                if (hasNetwork) {
+                    return;
+                }
+            }
+            return;
+        }""",
+    ui,
+    count=1,
+    flags=re.S,
+)
+
+# Save and restore the selected USB/Wi-Fi entry around any list rebuild.
+ui = ui.replace(
+"""        deviceDropdown.innerHTML = '';
+        connectionDropdown.innerHTML = '';
+
+        const seenDeviceOptions = new Set();""",
+"""        const previousOption = deviceDropdown.options[deviceDropdown.selectedIndex];
+        const previousKey = previousOption
+            ? String(previousOption.dataset.dportKey || '')
+            : '';
+
+        deviceDropdown.innerHTML = '';
+        connectionDropdown.innerHTML = '';
+
+        const seenDeviceOptions = new Set();""",
+1,
+)
+
+ui = ui.replace(
+"""                    option.value = JSON.stringify(deviceInfo);
+
+                    devicesInfo[udid] = devicesInfo[udid] || {};""",
+"""                    option.value = JSON.stringify(deviceInfo);
+                    option.dataset.dportKey =
+                        String(udid) + '|' +
+                        String(connectionType) + '|' +
+                        String(deviceInfo.Identifier || '') + '|' +
+                        String(deviceInfo.wifiAddress || '');
+
+                    devicesInfo[udid] = devicesInfo[udid] || {};""",
+1,
+)
+
+ui = ui.replace(
+"""        if (requestSerial !== deviceListRequestSerial) return false;
+        deviceDropdown.devicesInfo = devicesInfo;""",
+"""        if (requestSerial !== deviceListRequestSerial) return false;
+
+        if (previousKey) {
+            const restoreIndex = Array.from(deviceDropdown.options).findIndex(function(option){
+                return option.dataset &&
+                    option.dataset.dportKey === previousKey;
+            });
+            if (restoreIndex >= 0) {
+                deviceDropdown.selectedIndex = restoreIndex;
+            }
+        }
+
+        deviceDropdown.devicesInfo = devicesInfo;""",
+1,
+)
+
+# Refresh is disabled only while DPort itself is connected.
+ui = re.sub(
+    r"function enableManualRefresh\(\)\{.*?\n\s*\}",
+    """function enableManualRefresh(){
+        var btn=document.getElementById('refresh-device');
+        if(!btn) return;
+
+        var connected = false;
+        try {
+            connected = (typeof isDeviceConnected !== 'undefined' &&
+                         isDeviceConnected === true);
+        } catch(e) {}
+
+        btn.disabled = connected;
+        if (connected) {
+            btn.setAttribute('aria-disabled','true');
+        } else {
+            btn.removeAttribute('aria-disabled');
+        }
+    }""",
+    ui,
+    count=1,
+    flags=re.S,
+)
+
+# Successful connection explicitly locks Refresh.
+ui = ui.replace(
+"""        if (connectButton) {
+            connectButton.disabled = true;  // Disable the button
+        }
+        if (selectedDeviceConnType === 'USB') {""",
+"""        if (connectButton) {
+            connectButton.disabled = true;  // Disable the button
+        }
+
+        var refreshButtonConnected = document.getElementById('refresh-device');
+        if (refreshButtonConnected) {
+            refreshButtonConnected.disabled = true;
+            refreshButtonConnected.setAttribute('aria-disabled','true');
+        }
+
+        if (selectedDeviceConnType === 'USB') {""",
+1,
+)
+
+# Replace the USB-disconnect handler so only USB entries are removed and the
+# Network entry remains visible while the Wi-Fi tunnel is established.
+handle_pattern = re.compile(
+    r"function handleUsbCableRemoved\(\)\s*\{.*?\n\}\s*\n\s*var appVersionNum",
+    re.S,
+)
+handle_new = """function handleUsbCableRemoved() {
+    stopUsbPresenceMonitor();
+    activeUsbUDID = null;
+    isDeviceConnected = false;
+
+    if (typeof stopGPXPlaybackForReason === 'function') {
+        stopGPXPlaybackForReason("裝置已中斷連接，GPX 軌跡播放已停止。");
+    }
+
+    var connectButton = document.getElementById('connect');
+    var connectTextElement = document.getElementById('connectText');
+    var disconnectButton = document.getElementById('disconnect');
+    var deviceDropdown = document.getElementById('device');
+    var connectionDropdown = document.getElementById('connection');
+    var spinnerElement = document.getElementById('spinner');
+
+    // Remove only USB options. Keep Network/Wi-Fi visible.
+    if (deviceDropdown) {
+        Array.from(deviceDropdown.options).forEach(function(option){
+            try {
+                var info = JSON.parse(option.value || '{}');
+                if (String(info.ConnectionType || '').toUpperCase() === 'USB') {
+                    option.remove();
+                }
+            } catch (e) {}
+        });
+    }
+
+    if (connectTextElement) {
+        connectTextElement.innerText = "連接裝置";
+        connectTextElement.style.display = 'inline-block';
+    }
+    if (connectButton) connectButton.disabled = false;
+    if (disconnectButton) {
+        disconnectButton.style.display = 'none';
+        disconnectButton.disabled = false;
+        disconnectButton.innerText = "中斷連接";
+    }
+    if (deviceDropdown) deviceDropdown.disabled = false;
+    if (spinnerElement) spinnerElement.style.display = 'none';
+
+    var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
+    if (refreshButtonAfterUsbRemoval) {
+        refreshButtonAfterUsbRemoval.disabled = false;
+        refreshButtonAfterUsbRemoval.removeAttribute('aria-disabled');
+    }
+
+    startDeviceAutoDetect();
+
+    fetch('/device_disconnected', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({})
+    }).catch(function (error) {
+        console.debug('USB disconnect cleanup skipped:', error);
+    });
+
+    displayToast("USB 已拔除");
+}
+
+    var appVersionNum"""
+ui, handle_count = handle_pattern.subn(handle_new, ui, count=1)
+if handle_count != 1:
+    raise SystemExit("USB disconnect handler replacement failed.")
+
+
 # Don't build if an updater residue is present.
 for forbidden in (
     "dport_release_updater",
