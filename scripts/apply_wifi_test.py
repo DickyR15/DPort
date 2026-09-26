@@ -308,6 +308,164 @@ for forbidden_ui in (
     if forbidden_ui in ui:
         raise SystemExit(f"Updater UI residue remains: {forbidden_ui}")
 
+# ---------------------------------------------------------------------------
+# Runtime guardrails for the existing production UI.
+# This is intentionally appended without changing any existing layout/CSS or
+# rewriting the production device-list code.
+# ---------------------------------------------------------------------------
+wifi_ui_guard = r"""
+<script id="dport-wifi-ui-guard-6-9-17">
+(function () {
+    'use strict';
+
+    var deviceDropdown = document.getElementById('deviceDropdown');
+    var refreshButton = document.getElementById('refresh-device');
+    if (!deviceDropdown) return;
+
+    var WIFI_CACHE_TTL_MS = 5000;
+    var networkCache = new Map();
+
+    function parseOption(option) {
+        try {
+            return JSON.parse(option.value || '{}');
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function isNetworkInfo(info) {
+        if (!info) return false;
+        var type = String(
+            info.ConnectionType ||
+            info.connectionType ||
+            info.wifiTransport ||
+            ''
+        ).toUpperCase();
+
+        return type === 'NETWORK' ||
+               type === 'WIFI' ||
+               !!info.wifiAddress ||
+               !!info.wifiPort ||
+               !!info.wifiTransport;
+    }
+
+    function optionKey(option, info) {
+        info = info || parseOption(option);
+        if (!info || !isNetworkInfo(info)) return '';
+
+        return [
+            String(info.Identifier || info.UniqueDeviceID || ''),
+            String(info.wifiAddress || info.host || ''),
+            String(info.wifiPort || 62078),
+            String(info.ConnectionType || info.connectionType || 'NETWORK')
+        ].join('|');
+    }
+
+    function captureNetworkOptions() {
+        var now = Date.now();
+
+        Array.prototype.forEach.call(deviceDropdown.options, function (option) {
+            var info = parseOption(option);
+            var key = optionKey(option, info);
+            if (!key) return;
+
+            networkCache.set(key, {
+                value: option.value,
+                text: option.text,
+                title: option.title || '',
+                seenAt: now
+            });
+        });
+
+        networkCache.forEach(function (cached, key) {
+            if (now - cached.seenAt > WIFI_CACHE_TTL_MS) {
+                networkCache.delete(key);
+            }
+        });
+    }
+
+    function restoreNetworkOptions() {
+        var now = Date.now();
+        var present = new Set();
+
+        Array.prototype.forEach.call(deviceDropdown.options, function (option) {
+            var info = parseOption(option);
+            var key = optionKey(option, info);
+            if (key) present.add(key);
+        });
+
+        networkCache.forEach(function (cached, key) {
+            if (now - cached.seenAt > WIFI_CACHE_TTL_MS) {
+                networkCache.delete(key);
+                return;
+            }
+            if (present.has(key)) return;
+
+            var option = document.createElement('option');
+            option.value = cached.value;
+            option.text = cached.text;
+            if (cached.title) option.title = cached.title;
+            option.dataset.dportWifiRestored = '1';
+            deviceDropdown.appendChild(option);
+        });
+    }
+
+    function syncRefreshButton() {
+        if (!refreshButton || !document.body.contains(refreshButton)) {
+            refreshButton = document.getElementById('refresh-device');
+            if (!refreshButton) return;
+        }
+
+        var connected = false;
+        try {
+            connected = (
+                typeof isDeviceConnected !== 'undefined' &&
+                isDeviceConnected === true
+            );
+        } catch (e) {}
+
+        refreshButton.disabled = connected;
+        if (connected) {
+            refreshButton.setAttribute('aria-disabled', 'true');
+        } else {
+            refreshButton.removeAttribute('aria-disabled');
+        }
+    }
+
+    var observer = new MutationObserver(function () {
+        captureNetworkOptions();
+        restoreNetworkOptions();
+        syncRefreshButton();
+    });
+
+    observer.observe(deviceDropdown, {
+        childList: true,
+        subtree: false
+    });
+
+    deviceDropdown.addEventListener('change', function () {
+        captureNetworkOptions();
+        syncRefreshButton();
+    });
+
+    setInterval(function () {
+        captureNetworkOptions();
+        restoreNetworkOptions();
+        syncRefreshButton();
+    }, 50);
+
+    captureNetworkOptions();
+    restoreNetworkOptions();
+    syncRefreshButton();
+})();
+</script>
+"""
+
+body_pos = ui.lower().rfind("</body>")
+if body_pos < 0:
+    raise SystemExit("Could not find </body> in production map.html")
+ui = ui[:body_pos] + wifi_ui_guard + ui[body_pos:]
+
 MAIN.write_text(src, encoding="utf-8")
 MAP.write_text(ui, encoding="utf-8")
 print("Wi-Fi patch applied. Production UI layout preserved; updater UI removed safely.")
