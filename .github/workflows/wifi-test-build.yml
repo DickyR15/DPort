@@ -106,7 +106,7 @@ jobs:
           python -m pip install -r requirements-build.txt
           python -m pip install lzfse==0.4.2 pyinstaller
           $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
-          if ($pm3 -ne '11.18.0') { throw "Expected pymobiledevice3 11.19.1, got $pm3" }
+          if ($pm3.Trim() -ne '11.19.1') { throw "Expected pymobiledevice3 11.19.1, got [$pm3]" }
 
       - name: Prepare MOENV API key
         shell: pwsh
