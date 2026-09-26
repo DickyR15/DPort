@@ -447,4 +447,125 @@ jobs:
 
           Write-Host "Published DPort v$v to GitHub Releases."
 
+
+  build-wifi-test:
+    if: contains(github.event.head_commit.message, '[wifi-test-6.9.4]')
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Wi-Fi source
+        uses: actions/checkout@v4
+        with:
+          ref: feature/wifi-test-6.9.4
+          fetch-depth: 1
+
+      - name: Restore v6.9.0 source
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing.' }
+          $tmp = Join-Path $env:RUNNER_TEMP 'dport-source'
+          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
+          $root = Join-Path $tmp 'DPort-6.9.0'
+          if (-not (Test-Path (Join-Path $root 'src\main.py'))) { throw 'Source ZIP is missing src\main.py' }
+          Copy-Item (Join-Path $root '*') . -Recurse -Force
+          if (Test-Path src) { Remove-Item src -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path src | Out-Null
+          Copy-Item (Join-Path $root 'src\*') src -Recurse -Force
+
+      - name: Apply Wi-Fi discovery patch
+        shell: pwsh
+        run: |
+          python scripts/apply_wifi_test_patch.py
+          python -m py_compile src/main.py
+
+      - name: Set test version and dependency
+        shell: pwsh
+        run: |
+          Set-Content 'src\dport_version.py' 'DPORT_VERSION="6.9.4"' -Encoding utf8
+          $r = Get-Content 'requirements-build.txt' -Raw
+          $r = [regex]::Replace($r, '(?m)^\s*pymobiledevice3\s*==\s*[^\r\n#]+', 'pymobiledevice3==11.19.1')
+          Set-Content 'requirements-build.txt' $r -Encoding utf8
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements-build.txt
+          python -m pip install lzfse==0.4.2 pyinstaller
+          $pm3 = (python -c "from importlib.metadata import version; print(version('pymobiledevice3'))").Trim()
+          if ($pm3 -ne '11.19.1') { throw "Wrong pymobiledevice3 version: [$pm3]" }
+          Write-Host "PASS: pymobiledevice3 $pm3"
+
+      - name: Validate Wi-Fi source
+        shell: pwsh
+        run: |
+          $main = Get-Content 'src\main.py' -Raw
+          foreach ($check in @(
+            'get_mobdev2_lockdowns(',
+            'ConnectionType"] = "Network"',
+            'wifiAddress"] = str(ip)',
+            'wifiPort"] = 62078',
+            'Wi-Fi RSD tunnel was not established.'
+          )) {
+            if ($main -notlike "*$check*") { throw "Missing Wi-Fi source check: $check" }
+          }
+          Write-Host 'Wi-Fi source validation passed.'
+
+      - name: Build Wi-Fi test EXE
+        shell: pwsh
+        run: |
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          $args = @(
+            '--noconfirm','--clean','--onefile',
+            '--name','DPort-WiFi-Test-6.9.4',
+            '--icon','DPort-6.9.0.ico',
+            '--collect-all','pymobiledevice3',
+            '--collect-all','pytun_pmd3',
+            '--collect-all','pyimg4',
+            '--collect-all','inquirer3',
+            '--copy-metadata','pymobiledevice3',
+            '--copy-metadata','pyimg4',
+            '--copy-metadata','readchar',
+            '--hidden-import','pymobiledevice3.remote.userspace_tunnel',
+            '--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider',
+            '--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation',
+            '--hidden-import','pymobiledevice3.usbmux',
+            '--add-data','src/templates;templates',
+            'src/main.py'
+          )
+          python -m PyInstaller @args
+
+      - name: Package Wi-Fi test ZIP
+        shell: pwsh
+        run: |
+          $exe = 'dist\DPort-WiFi-Test-6.9.4.exe'
+          $zip = 'DPort-WiFi-Test-6.9.4.zip'
+          if (-not (Test-Path $exe)) { throw 'Wi-Fi EXE was not built.' }
+          $stage = Join-Path $env:RUNNER_TEMP 'DPort-WiFi-Test-6.9.4'
+          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item $exe (Join-Path $stage 'DPort-WiFi-Test-6.9.4.exe') -Force
+          Set-Content (Join-Path $stage 'README-WiFi-Test.txt') @'
+DPort Wi-Fi Test 6.9.4
+
+Base: DPort v6.9.0
+Wi-Fi discovery: mobdev2 / Bonjour
+pymobiledevice3: 11.19.1
+
+Test build only.
+'@ -Encoding utf8
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
+          if ((Get-Item $zip).Length -lt 1000000) { throw 'Wi-Fi ZIP is unexpectedly small.' }
+          Write-Host "ZIP ready: $zip"
+
+      - name: Upload Wi-Fi ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-WiFi-Test-6.9.4
+          path: DPort-WiFi-Test-6.9.4.zip
+          retention-days: 14
+
 # DPort release policy: current stable is 6.9.0; next release is 6.9.1.
