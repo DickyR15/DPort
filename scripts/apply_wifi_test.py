@@ -629,6 +629,190 @@ for forbidden_ui in (
     if forbidden_ui in ui:
         raise SystemExit(f"Updater UI residue remains: {forbidden_ui}")
 
+
+# ---------------------------------------------------------------------------
+# Final Wi-Fi tunnel fix.
+# Use the FIRST successful mobdev2 discovery result. Save its validated pairing
+# record, then create a fresh TCP Lockdown in the worker thread from the exact
+# IP + pair record. This removes the second-Bonjour-discovery race.
+# ---------------------------------------------------------------------------
+
+if "wifi_pair_record = None" not in src:
+    anchor = "wifi_port = None\nconnection_type = None"
+    if anchor not in src:
+        raise SystemExit("Wi-Fi global state anchor not found.")
+    src = src.replace(
+        anchor,
+        "wifi_port = None\nwifi_pair_record = None\nconnection_type = None",
+        1,
+    )
+
+gw_start = src.find("def get_wifi_with_retry(")
+gw_end = src.find("\n@app.route('/stop_tunnel'", gw_start)
+if gw_start < 0 or gw_end < 0:
+    raise SystemExit("get_wifi_with_retry() bounds not found.")
+
+wifi_retry = '''def get_wifi_with_retry(max_attempts=10):
+    global udid, wifi_address, wifi_port, ios_version, wifi_pair_record
+
+    home = get_home_folder()
+    logger.info("Wi-Fi discovery: mobdev2 Bonjour")
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            async def discover():
+                results = []
+                async for ip, device in get_mobdev2_lockdowns(
+                    udid=udid,
+                    pair_records=home,
+                    only_paired=True,
+                    timeout=timeout,
+                ):
+                    try:
+                        info = dict(device.short_info)
+                        device_udid = (
+                            getattr(device, "udid", None)
+                            or info.get("UniqueDeviceID")
+                            or info.get("Identifier")
+                        )
+                        pair = getattr(device, "pair_record", None)
+                        results.append(
+                            (
+                                str(ip),
+                                info,
+                                device_udid,
+                                dict(pair) if isinstance(pair, dict) else None,
+                            )
+                        )
+                    finally:
+                        try:
+                            await device.close()
+                        except Exception:
+                            pass
+                return results
+
+            devices = asyncio.run(discover())
+            logger.info(f"mobdev2 Wi-Fi devices found: {len(devices)}")
+
+            for ip, info, device_udid, pair in devices:
+                if udid and device_udid and device_udid != udid:
+                    continue
+
+                udid = device_udid or udid
+                ios_version = info.get("ProductVersion") or ios_version
+                wifi_address = ip
+                wifi_port = 62078
+                wifi_pair_record = (
+                    pair
+                    if pair is not None
+                    else get_preferred_pair_record(udid, home)
+                )
+
+                if wifi_pair_record is None:
+                    raise RuntimeError(
+                        f"找不到 iPhone {udid} 的 Wi-Fi 配對紀錄。"
+                    )
+
+                logger.info(
+                    f"Wi-Fi selected: udid={udid}, "
+                    f"host={wifi_address}, port={wifi_port}, "
+                    "validated_pair_record=yes"
+                )
+                return {
+                    "udid": udid,
+                    "hostname": wifi_address,
+                    "port": wifi_port,
+                }
+
+        except Exception as exc:
+            logger.warning(
+                f"Wi-Fi discovery attempt {attempt} failed: {exc}"
+            )
+
+        if attempt < max_attempts:
+            time.sleep(1)
+
+    raise RuntimeError(
+        "No paired Wi-Fi device found through mobdev2."
+    )
+
+'''
+src = src[:gw_start] + wifi_retry + src[gw_end:]
+
+tw_start = src.find("async def start_wifi_tcp_tunnel() -> None:")
+tw_end = src.find("\n\nasync def start_wifi_quic_tunnel", tw_start)
+if tw_start < 0 or tw_end < 0:
+    raise SystemExit("start_wifi_tcp_tunnel() bounds not found.")
+
+wifi_tcp = '''async def start_wifi_tcp_tunnel() -> None:
+    global terminate_tunnel_thread, rsd_port, rsd_host
+
+    lockdown = None
+    service = None
+
+    try:
+        if not wifi_address:
+            raise RuntimeError("Wi-Fi 裝置沒有有效的 IP 位址。")
+        if not udid:
+            raise RuntimeError("Wi-Fi 裝置缺少 UDID。")
+
+        home = get_home_folder()
+        pair = wifi_pair_record or get_preferred_pair_record(udid, home)
+        if pair is None:
+            raise RuntimeError(
+                f"找不到 iPhone {udid} 的 Wi-Fi 配對紀錄。"
+                "請先用 USB 連接一次並信任此電腦。"
+            )
+
+        logger.info(
+            f"Wi-Fi TCP Lockdown: {wifi_address}:{wifi_port}, "
+            f"udid={udid}"
+        )
+
+        lockdown = await create_using_tcp(
+            hostname=str(wifi_address),
+            identifier=udid,
+            autopair=False,
+            pair_record=pair,
+            pairing_records_cache_folder=home,
+            port=int(wifi_port or 62078),
+            keep_alive=True,
+        )
+
+        logger.info(
+            f"Wi-Fi Lockdown connected: udid={lockdown.udid}, "
+            f"iOS={lockdown.product_version}"
+        )
+
+        service = await CoreDeviceTunnelProxy.create(lockdown)
+        logger.info("Wi-Fi CoreDeviceProxy service created")
+
+        async with service.start_tcp_tunnel() as tunnel_result:
+            rsd_host = tunnel_result.address
+            rsd_port = str(tunnel_result.port)
+
+            logger.info(
+                f"Wi-Fi RSD ready: {rsd_host}:{rsd_port}"
+            )
+
+            while not terminate_tunnel_thread:
+                await asyncio.sleep(0.5)
+
+    finally:
+        if service is not None:
+            try:
+                await service.close()
+            except Exception:
+                pass
+        elif lockdown is not None:
+            try:
+                await lockdown.close()
+            except Exception:
+                pass
+
+'''
+src = src[:tw_start] + wifi_tcp + src[tw_end:]
+
 MAIN.write_text(src, encoding="utf-8")
 MAP.write_text(ui, encoding="utf-8")
 print("Wi-Fi patch applied. Production UI layout preserved; updater UI removed safely.")
