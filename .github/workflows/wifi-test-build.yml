@@ -3,14 +3,14 @@ name: DPort Wi-Fi Test Build
 on:
   push:
     branches:
-      - 'feature/wifi-test-6.9.2'
+      - 'feature/wifi-test-6.9.3'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: dport-wifi-test-6.9.2
+  group: dport-wifi-test-6.9.3
   cancel-in-progress: false
 
 jobs:
@@ -23,7 +23,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Restore 6.9.1 source
+      - name: Restore v6.9.0 source
         shell: pwsh
         run: |
           if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing.' }
@@ -41,7 +41,7 @@ jobs:
       - name: Upload extracted Wi-Fi source for development
         uses: actions/upload-artifact@v4
         with:
-          name: dport-wifi-source-6.9.2
+          name: dport-wifi-source-6.9.3
           path: |
             src/main.py
             src/dport_release_updater.py
@@ -85,12 +85,12 @@ jobs:
           $networkCount = ([regex]::Matches($map, 'Network')).Count
           Write-Host "map.html Network text count: $networkCount"
 
-      - name: Set DPort 6.9.2 test version
+      - name: Set DPort 6.9.3 test version
         shell: pwsh
         run: |
-          Set-Content 'src\dport_version.py' 'DPORT_VERSION="6.9.2"' -Encoding utf8
+          Set-Content 'src\dport_version.py' 'DPORT_VERSION="6.9.3"' -Encoding utf8
           $r = Get-Content 'requirements-build.txt' -Raw
-          $r = [regex]::Replace($r, '(?m)^\s*pymobiledevice3\s*==\s*[^\r\n#]+', 'pymobiledevice3==11.18.0')
+          $r = [regex]::Replace($r, '(?m)^\s*pymobiledevice3\s*==\s*[^\r\n#]+', 'pymobiledevice3==11.19.1')
           Set-Content 'requirements-build.txt' $r -Encoding utf8
           if (Test-Path 'src\templates\map.html') {
             $html = Get-Content 'src\templates\map.html' -Raw
@@ -106,7 +106,7 @@ jobs:
           python -m pip install -r requirements-build.txt
           python -m pip install lzfse==0.4.2 pyinstaller
           $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
-          if ($pm3 -ne '11.18.0') { throw "Expected pymobiledevice3 11.18.0, got $pm3" }
+          if ($pm3 -ne '11.18.0') { throw "Expected pymobiledevice3 11.19.1, got $pm3" }
 
       - name: Prepare MOENV API key
         shell: pwsh
@@ -133,10 +133,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path build\updater | Out-Null
           Copy-Item dist\DPortUpdater.exe build\updater\DPortUpdater.exe -Force
 
-      - name: Build DPort Wi-Fi Test 6.9.2
+      - name: Build DPort Wi-Fi Test 6.9.3
         shell: pwsh
         run: |
-          $v = '6.9.2'
+          $v = '6.9.3'
           $vi = @(
             '# UTF-8',
             'VSVersionInfo(',
@@ -161,7 +161,7 @@ jobs:
           $vi | Set-Content version_info.wifi-test.txt -Encoding utf8
           $pyargs = @(
             '--noconfirm','--clean','--onefile',
-            '--name','DPort-WiFi-Test-6.9.2',
+            '--name','DPort-WiFi-Test-6.9.3',
             '--icon','DPort-6.9.0.ico',
             '--collect-all','pymobiledevice3',
             '--collect-all','pytun_pmd3',
@@ -187,7 +187,7 @@ jobs:
       - name: Verify test EXE
         shell: pwsh
         run: |
-          $exe = 'dist\DPort-WiFi-Test-6.9.2.exe'
+          $exe = 'dist\DPort-WiFi-Test-6.9.3.exe'
           if (-not (Test-Path $exe)) { throw "Missing test EXE: $exe" }
           if ((Get-Item $exe).Length -lt 1000000) { throw 'Test EXE is unexpectedly small.' }
           Write-Host "Built: $exe"
@@ -196,5 +196,5 @@ jobs:
       - name: Upload Wi-Fi test artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DPort-WiFi-Test-6.9.2
-          path: dist/DPort-WiFi-Test-6.9.2.exe
+          name: DPort-WiFi-Test-6.9.3
+          path: dist/DPort-WiFi-Test-6.9.3.exe
