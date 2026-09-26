@@ -644,7 +644,7 @@ handle_new = """function handleUsbCableRemoved() {
 
     displayToast("USB 已拔除");
 }
-
+"""
 
 # Don't build if an updater residue is present.
 for forbidden in (
