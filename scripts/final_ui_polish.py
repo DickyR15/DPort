@@ -7,6 +7,39 @@ if not path.exists():
 
 html = path.read_text(encoding="utf-8")
 
+# Critical pre-paint theme: the final UI stylesheet is appended later in this
+# script, so establish the dark canvas/panels inside <head> first. This
+# prevents a visible light/default-theme flash while Chromium parses the page
+# and before the final layout polish is applied.
+critical_prepaint = r'''<style id="dport-prepaint-critical">
+html,body{
+  margin:0!important;
+  background:#161b24!important;
+  color:#f5f7fb!important;
+}
+body{
+  min-height:100vh!important;
+  color-scheme:dark!important;
+}
+body > div, main, section, article, aside, header, .card, .panel{
+  box-sizing:border-box;
+}
+#map,.leaflet-container,.map-container{
+  background:#202733!important;
+}
+.dport-hero,.geoport-control-panel,.geoport-map-panel,.geoport-gpx-card,
+.geoport-location-card,.geoport-status-card{
+  background:#1d2430!important;
+  color:#f5f7fb!important;
+}
+</style>'''
+
+if 'id="dport-prepaint-critical"' not in html and '<head' in html:
+    html = re.sub(r'(<head[^>]*>)', r'\1\n' + critical_prepaint, html, count=1, flags=re.I)
+elif 'id="dport-prepaint-critical"' in html:
+    pass
+else:
+    raise SystemExit('Unable to locate <head>; refusing to add pre-paint CSS blindly.')
 # Rebuild the desktop header from one authoritative block. This removes all
 # previous layered header CSS/JS revisions without touching the rest of UI.
 for pattern in (
