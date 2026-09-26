@@ -401,13 +401,13 @@ ui = re.sub(
     count=1,
     flags=re.S,
 )
-ui = re.sub(
-    r'function\s+dportPm3ShowUpdateModal\(.*?function\s+setDPortLayout\(',
-    'function setDPortLayout(',
-    ui,
-    count=1,
-    flags=re.S,
-)
+# IMPORTANT: Do not use a broad regex here. The updater modal function and
+# setDPortLayout() live in the same JavaScript region in some 6.9.0 source
+# snapshots. Removing everything between them can delete production header
+# initialization (GPX / device / refresh controls). Keep setDPortLayout and
+# the surrounding production UI intact.
+# The updater modal DOM/polling is removed by the targeted ID-based regexes
+# below; the function itself may remain as dead code.
 ui = re.sub(r'^\s*dportStartPm3StatusPolling\(\);\s*\n?', '', ui, flags=re.M)
 ui = re.sub(r'\s*<div id="dport-pm3-status"[^>]*>.*?</div>', '', ui, count=1, flags=re.S)
 
