@@ -25,6 +25,10 @@ jobs:
           ref: feature/wifi-test
           fetch-depth: 1
 
+      - name: Validate Wi-Fi patch syntax
+        shell: pwsh
+        run: python -m py_compile scripts\apply_wifi_test.py
+
       - name: Build DPort Wi-Fi test ZIP
         shell: pwsh
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_wifi_test.ps1
