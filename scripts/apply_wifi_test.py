@@ -529,17 +529,13 @@ sort_code = """        if (requestSerial !== deviceListRequestSerial) return fal
 """
 ui=ui.replace(sort_anchor,sort_code,1)
 
-# Ensure the USB watcher uses only USB options for displayedIds.
-display_pat=re.compile(
-    r"const displayedIds = Array.from(deviceDropdown.options)s*"
-    r".map(function(option){.*?
-s*.sort();",
-    re.S,
-)
-m=display_pat.search(ui)
-if not m:
+# Ensure the USB watcher compares USB snapshot IDs against USB options only.
+display_start = ui.find("        const displayedIds = Array.from(deviceDropdown.options)")
+display_end = ui.find("            .sort();", display_start)
+if display_start < 0 or display_end < 0:
     raise SystemExit("USB watcher displayedIds block not found.")
-new_display="""const displayedIds = Array.from(deviceDropdown.options)
+display_end += len("            .sort();")
+new_display = """        const displayedIds = Array.from(deviceDropdown.options)
             .map(function(option){
                 try {
                     const info = JSON.parse(option.value || '{}');
@@ -552,7 +548,7 @@ new_display="""const displayedIds = Array.from(deviceDropdown.options)
             })
             .filter(Boolean)
             .sort();"""
-ui=ui[:m.start()]+new_display+ui[m.end():]
+ui = ui[:display_start] + new_display + ui[display_end:]
 
 # Timeout modal: never force a full page navigation when closing.
 old_button='''<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = '/'">關閉</button>'''
