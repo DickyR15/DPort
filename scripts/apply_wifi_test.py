@@ -233,15 +233,14 @@ if old_wifi_discovery in src:
 
 
 # ---------------------------------------------------------------------------
-# UI state fixes. Patch the actual production functions directly.
-# No high-frequency polling and no document-wide MutationObserver.
+# UI state fixes. Apply only exact production-source substitutions.
 # ---------------------------------------------------------------------------
 
-# Lock Refresh immediately after successful connection.
-success_marker = """        isDeviceConnected = true;
+# A) USB connection success: lock Refresh.
+old_success = """        isDeviceConnected = true;
         stopDeviceAutoDetect();
-"""
-success_insert = """        isDeviceConnected = true;
+if (connectTextElement) {"""
+new_success = """        isDeviceConnected = true;
         stopDeviceAutoDetect();
 
         var refreshButtonConnected = document.getElementById('refresh-device');
@@ -250,34 +249,25 @@ success_insert = """        isDeviceConnected = true;
             refreshButtonConnected.setAttribute('aria-disabled', 'true');
             refreshButtonConnected.setAttribute('data-dport-connected-lock', '1');
         }
-"""
-if success_marker not in ui:
-    raise SystemExit("USB connection success marker not found.")
-if "data-dport-connected-lock" not in ui[ui.find(success_marker):ui.find(success_marker)+800]:
-    ui = ui.replace(success_marker, success_insert, 1)
 
-# Guard the manual Refresh function using the same real #refresh-device control.
-manual_marker = """async function dportRefreshDeviceList() {
-    if (typeof isDeviceConnected !== 'undefined' && isDeviceConnected) {
-"""
-manual_insert = """async function dportRefreshDeviceList() {
-    if (typeof isDeviceConnected !== 'undefined' && isDeviceConnected) {
-        var refreshWhileConnected = document.getElementById('refresh-device');
-        if (refreshWhileConnected) {
-            refreshWhileConnected.disabled = true;
-            refreshWhileConnected.setAttribute('aria-disabled', 'true');
-        }
-"""
-if manual_marker not in ui:
-    raise SystemExit("dportRefreshDeviceList marker not found.")
-if "refreshWhileConnected" not in ui[ui.find(manual_marker):ui.find(manual_marker)+700]:
-    ui = ui.replace(manual_marker, manual_insert, 1)
+if (connectTextElement) {"""
+if old_success not in ui:
+    raise SystemExit("USB success block not found.")
+ui = ui.replace(old_success, new_success, 1)
 
-# On connect error, restore Refresh.
-error_marker = """            // Stop processing the rest of the JavaScript
+# B) USB connect error: explicitly unlock Refresh.
+old_error = """            if (connectButton) {
+                connectButton.disabled = false;
+            }
+
+            // Stop processing the rest of the JavaScript
             return;
 """
-error_insert = """            var refreshButtonConnectError = document.getElementById('refresh-device');
+new_error = """            if (connectButton) {
+                connectButton.disabled = false;
+            }
+
+            var refreshButtonConnectError = document.getElementById('refresh-device');
             if (refreshButtonConnectError) {
                 refreshButtonConnectError.disabled = false;
                 refreshButtonConnectError.removeAttribute('aria-disabled');
@@ -287,180 +277,146 @@ error_insert = """            var refreshButtonConnectError = document.getElemen
             // Stop processing the rest of the JavaScript
             return;
 """
-if error_marker in ui and "refreshButtonConnectError" not in ui:
-    ui = ui.replace(error_marker, error_insert, 1)
+if old_error in ui and "refreshButtonConnectError" not in ui:
+    ui = ui.replace(old_error, new_error, 1)
 
-# On physical USB removal, restore Refresh.
-remove_marker = """    var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
-    if (refreshButtonAfterUsbRemoval) {
-        refreshButtonAfterUsbRemoval.disabled = false;
-        refreshButtonAfterUsbRemoval.removeAttribute('aria-disabled');
+# C) Manual Refresh: the function already refuses refresh while connected;
+#    keep the actual button visually disabled as well.
+old_manual = """async function dportRefreshDeviceList() {
+    if (typeof isDeviceConnected !== 'undefined' && isDeviceConnected) {
+        displayToast("裝置已連接，無需重新整理裝置清單。");
+        return;
     }
 """
-remove_insert = """    var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
-    if (refreshButtonAfterUsbRemoval) {
-        refreshButtonAfterUsbRemoval.disabled = false;
-        refreshButtonAfterUsbRemoval.removeAttribute('aria-disabled');
-        refreshButtonAfterUsbRemoval.removeAttribute('data-dport-connected-lock');
+new_manual = """async function dportRefreshDeviceList() {
+    if (typeof isDeviceConnected !== 'undefined' && isDeviceConnected) {
+        var refreshWhileConnected = document.getElementById('refresh-device');
+        if (refreshWhileConnected) {
+            refreshWhileConnected.disabled = true;
+            refreshWhileConnected.setAttribute('aria-disabled', 'true');
+        }
+        displayToast("裝置已連接，無需重新整理裝置清單。");
+        return;
     }
 """
-if remove_marker in ui and "data-dport-connected-lock" not in ui[ui.find(remove_marker):ui.find(remove_marker)+500]:
-    ui = ui.replace(remove_marker, remove_insert, 1)
+if old_manual not in ui:
+    raise SystemExit("Manual refresh function not found.")
+if "refreshWhileConnected" not in ui:
+    ui = ui.replace(old_manual, new_manual, 1)
 
-# Explicit disconnect: restore Refresh where the production disconnect routine
-# already restores the Connect button.
-disconnect_start = ui.find("function disconnectDevice()")
-disconnect_end = ui.find("
-    async function handleFuelTypeChange()", disconnect_start)
-if disconnect_start >= 0 and disconnect_end > disconnect_start:
-    block = ui[disconnect_start:disconnect_end]
-    marker = """        if (connectButton) {
-            connectButton.disabled = false;
+# D) Manual Refresh finally MUST NOT unconditionally re-enable the button.
+old_finally = """        if (button) {
+            button.textContent = button.dataset.originalText || '↻ 重新整理';
+            button.disabled = false;
         }
 """
-    if marker in block and "refreshButtonAfterDisconnect" not in block:
-        block = block.replace(
-            marker,
-            marker + """
-        var refreshButtonAfterDisconnect = document.getElementById('refresh-device');
-        if (refreshButtonAfterDisconnect) {
-            refreshButtonAfterDisconnect.disabled = false;
-            refreshButtonAfterDisconnect.removeAttribute('aria-disabled');
-            refreshButtonAfterDisconnect.removeAttribute('data-dport-connected-lock');
-        }
-""",
-            1,
-        )
-        ui = ui[:disconnect_start] + block + ui[disconnect_end:]
+new_finally = """        if (button) {
+            button.textContent = button.dataset.originalText || '↻ 重新整理';
 
-# Preserve Network/Wi-Fi options inside populateDeviceList().
-pop_start = ui.find("async function populateDeviceList(options)")
-if pop_start < 0:
-    raise SystemExit("populateDeviceList() not found.")
-pop_end_candidates = [
-    i for i in (
-        ui.find("
-async function ", pop_start + 20),
-        ui.find("
-function ", pop_start + 20),
-    ) if i >= 0
-]
-pop_end = min(pop_end_candidates) if pop_end_candidates else len(ui)
-pop = ui[pop_start:pop_end]
-
-clear_i = pop.find("deviceDropdown.innerHTML = '';")
-if clear_i < 0:
-    raise SystemExit("populateDeviceList() clear not found.")
-
-cache_code = """        // Preserve the last known Network/Wi-Fi option before rebuilding the list.
-        const cachedNetworkOptions = [];
-        Array.from(deviceDropdown.options).forEach(function(option){
-            try {
-                const oldInfo = JSON.parse(option.value || '{}');
-                const oldType = String(
-                    oldInfo.ConnectionType ||
-                    oldInfo.connectionType ||
-                    oldInfo.wifiTransport ||
-                    ''
-                ).toUpperCase();
-                if (
-                    oldType === 'NETWORK' ||
-                    oldType === 'WIFI' ||
-                    oldInfo.wifiAddress ||
-                    oldInfo.wifiPort ||
-                    oldInfo.wifiTransport
-                ) {
-                    cachedNetworkOptions.push({
-                        value: option.value,
-                        text: option.text,
-                        title: option.title || ''
-                    });
-                }
-            } catch (e) {}
-        });
-
-"""
-if "const cachedNetworkOptions" not in pop:
-    pop = pop[:clear_i] + cache_code + pop[clear_i:]
-
-info_i = pop.find("deviceDropdown.devicesInfo = devicesInfo;")
-if info_i < 0:
-    raise SystemExit("populateDeviceList() devicesInfo marker not found.")
-
-merge_code = """        // Keep the last known Wi-Fi entry when this enumeration response is
-        // temporarily USB-only while Bonjour/mobdev2 is between advertisements.
-        const hasNetworkOption = Array.from(deviceDropdown.options).some(function(option){
-            try {
-                const info = JSON.parse(option.value || '{}');
-                const t = String(
-                    info.ConnectionType ||
-                    info.connectionType ||
-                    info.wifiTransport ||
-                    ''
-                ).toUpperCase();
-                return (
-                    t === 'NETWORK' ||
-                    t === 'WIFI' ||
-                    !!info.wifiAddress ||
-                    !!info.wifiPort ||
-                    !!info.wifiTransport
-                );
-            } catch (e) {
-                return false;
+            if (isDeviceConnected) {
+                button.disabled = true;
+                button.setAttribute('aria-disabled', 'true');
+                button.setAttribute('data-dport-connected-lock', '1');
+            } else {
+                button.disabled = false;
+                button.removeAttribute('aria-disabled');
+                button.removeAttribute('data-dport-connected-lock');
             }
-        });
-
-        if (!hasNetworkOption && cachedNetworkOptions.length > 0) {
-            cachedNetworkOptions.forEach(function(cached){
-                const option = document.createElement('option');
-                option.value = cached.value;
-                option.text = cached.text;
-                if (cached.title) option.title = cached.title;
-                deviceDropdown.add(option);
-            });
         }
-
 """
-if "Keep the last known Wi-Fi entry" not in pop:
-    pop = pop[:info_i] + merge_code + pop[info_i:]
+if old_finally not in ui:
+    raise SystemExit("Manual refresh finally block not found.")
+ui = ui.replace(old_finally, new_finally, 1)
 
-ui = ui[:pop_start] + pop + ui[pop_end:]
-
-# Do not clear Wi-Fi because USB presence temporarily reports empty.
+# E) checkDeviceAutoDetect() must compare USB snapshot only with USB options.
+#    Network/Wi-Fi entries are not part of /usb_presence and must not force
+#    a perpetual full-list rebuild.
 auto_start = ui.find("async function checkDeviceAutoDetect()")
-if auto_start >= 0:
-    auto_end = ui.find("
-function startDeviceAutoDetect()", auto_start)
-    auto = ui[auto_start:auto_end if auto_end >= 0 else len(ui)]
-    empty_start = auto.find("if (rawIds.length === 0) {")
-    if empty_start >= 0:
-        brace = auto.find("{", empty_start)
-        depth = 0
-        end_block = -1
-        for pos in range(brace, len(auto)):
-            if auto[pos] == "{":
-                depth += 1
-            elif auto[pos] == "}":
-                depth -= 1
-                if depth == 0:
-                    end_block = pos + 1
-                    break
-        if end_block > empty_start:
-            old_block = auto[empty_start:end_block]
-            if "hasNetworkEntry" not in old_block:
-                new_block = """if (rawIds.length === 0) {
-            const hasNetworkEntry = Array.from(deviceDropdown.options).some(function(option){
+auto_end = ui.find("\n\nfunction startDeviceAutoDetect()", auto_start)
+if auto_start < 0 or auto_end < 0:
+    raise SystemExit("checkDeviceAutoDetect function not found.")
+auto = ui[auto_start:auto_end]
+
+old_displayed = """        const displayedIds = Array.from(deviceDropdown.options)
+            .map(function(option){
                 try {
                     const info = JSON.parse(option.value || '{}');
-                    const t = String(
+                    return String(info.Identifier || '');
+                } catch (e) {
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .sort();
+"""
+new_displayed = """        const displayedIds = Array.from(deviceDropdown.options)
+            .map(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    const type = String(
                         info.ConnectionType ||
                         info.connectionType ||
                         info.wifiTransport ||
                         ''
                     ).toUpperCase();
+
+                    // /usb_presence returns USB only. Compare only USB options
+                    // here; Wi-Fi must not participate in this equality test.
+                    if (type !== 'USB') return '';
+                    return String(info.Identifier || '');
+                } catch (e) {
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .sort();
+"""
+if old_displayed not in auto:
+    raise SystemExit("USB displayedIds block not found.")
+auto=auto.replace(old_displayed,new_displayed,1)
+
+old_empty = """        if (rawIds.length === 0) {
+            // Only a successful, error-free empty snapshot may clear stale
+            // device entries.
+            deviceReinsertRetryCount = 0;
+            deviceReinsertRetryUntil = 0;
+            deviceAutoRefreshSignature = '';
+            deviceAutoRefreshScheduled = false;
+
+            if (deviceDropdown.options.length > 0) {
+                deviceDropdown.innerHTML = '';
+                deviceDropdown.value = '';
+            }
+
+            var connectionDropdown = document.getElementById('connection');
+            if (connectionDropdown) {
+                connectionDropdown.innerHTML = '';
+                connectionDropdown.value = '';
+            }
+            return;
+        }
+"""
+new_empty = """        if (rawIds.length === 0) {
+            // /usb_presence sees only USB. An empty USB snapshot does NOT mean
+            // that the currently visible Wi-Fi device disappeared.
+            deviceReinsertRetryCount = 0;
+            deviceReinsertRetryUntil = 0;
+            deviceAutoRefreshSignature = '';
+            deviceAutoRefreshScheduled = false;
+
+            const hasNetworkEntry = Array.from(deviceDropdown.options).some(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    const type = String(
+                        info.ConnectionType ||
+                        info.connectionType ||
+                        info.wifiTransport ||
+                        ''
+                    ).toUpperCase();
+
                     return (
-                        t === 'NETWORK' ||
-                        t === 'WIFI' ||
+                        type === 'NETWORK' ||
+                        type === 'WIFI' ||
                         !!info.wifiAddress ||
                         !!info.wifiPort ||
                         !!info.wifiTransport
@@ -469,11 +425,6 @@ function startDeviceAutoDetect()", auto_start)
                     return false;
                 }
             });
-
-            deviceReinsertRetryCount = 0;
-            deviceReinsertRetryUntil = 0;
-            deviceAutoRefreshSignature = '';
-            deviceAutoRefreshScheduled = false;
 
             if (hasNetworkEntry) {
                 return;
@@ -490,16 +441,21 @@ function startDeviceAutoDetect()", auto_start)
                 connectionDropdown.value = '';
             }
             return;
-        }"""
-                auto = auto[:empty_start] + new_block + auto[end_block:]
-                ui = ui[:auto_start] + auto + ui[auto_end:]
+        }
+"""
+if old_empty not in auto:
+    raise SystemExit("USB empty snapshot block not found.")
+auto=auto.replace(old_empty,new_empty,1)
 
-# Build-time sanity checks use actual production element IDs.
+ui=ui[:auto_start]+auto+ui[auto_end:]
+
+# F) The Wi-Fi option must never be treated as a USB option by the USB watcher.
+#    No extra timers or DOM observers are used.
 for required_ui in (
     'id="device"',
     'id="refresh-device"',
     'dportRefreshDeviceList',
-    'populateDeviceList',
+    'checkDeviceAutoDetect',
 ):
     if required_ui not in ui:
         raise SystemExit("Production UI missing: " + required_ui)
