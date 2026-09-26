@@ -648,6 +648,78 @@ if handler_start >= 0 and handler_end > handler_start:
         ui = ui[:handler_start] + handler + ui[handler_end:]
         print("USB disconnect Refresh state normalized.")
 
+# Remove the retired updater modal function without touching surrounding
+# production layout functions (notably setDPortLayout).
+def _remove_js_function(text, function_name):
+    needle = "function " + function_name
+    start = text.find(needle)
+    if start < 0:
+        return text
+    brace = text.find("{", start)
+    if brace < 0:
+        return text
+    depth = 0
+    i = brace
+    quote = None
+    escaped = False
+    line_comment = False
+    block_comment = False
+    while i < len(text):
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < len(text) else ""
+        if line_comment:
+            if ch == "\n":
+                line_comment = False
+            i += 1
+            continue
+        if block_comment:
+            if ch == "*" and nxt == "/":
+                block_comment = False
+                i += 2
+                continue
+            i += 1
+            continue
+        if quote:
+            if escaped:
+                escaped = False
+            elif ch == "\\\\":
+                escaped = True
+            elif ch == quote:
+                quote = None
+            i += 1
+            continue
+        if ch == "/" and nxt == "/":
+            line_comment = True
+            i += 2
+            continue
+        if ch == "/" and nxt == "*":
+            block_comment = True
+            i += 2
+            continue
+        if ch in ("'", '"', "`"):
+            quote = ch
+            i += 1
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                while end < len(text) and text[end] in " \\t":
+                    end += 1
+                if end < len(text) and text[end] == ";":
+                    end += 1
+                if end < len(text) and text[end] == "\n":
+                    end += 1
+                return text[:start] + text[end:]
+        i += 1
+    return text
+
+ui = _remove_js_function(ui, "dportPm3ShowUpdateModal")
+ui = _remove_js_function(ui, "dportPm3ShowUpdateModalFix9")
+ui = ui.replace("dport-pm3-update-modal", "dport-retired-update-modal")
+
 # Final targeted updater residue cleanup. Remove only lines containing the
 # retired updater endpoint/polling identifiers; do not touch the production
 # DPort layout or connection code.
@@ -660,7 +732,7 @@ def _strip_updater_lines(text):
         )):
             continue
         kept.append(line)
-    return "\n".join(kept) + "\n"
+    return "\\n".join(kept) + "\\n"
 
 src = _strip_updater_lines(src)
 ui = _strip_updater_lines(ui)
