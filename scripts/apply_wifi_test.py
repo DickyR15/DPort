@@ -93,77 +93,75 @@ end = src.find("\n\nasync def start_wifi_quic_tunnel", start)
 if start < 0 or end < 0:
     raise SystemExit("Wi-Fi TCP tunnel function not found.")
 
+# Keep the proven baseline implementation from DPort-source-6.9.0:
+# mobdev2 Bonjour -> paired TcpLockdownClient -> CoreDeviceProxy -> TCP tunnel.
+# Do NOT replace this with create_using_tcp() or create_using_usbmux(Network);
+# those paths do not carry the mobdev2-resolved Wi-Fi lockdown endpoint.
 tcp = '''async def start_wifi_tcp_tunnel() -> None:
-    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_tunnel_error
+    """Start the official iOS 17.4+ CoreDeviceProxy TCP tunnel over mobdev2 Wi-Fi."""
+    logger.warning("Start Wi-Fi TCP tunnel via mobdev2 + CoreDeviceProxy")
+    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_address
 
     lockdown = None
     service = None
     try:
-        wifi_tunnel_error = None
+        # Resolve and handshake the actual paired Wi-Fi lockdown service in
+        # THIS event loop. Do not reuse the discovery client's loop-bound object
+        # from the Flask request thread.
+        home = get_home_folder()
+        async for ip, candidate in get_mobdev2_lockdowns(
+            udid=udid,
+            pair_records=home,
+            only_paired=True,
+            timeout=timeout,
+        ):
+            logger.info(
+                f"mobdev2 tunnel candidate: {ip}, "
+                f"udid={candidate.udid}, "
+                f"iOS={candidate.product_version}"
+            )
+            wifi_address = str(ip)
+            lockdown = candidate
+            break
 
-        if not udid:
-            raise RuntimeError("Wi-Fi 裝置缺少 UDID。")
+        if lockdown is None:
+            raise RuntimeError(
+                f"找不到已配對的 Wi-Fi Lockdown：{udid}"
+            )
 
-        # Windows Wi-Fi path: use the Apple usbmux Network transport that
-        # already succeeded during Developer Mode checking. Do NOT bypass it
-        # with a raw create_using_tcp(IP) connection.
-        network_connection_type = (
-            connection_type
-            if connection_type in ("Network", "WiFi", "WIFI")
-            else "Network"
-        )
-
-        logger.info(
-            f"Wi-Fi CoreDeviceProxy: creating Network Lockdown "
-            f"(connection_type={network_connection_type}, udid={udid})"
-        )
-
-        lockdown = await create_using_usbmux(
-            udid,
-            connection_type=network_connection_type,
-            autopair=True,
-        )
-
-        logger.info(
-            f"Wi-Fi Lockdown connected: udid={lockdown.udid}, "
-            f"iOS={lockdown.product_version}"
-        )
-
-        # iOS 17.4+ exposes CoreDeviceProxy through Lockdown.
+        # CoreDeviceProxy is the iOS 17.4+ tunnel entry point.
         service = await CoreDeviceTunnelProxy.create(lockdown)
-
-        logger.info("Wi-Fi CoreDeviceProxy service created")
+        logger.info("CoreDeviceProxy service created over Wi-Fi Lockdown")
 
         async with service.start_tcp_tunnel() as tunnel_result:
+            resume_remoted_if_required()
+
             rsd_host = tunnel_result.address
             rsd_port = str(tunnel_result.port)
-            wifi_tunnel_error = None
 
             logger.info(
-                f"Wi-Fi CoreDeviceProxy tunnel ready: "
-                f"{rsd_host}:{rsd_port}"
+                f"Wi-Fi RSD tunnel ready: "
+                f"address={rsd_host}, port={rsd_port}, "
+                f"interface={tunnel_result.interface}"
             )
 
             while not terminate_tunnel_thread:
                 await asyncio.sleep(0.5)
 
-    except Exception as exc:
-        wifi_tunnel_error = str(exc)
-        logger.exception(f"Wi-Fi TCP/CoreDeviceProxy tunnel failed: {exc}")
-        raise
     finally:
+        resume_remoted_if_required()
+
         if service is not None:
             try:
                 await service.close()
             except Exception:
                 pass
-        if lockdown is not None:
+        elif lockdown is not None:
             try:
                 await lockdown.close()
             except Exception:
                 pass
 '''
-src = src[:start] + tcp + src[end:]
 
 # Fail fast when the Wi-Fi tunnel worker reports an error.
 start = src.find("def check_rsd_data():")
