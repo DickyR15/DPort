@@ -35,11 +35,11 @@ jobs:
         run: |
           git status --short
           git ls-tree -r --name-only HEAD | Select-String -SimpleMatch 'DPort-source-6.9.0.zip'
-          if (-not (Test-Path 'DPort-source-6.9.0.zip')) {
-            Write-Host 'Working tree does not contain the ZIP; restoring directly from HEAD blob...'
-            git show HEAD:DPort-source-6.9.0.zip | Set-Content -AsByteStream DPort-source-6.9.0.zip
-          }
-          if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing from both working tree and HEAD.' }
+          # Always restore the known-good Run #179 source package as the build baseline.
+          $baselineCommit = 'c5d522744a76482f12a8de99a9bdcd636c7fb881'
+          Write-Host "Restoring DPort-source-6.9.0.zip from baseline $baselineCommit"
+          git show "$baselineCommit`":DPort-source-6.9.0.zip | Set-Content -AsByteStream DPort-source-6.9.0.zip
+          if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip baseline restore failed.' }
 
           $zip = Get-Item 'DPort-source-6.9.0.zip'
           Write-Host "Source ZIP size: $($zip.Length) bytes"
