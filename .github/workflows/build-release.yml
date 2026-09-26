@@ -449,7 +449,6 @@ jobs:
 
 
   build-wifi-test:
-    if: contains(github.event.head_commit.message, '[wifi-test-6.9.4]')
     runs-on: windows-latest
 
     steps:
