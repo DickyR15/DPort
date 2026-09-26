@@ -14,6 +14,19 @@ if not HELPER.exists():
 text = UPDATER.read_text(encoding="utf-8")
 original = text
 
+def replace_function(source: str, name: str, replacement: str) -> str:
+    pattern = re.compile(rf"(?ms)^def {re.escape(name)}\b.*?(?=^def \w+\b|^class \w+\b|^if __name__|\Z)")
+    match = pattern.search(source)
+    if not match:
+        raise SystemExit(f"Function not found: {name}")
+    return source[:match.start()] + replacement.rstrip() + "\n\n" + source[match.end():]
+
+# Ensure the needed standard-library imports exist.
+for import_line in ("import hashlib", "import sys"):
+    if import_line not in text:
+        text = import_line + "\n" + text
+
+# Add state fields.
 text = text.replace(
 '''    "current_version": None,
     "latest_version": None,
@@ -23,12 +36,9 @@ text = text.replace(
     "latest_version": None,
     "latest_sha256": None,
 ''',
-1,
-)
+1)
 
-marker = '''def _github_json(url: str) -> dict[str, Any]:
-'''
-helper = r'''def _current_exe_sha256() -> str:
+helper_functions = '''def _current_exe_sha256() -> str:
     """Return the SHA-256 of the running DPort EXE."""
     if not getattr(sys, "frozen", False):
         return ""
@@ -47,40 +57,23 @@ helper = r'''def _current_exe_sha256() -> str:
 def _read_release_sha256(url: str) -> str:
     req = urllib.request.Request(
         url,
-        headers={
-            "User-Agent": "DPort-Updater",
-            "Cache-Control": "no-cache",
-            "Pragma": "no-cache",
-        },
+        headers={"User-Agent": "DPort-Updater", "Cache-Control": "no-cache", "Pragma": "no-cache"},
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
-    for token in raw.replace("\r", " ").replace("\n", " ").split():
+    for token in raw.replace("\\r", " ").replace("\\n", " ").split():
         if len(token) == 64 and all(c in "0123456789abcdefABCDEF" for c in token):
             return token.lower()
     raise RuntimeError("Release SHA-256 checksum file is invalid")
-
 '''
-if "_current_exe_sha256" not in text and marker in text:
-    text = text.replace(marker, helper + marker, 1)
 
-old_candidate = re.compile(
-    r'''def _get_update_candidate\(current: str\) -> tuple\[str, str, str, str\] \| None:\n'''
-    r'''    data = _github_json\(RELEASE_API \+ f"\?dport_cache_bust=\{time\.time_ns\(\)\}"\)\n'''
-    r'''    if data\.get\("draft"\) or data\.get\("prerelease"\):\n'''
-    r'''        return None\n'''
-    r'''    release = _find_release_assets\(data\)\n'''
-    r'''    if release is None:\n'''
-    r'''        raise RuntimeError\("最新正式 Release 沒有可用的 DPort EXE"\)\n'''
-    r'''    tag, exe_url, sha_url = release\n'''
-    r'''    if _version_key\(tag\) <= _version_key\(current\):\n'''
-    r'''        return None\n'''
-    r'''    return tag\.lstrip\("v"\), exe_url, sha_url, str\(data\.get\("html_url"\) or ""\)\n'''
-)
-new_candidate = '''def _get_update_candidate(
-    current: str,
-    current_sha256: str,
-) -> tuple[str, str, str, str, str] | None:
+if "def _current_exe_sha256" not in text:
+    marker = "def _github_json("
+    if marker not in text:
+        raise SystemExit("Updater insertion point not found: _github_json")
+    text = text.replace(marker, helper_functions + "\n\n" + marker, 1)
+
+candidate = '''def _get_update_candidate(current: str, current_sha256: str) -> tuple[str, str, str, str, str] | None:
     data = _github_json(RELEASE_API + f"?dport_cache_bust={time.time_ns()}")
     if data.get("draft") or data.get("prerelease"):
         return None
@@ -91,75 +84,29 @@ new_candidate = '''def _get_update_candidate(
 
     tag, exe_url, sha_url = release
     remote_sha256 = _read_release_sha256(sha_url)
-
     latest_key = _version_key(tag)
     current_key = _version_key(current)
 
     if latest_key > current_key:
-        return (
-            tag.lstrip("v"),
-            exe_url,
-            sha_url,
-            str(data.get("html_url") or ""),
-            remote_sha256,
-        )
+        return tag.lstrip("v"), exe_url, sha_url, str(data.get("html_url") or ""), remote_sha256
 
-    if latest_key == current_key and current_sha256:
-        if remote_sha256 != current_sha256:
-            return (
-                tag.lstrip("v"),
-                exe_url,
-                sha_url,
-                str(data.get("html_url") or ""),
-                remote_sha256,
-            )
+    if latest_key == current_key and current_sha256 and remote_sha256 != current_sha256:
+        return tag.lstrip("v"), exe_url, sha_url, str(data.get("html_url") or ""), remote_sha256
 
     return None
 '''
-text, candidate_hits = old_candidate.subn(new_candidate, text, count=1)
-if candidate_hits != 1:
-    raise SystemExit("Version-only update candidate block not found.")
+text = replace_function(text, "_get_update_candidate", candidate)
 
-text = text.replace(
-'''    current = _bundled_version()
-    try:
-        candidate = _get_update_candidate(current)
-''',
-'''    current = _bundled_version()
-    current_sha256 = _current_exe_sha256()
-    try:
-        candidate = _get_update_candidate(current, current_sha256)
-''',
-1,
+# Update the current-check call without relying on formatting.
+text = re.sub(
+    r"current\s*=\s*_bundled_version\(\)\s*\n\s*try:\s*\n\s*candidate\s*=\s*_get_update_candidate\(current\)",
+    "current = _bundled_version()\n    current_sha256 = _current_exe_sha256()\n    try:\n        candidate = _get_update_candidate(current, current_sha256)",
+    text,
+    count=1,
 )
 
-text = text.replace(
-'''            _STATE["current_version"] = current
-            _STATE["checked_at"] = time.time()
-''',
-'''            _STATE["current_version"] = current
-            _STATE["current_sha256"] = current_sha256 or None
-            _STATE["checked_at"] = time.time()
-''',
-1,
-)
-
-text = text.replace(
-'''        if candidate is None:
-            with _LOCK:
-                _STATE["state"] = "latest"
-                _STATE["latest_version"] = current
-                _STATE["message"] = f"DPort v{current} 已是最新正式版"
-                _STATE["restart_required"] = False
-        else:
-            version, exe_url, sha_url, release_url = candidate
-            with _LOCK:
-                _STATE["state"] = "update_available"
-                _STATE["latest_version"] = version
-                _STATE["latest_url"] = release_url
-                _STATE["message"] = f"發現 DPort 新版 v{version}，準備自動更新…"
-''',
-'''        if candidate is None:
+# Replace candidate result handling.
+handling = '''        if candidate is None:
             with _LOCK:
                 _STATE["state"] = "latest"
                 _STATE["latest_version"] = current
@@ -179,20 +126,23 @@ text = text.replace(
                     if same_version_build
                     else f"發現 DPort 新版 v{version}，準備自動更新…"
                 )
-''',
-1,
-)
+'''
+pattern = re.compile(r"(?ms)^        if candidate is None:.*?(?=^        [A-Za-z_].*?:|^def |\Z)")
+m = pattern.search(text)
+if not m:
+    raise SystemExit("Updater candidate handling block not found")
+text = text[:m.start()] + handling.rstrip() + "\n" + text[m.end():]
 
+# Persist current SHA anywhere the current version is saved.
 text = text.replace(
-'''            _STATE["checked_at"] = time.time()
-            _STATE["current_version"] = current
+'''            _STATE["current_version"] = current
+            _STATE["checked_at"] = time.time()
 ''',
-'''            _STATE["checked_at"] = time.time()
-            _STATE["current_version"] = current
+'''            _STATE["current_version"] = current
             _STATE["current_sha256"] = current_sha256 or None
+            _STATE["checked_at"] = time.time()
 ''',
-1,
-)
+1)
 
 UPDATER.write_text(text, encoding="utf-8")
 
@@ -205,5 +155,4 @@ helper_text = helper_text.replace(
 HELPER.write_text(helper_text, encoding="utf-8")
 
 print(f"Updater changed: {text != original}")
-print(f"Version+SHA candidate logic inserted: {candidate_hits}")
-print("Same-version Release EXE SHA-256 differences now trigger updates.")
+print("SHA-aware same-version update support installed.")
