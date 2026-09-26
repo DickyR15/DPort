@@ -17,7 +17,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: dport-build-${{ github.ref }}
+  group: dport-wifi-one-shot-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
