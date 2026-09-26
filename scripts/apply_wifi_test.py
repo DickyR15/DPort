@@ -314,7 +314,7 @@ for forbidden_ui in (
 # rewriting the production device-list code.
 # ---------------------------------------------------------------------------
 wifi_ui_guard = r"""
-<script id="dport-wifi-ui-guard-6-9-17">
+<script id="dport-wifi-ui-guard-6-9-18">
 (function () {
     'use strict';
 
@@ -410,21 +410,107 @@ wifi_ui_guard = r"""
         });
     }
 
+    function findConnectControl() {
+        var nodes = document.querySelectorAll(
+            'button, input[type="button"], input[type="submit"], [role="button"]'
+        );
+
+        for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
+            var text = String(
+                node.textContent ||
+                node.value ||
+                node.getAttribute('aria-label') ||
+                ''
+            ).replace(/\s+/g, '').trim();
+
+            if (
+                text.indexOf('連接裝置') >= 0 ||
+                text.indexOf('已連接') >= 0 ||
+                text.indexOf('ConnectDevice') >= 0
+            ) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    function domReportsConnected() {
+        var connected = false;
+
+        // Existing application state, when available.
+        try {
+            if (typeof isDeviceConnected === 'boolean') {
+                connected = isDeviceConnected;
+            } else if (
+                typeof isDeviceConnected === 'function'
+            ) {
+                connected = !!isDeviceConnected();
+            }
+        } catch (e) {}
+
+        // Production connect control: DPort disables it after a successful
+        // device connection. Treat that exact state as authoritative for UI.
+        try {
+            var connectControl = findConnectControl();
+            if (connectControl && connectControl.disabled === true) {
+                connected = true;
+            }
+        } catch (e) {}
+
+        // Status text fallback. Only exact/near-exact status nodes count;
+        // do not scan the whole page, avoiding false positives from history.
+        try {
+            var statusNodes = document.querySelectorAll(
+                '[id*="status" i], [class*="status" i], [role="status"]'
+            );
+            for (var i = 0; i < statusNodes.length; i++) {
+                var statusText = String(statusNodes[i].textContent || '')
+                    .replace(/\s+/g, '')
+                    .trim();
+                if (
+                    statusText === '已連接' ||
+                    statusText.indexOf('已連接：') === 0 ||
+                    statusText.indexOf('已連接') >= 0
+                ) {
+                    connected = true;
+                    break;
+                }
+            }
+        } catch (e) {}
+
+        // When the selected entry is explicitly USB and the app has a
+        // non-empty connection indicator, keep Refresh locked.
+        try {
+            var selected = deviceDropdown.options[deviceDropdown.selectedIndex];
+            var info = selected ? parseOption(selected) : null;
+            if (
+                info &&
+                String(info.ConnectionType || info.connectionType || '')
+                    .toUpperCase() === 'USB' &&
+                (document.body.innerText || '').indexOf('已連接') >= 0
+            ) {
+                connected = true;
+            }
+        } catch (e) {}
+
+        return connected;
+    }
+
     function syncRefreshButton() {
         if (!refreshButton || !document.body.contains(refreshButton)) {
             refreshButton = document.getElementById('refresh-device');
             if (!refreshButton) return;
         }
 
-        var connected = false;
-        try {
-            connected = (
-                typeof isDeviceConnected !== 'undefined' &&
-                isDeviceConnected === true
-            );
-        } catch (e) {}
+        var connected = domReportsConnected();
 
         refreshButton.disabled = connected;
+        refreshButton.setAttribute(
+            'data-dport-connected-guard',
+            connected ? '1' : '0'
+        );
+
         if (connected) {
             refreshButton.setAttribute('aria-disabled', 'true');
         } else {
@@ -432,15 +518,30 @@ wifi_ui_guard = r"""
         }
     }
 
+    // Capture-phase blocker covers cases where production code accidentally
+    // re-enables the DOM button for a moment before our state sync catches it.
+    document.addEventListener('click', function (event) {
+        var target = event.target;
+        if (!target || target !== refreshButton) return;
+
+        if (domReportsConnected()) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            syncRefreshButton();
+        }
+    }, true);
+
     var observer = new MutationObserver(function () {
         captureNetworkOptions();
         restoreNetworkOptions();
         syncRefreshButton();
     });
 
-    observer.observe(deviceDropdown, {
+    observer.observe(document.documentElement, {
         childList: true,
-        subtree: false
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['disabled', 'aria-disabled', 'class']
     });
 
     deviceDropdown.addEventListener('change', function () {
@@ -452,7 +553,7 @@ wifi_ui_guard = r"""
         captureNetworkOptions();
         restoreNetworkOptions();
         syncRefreshButton();
-    }, 50);
+    }, 100);
 
     captureNetworkOptions();
     restoreNetworkOptions();
