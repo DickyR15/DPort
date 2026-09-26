@@ -1,0 +1,3 @@
+DPort Wi-Fi Test 6.9.3 build trigger
+Base: DPort v6.9.0
+pymobiledevice3: 11.19.1
