@@ -21,12 +21,11 @@ def replace_function(source: str, name: str, replacement: str) -> str:
         raise SystemExit(f"Function not found: {name}")
     return source[:match.start()] + replacement.rstrip() + "\n\n" + source[match.end():]
 
-# Ensure the needed standard-library imports exist.
 for import_line in ("import hashlib", "import sys"):
     if import_line not in text:
-        text = import_line + "\n" + text
+        insert_at = text.find("\n") + 1
+        text = text[:insert_at] + import_line + "\n" + text[insert_at:]
 
-# Add state fields.
 text = text.replace(
 '''    "current_version": None,
     "latest_version": None,
@@ -38,7 +37,7 @@ text = text.replace(
 ''',
 1)
 
-helper_functions = '''def _current_exe_sha256() -> str:
+helper_functions = r'''def _current_exe_sha256() -> str:
     """Return the SHA-256 of the running DPort EXE."""
     if not getattr(sys, "frozen", False):
         return ""
@@ -73,7 +72,7 @@ if "def _current_exe_sha256" not in text:
         raise SystemExit("Updater insertion point not found: _github_json")
     text = text.replace(marker, helper_functions + "\n\n" + marker, 1)
 
-candidate = '''def _get_update_candidate(current: str, current_sha256: str) -> tuple[str, str, str, str, str] | None:
+candidate = r'''def _get_update_candidate(current: str, current_sha256: str) -> tuple[str, str, str, str, str] | None:
     data = _github_json(RELEASE_API + f"?dport_cache_bust={time.time_ns()}")
     if data.get("draft") or data.get("prerelease"):
         return None
@@ -97,7 +96,6 @@ candidate = '''def _get_update_candidate(current: str, current_sha256: str) -> t
 '''
 text = replace_function(text, "_get_update_candidate", candidate)
 
-# Update the current-check call without relying on formatting.
 text = re.sub(
     r"current\s*=\s*_bundled_version\(\)\s*\n\s*try:\s*\n\s*candidate\s*=\s*_get_update_candidate\(current\)",
     "current = _bundled_version()\n    current_sha256 = _current_exe_sha256()\n    try:\n        candidate = _get_update_candidate(current, current_sha256)",
@@ -105,8 +103,7 @@ text = re.sub(
     count=1,
 )
 
-# Replace candidate result handling.
-handling = '''        if candidate is None:
+handling = r'''        if candidate is None:
             with _LOCK:
                 _STATE["state"] = "latest"
                 _STATE["latest_version"] = current
@@ -127,13 +124,15 @@ handling = '''        if candidate is None:
                     else f"發現 DPort 新版 v{version}，準備自動更新…"
                 )
 '''
-pattern = re.compile(r"(?ms)^        if candidate is None:.*?(?=^        [A-Za-z_].*?:|^def |\Z)")
+pattern = re.compile(r"(?ms)^        if candidate is None:.*?(?=^        [A-Za-z_][A-Za-z0-9_]*\(|^def \w+\b|\Z)")
 m = pattern.search(text)
 if not m:
     raise SystemExit("Updater candidate handling block not found")
 text = text[:m.start()] + handling.rstrip() + "\n" + text[m.end():]
 
-# Persist current SHA anywhere the current version is saved.
+if 'current_sha256 = _current_exe_sha256()' not in text:
+    raise SystemExit('Current SHA integration was not inserted.')
+
 text = text.replace(
 '''            _STATE["current_version"] = current
             _STATE["checked_at"] = time.time()
