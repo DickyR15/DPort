@@ -1,0 +1,227 @@
+name: DPort Wi-Fi Test Build (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Wi-Fi test branch'
+        required: true
+        default: 'feature/wifi-test-6.9.4'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dport-wifi-test-6.9.4
+  cancel-in-progress: false
+
+jobs:
+  build-wifi-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Wi-Fi test branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+
+      - name: Restore v6.9.0 source
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing.' }
+          $tmp = Join-Path $env:RUNNER_TEMP 'dport-source'
+          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
+          $root = Join-Path $tmp 'DPort-6.9.0'
+          if (-not (Test-Path (Join-Path $root 'src\main.py'))) { throw 'Source ZIP is missing src\main.py' }
+          Copy-Item (Join-Path $root '*') . -Recurse -Force
+          if (Test-Path src) { Remove-Item src -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path src | Out-Null
+          Copy-Item (Join-Path $root 'src\*') src -Recurse -Force
+
+      - name: Upload extracted Wi-Fi source for development
+        uses: actions/upload-artifact@v4
+        with:
+          name: dport-wifi-source-6.9.4
+          path: |
+            src/main.py
+            src/dport_release_updater.py
+            src/dport_version.py
+            src/templates/map.html
+          retention-days: 7
+
+      - name: Apply Wi-Fi discovery patch
+        shell: pwsh
+        run: |
+          python scripts/apply_wifi_test_patch.py
+          python -m py_compile src/main.py
+
+      - name: Verify Wi-Fi listing and connection path
+        shell: pwsh
+        run: |
+          $main = Get-Content 'src/main.py' -Raw
+          if (-not $main.Contains('get_mobdev2_lockdowns(')) { throw 'mobdev2 Wi-Fi discovery is missing.' }
+          if (-not $main.Contains('Selected Wi-Fi address:')) { throw 'Wi-Fi selected-address connection path is missing.' }
+          if (-not $main.Contains('Wi-Fi RSD tunnel was not established.')) { throw 'Wi-Fi tunnel failure handling is missing.' }
+          if (-not $main.Contains('fallback = None')) { throw 'Wi-Fi tunnel candidate matching is missing.' }
+          Write-Host 'PASS: Wi-Fi discovery + connection + tunnel path verified.'
+
+      - name: Verify Wi-Fi support in source
+        shell: pwsh
+        run: |
+          $main = Get-Content 'src\main.py' -Raw
+          $map = Get-Content 'src\templates\map.html' -Raw
+          $all = $main + [Environment]::NewLine + $map
+          $checks = @(
+            @{ Name = 'connect_wifi backend'; Text = 'def connect_wifi(' },
+            @{ Name = 'Wi-Fi discovery'; Text = 'get_wifi_with_retry(' },
+            @{ Name = 'Wi-Fi QUIC tunnel'; Text = 'start_wifi_quic_tunnel(' },
+            @{ Name = 'Wi-Fi TCP tunnel'; Text = 'start_wifi_tcp_tunnel(' },
+            @{ Name = 'Network connection route'; Text = 'connection_type == "Network"' }
+          )
+          foreach ($c in $checks) {
+            if ($all -notlike "*$($c.Text)*") { throw "Wi-Fi source check failed: $($c.Name)" }
+            Write-Host "PASS: $($c.Name)"
+          }
+          $networkCount = ([regex]::Matches($map, 'Network')).Count
+          Write-Host "map.html Network text count: $networkCount"
+
+      - name: Set DPort 6.9.4 test version
+        shell: pwsh
+        run: |
+          Set-Content 'src\dport_version.py' 'DPORT_VERSION="6.9.4"' -Encoding utf8
+          $r = Get-Content 'requirements-build.txt' -Raw
+          $r = [regex]::Replace($r, '(?m)^\s*pymobiledevice3\s*==\s*[^\r\n#]+', 'pymobiledevice3==11.19.1')
+          Set-Content 'requirements-build.txt' $r -Encoding utf8
+          if (Test-Path 'src\templates\map.html') {
+            $html = Get-Content 'src\templates\map.html' -Raw
+            $old = '<span class="dport-version-badge">6.9.0</span>'
+            $html = $html.Replace($old, '')
+            Set-Content 'src\templates\map.html' $html -Encoding utf8
+          }
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements-build.txt
+          python -m pip install lzfse==0.4.2 pyinstaller
+          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
+          if ($pm3.Trim() -ne '11.19.1') { throw "Expected pymobiledevice3 11.19.1, got [$pm3]" }
+
+      - name: Prepare MOENV API key
+        shell: pwsh
+        env:
+          MOENV_API_KEY: \${{ secrets.MOENV_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:MOENV_API_KEY)) {
+            Set-Content 'moenv_api_key.txt' 'WIFI_TEST_BUILD_PLACEHOLDER' -Encoding utf8
+          } else {
+            [IO.File]::WriteAllText((Join-Path $PWD 'moenv_api_key.txt'), $env:MOENV_API_KEY.Trim(), (New-Object Text.UTF8Encoding($false)))
+          }
+
+      - name: Validate source
+        shell: pwsh
+        run: |
+          python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
+
+      - name: Build embedded updater
+        shell: pwsh
+        run: |
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          python -m PyInstaller --noconfirm --clean --onefile --name DPortUpdater --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
+          New-Item -ItemType Directory -Force -Path build\updater | Out-Null
+          Copy-Item dist\DPortUpdater.exe build\updater\DPortUpdater.exe -Force
+
+      - name: Build DPort Wi-Fi Test 6.9.4
+        shell: pwsh
+        run: |
+          $v = '6.9.4'
+          $vi = @(
+            '# UTF-8',
+            'VSVersionInfo(',
+            '  ffi=FixedFileInfo(',
+            "    filevers=(6,9,2,0),",
+            "    prodvers=(6,9,2,0),",
+            '    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)',
+            '  ),',
+            "  kids=[StringFileInfo([StringTable('040404B0',[",
+            "    StringStruct('CompanyName','Dicky'),",
+            "    StringStruct('FileDescription','DPort Wi-Fi Test'),",
+            "    StringStruct('FileVersion','$v'),",
+            "    StringStruct('InternalName','DPort-WiFi-Test-$v'),",
+            "    StringStruct('LegalCopyright','Dicky'),",
+            "    StringStruct('OriginalFilename','DPort-WiFi-Test-$v.exe'),",
+            "    StringStruct('ProductName','DPort Wi-Fi Test'),",
+            "    StringStruct('ProductVersion','$v'),",
+            "    StringStruct('Comments','Dicky')])]),",
+            '    VarFileInfo([VarStruct(''Translation'',[0x0404,1200])])]',
+            ')'
+          ) -join [Environment]::NewLine
+          $vi | Set-Content version_info.wifi-test.txt -Encoding utf8
+          $pyargs = @(
+            '--noconfirm','--clean','--onefile',
+            '--name','DPort-WiFi-Test-6.9.4',
+            '--icon','DPort-6.9.0.ico',
+            '--collect-all','pymobiledevice3',
+            '--collect-all','pytun_pmd3',
+            '--collect-all','pyimg4',
+            '--collect-all','inquirer3',
+            '--copy-metadata','pymobiledevice3',
+            '--copy-metadata','pyimg4',
+            '--copy-metadata','readchar',
+            '--hidden-import','pymobiledevice3.remote.userspace_tunnel',
+            '--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider',
+            '--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation',
+            '--hidden-import','pymobiledevice3.usbmux',
+            '--hidden-import','dport_release_updater',
+            '--hidden-import','dport_version',
+            '--add-data','src/templates;templates',
+            '--add-data','moenv_api_key.txt;.',
+            '--add-binary','build/updater/DPortUpdater.exe;dport_updater',
+            '--version-file','version_info.wifi-test.txt',
+            'src/main.py'
+          )
+          python -m PyInstaller @pyargs
+
+      - name: Package Wi-Fi test ZIP
+        shell: pwsh
+        run: |
+          $exe = 'dist\\DPort-WiFi-Test-6.9.4.exe'
+          if (-not (Test-Path $exe)) { throw "Cannot package missing EXE: $exe" }
+          $stage = Join-Path $env:RUNNER_TEMP 'DPort-WiFi-Test-6.9.4'
+          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item $exe (Join-Path $stage 'DPort-WiFi-Test-6.9.4.exe') -Force
+          Set-Content (Join-Path $stage 'README-WiFi-Test.txt') @'
+DPort Wi-Fi Test 6.9.4
+
+Base: DPort v6.9.0
+Transport: USB + Wi-Fi test path
+pymobiledevice3: 11.19.1
+
+This is a test build. Use the included EXE for Wi-Fi testing only.
+'@ -Encoding utf8
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath 'DPort-WiFi-Test-6.9.4.zip' -Force
+          if ((Get-Item 'DPort-WiFi-Test-6.9.4.zip').Length -lt 1000000) { throw 'Wi-Fi test ZIP is unexpectedly small.' }
+          Write-Host "ZIP created: DPort-WiFi-Test-6.9.4.zip"
+
+      - name: Verify test EXE
+        shell: pwsh
+        run: |
+          $exe = 'dist\DPort-WiFi-Test-6.9.4.exe'
+          if (-not (Test-Path $exe)) { throw "Missing test EXE: $exe" }
+          if ((Get-Item $exe).Length -lt 1000000) { throw 'Test EXE is unexpectedly small.' }
+          Write-Host "Built: $exe"
+          Write-Host "Size: $((Get-Item $exe).Length) bytes"
+
+      - name: Upload Wi-Fi test artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-WiFi-Test-6.9.4
+          path: |
+            dist/DPort-WiFi-Test-6.9.4.exe
+            DPort-WiFi-Test-6.9.4.zip
