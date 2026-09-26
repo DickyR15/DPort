@@ -572,7 +572,7 @@ ui = ui.replace(
 # Replace the USB-disconnect handler so only USB entries are removed and the
 # Network entry remains visible while the Wi-Fi tunnel is established.
 handle_pattern = re.compile(
-    r"function handleUsbCableRemoved\(\)\s*\{.*?\n\}\s*\n\s*var appVersionNum",
+    r"function\s+handleUsbCableRemoved\s*\(\)\s*\{.*?(?=\n\s*var\s+appVersionNum\s*=)",
     re.S,
 )
 handle_new = """function handleUsbCableRemoved() {
@@ -607,14 +607,24 @@ handle_new = """function handleUsbCableRemoved() {
         connectTextElement.innerText = "連接裝置";
         connectTextElement.style.display = 'inline-block';
     }
-    if (connectButton) connectButton.disabled = false;
+
+    if (connectButton) {
+        connectButton.disabled = false;
+    }
+
     if (disconnectButton) {
         disconnectButton.style.display = 'none';
         disconnectButton.disabled = false;
         disconnectButton.innerText = "中斷連接";
     }
-    if (deviceDropdown) deviceDropdown.disabled = false;
-    if (spinnerElement) spinnerElement.style.display = 'none';
+
+    if (deviceDropdown) {
+        deviceDropdown.disabled = false;
+    }
+
+    if (spinnerElement) {
+        spinnerElement.style.display = 'none';
+    }
 
     var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
     if (refreshButtonAfterUsbRemoval) {
@@ -628,17 +638,12 @@ handle_new = """function handleUsbCableRemoved() {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({})
-    }).catch(function (error) {
+    }).catch(function(error) {
         console.debug('USB disconnect cleanup skipped:', error);
     });
 
     displayToast("USB 已拔除");
 }
-
-    var appVersionNum"""
-ui, handle_count = handle_pattern.subn(handle_new, ui, count=1)
-if handle_count != 1:
-    raise SystemExit("USB disconnect handler replacement failed.")
 
 
 # Don't build if an updater residue is present.
