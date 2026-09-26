@@ -184,6 +184,28 @@ jobs:
           )
           python -m PyInstaller @pyargs
 
+      - name: Package Wi-Fi test ZIP
+        shell: pwsh
+        run: |
+          $exe = 'dist\\DPort-WiFi-Test-6.9.3.exe'
+          if (-not (Test-Path $exe)) { throw "Cannot package missing EXE: $exe" }
+          $stage = Join-Path $env:RUNNER_TEMP 'DPort-WiFi-Test-6.9.3'
+          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item $exe (Join-Path $stage 'DPort-WiFi-Test-6.9.3.exe') -Force
+          Set-Content (Join-Path $stage 'README-WiFi-Test.txt') @'
+DPort Wi-Fi Test 6.9.3
+
+Base: DPort v6.9.0
+Transport: USB + Wi-Fi test path
+pymobiledevice3: 11.19.1
+
+This is a test build. Use the included EXE for Wi-Fi testing only.
+'@ -Encoding utf8
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath 'DPort-WiFi-Test-6.9.3.zip' -Force
+          if ((Get-Item 'DPort-WiFi-Test-6.9.3.zip').Length -lt 1000000) { throw 'Wi-Fi test ZIP is unexpectedly small.' }
+          Write-Host "ZIP created: DPort-WiFi-Test-6.9.3.zip"
+
       - name: Verify test EXE
         shell: pwsh
         run: |
@@ -193,8 +215,10 @@ jobs:
           Write-Host "Built: $exe"
           Write-Host "Size: $((Get-Item $exe).Length) bytes"
 
-      - name: Upload Wi-Fi test artifact
+      - name: Upload Wi-Fi test artifacts
         uses: actions/upload-artifact@v4
         with:
           name: DPort-WiFi-Test-6.9.3
-          path: dist/DPort-WiFi-Test-6.9.3.exe
+          path: |
+            dist/DPort-WiFi-Test-6.9.3.exe
+            DPort-WiFi-Test-6.9.3.zip
