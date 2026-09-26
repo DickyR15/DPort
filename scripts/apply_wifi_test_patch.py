@@ -268,6 +268,7 @@ print("USB/Wi-Fi selection is sticky across list refresh.")
 
 
 # --- Final backend Wi-Fi connection fix ---
+# CI build trigger checkpoint 3
 src = src.replace(
     """                        f"mobdev2 device: ip={ip}, udid={device_udid}, iOS={product}, paired={getattr(device, 'paired', None)}" """.rstrip(),
     """                        f"mobdev2 device: ip={ip}, udid={device_udid}, iOS={product}" """.rstrip(),
