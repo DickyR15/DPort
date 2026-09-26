@@ -36,8 +36,8 @@ jobs:
       - name: Upload direct package (no nested ZIP)
         uses: actions/upload-artifact@v4
         with:
-          name: DPort-WiFi-Test-6.9.28
-          path: DPort-WiFi-Test-6.9.28/*
+          name: DPort-WiFi-Test-6.9.29
+          path: DPort-WiFi-Test-6.9.29/*
           retention-days: 14
 
       - name: Delete failed Wi-Fi run
