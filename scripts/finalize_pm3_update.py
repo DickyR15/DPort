@@ -74,7 +74,6 @@ def main() -> int:
         updater_file = root / "src" / "dport_release_updater.py"
         if not updater_file.exists():
             raise SystemExit("Source ZIP is missing src/dport_release_updater.py")
-        # Keep the source package's SHA-aware same-version updater support intact.
 
         tmp_zip = zip_path.with_suffix(".new.zip")
         if tmp_zip.exists():
