@@ -11,7 +11,44 @@ html = path.read_text(encoding="utf-8")
 # script, so establish the final dark canvas first and gate body visibility until the
 # complete HTML has been parsed. This prevents Chromium from ever displaying
 # the transient light/default-theme frame before the final layout polish is applied.
-critical_prepaint = r'''<style id="dport-prepaint-critical">,html{,  margin:0!important;,  background:#161b24!important;,  color-scheme:dark!important;,},body{,  margin:0!important;,  min-height:100vh!important;,  background:#161b24!important;,  color:#f5f7fb!important;,  visibility:hidden!important;,},/* Layout remains fully measurable while first-paint is gated. */,.dport-app,.dport-shell,#app,main,body>div{,  box-sizing:border-box!important;,},</style>,<script id="dport-prepaint-reveal">,(function(){,  var revealed=false;,  function reveal(){,    if(revealed) return;,    revealed=true;,    document.documentElement.classList.add('dport-ready');,  },  if(document.readyState==='loading'){,    document.addEventListener('DOMContentLoaded',reveal,{once:true});,  }else{,    reveal();,  },  window.addEventListener('load',reveal,{once:true});,  setTimeout(reveal,5000);,})();,</script>,<style id="dport-prepaint-reveal-style">,html.dport-ready body{visibility:visible!important;},</style>''',if 'id="dport-prepaint-critical"' not in html and '<head' in html:
+critical_prepaint = r'''<style id="dport-prepaint-critical">
+html{
+  margin:0!important;
+  background:#161b24!important;
+  color-scheme:dark!important;
+}
+body{
+  margin:0!important;
+  min-height:100vh!important;
+  background:#161b24!important;
+  color:#f5f7fb!important;
+  visibility:hidden!important;
+}
+.dport-app,.dport-shell,#app,main,body>div{
+  box-sizing:border-box!important;
+}
+</style>
+<script id="dport-prepaint-reveal">
+(function(){
+  var revealed=false;
+  function reveal(){
+    if(revealed) return;
+    revealed=true;
+    document.documentElement.classList.add('dport-ready');
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',reveal,{once:true});
+  }else{
+    reveal();
+  }
+  window.addEventListener('load',reveal,{once:true});
+  setTimeout(reveal,5000);
+})();
+</script>
+<style id="dport-prepaint-reveal-style">
+html.dport-ready body{visibility:visible!important;}
+</style>''';
+ not in html and '<head' in html:
     html = re.sub(r'(<head[^>]*>)', r'\1\n' + critical_prepaint, html, count=1, flags=re.I)
 elif 'id="dport-prepaint-critical"' in html:
     pass
