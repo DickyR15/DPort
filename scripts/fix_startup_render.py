@@ -91,7 +91,7 @@ REVEAL_SCRIPT = r'''
 
 html = MAP.read_text(encoding="utf-8")
 
-if START_STYLE_ID in html or START_REVEAL_SCRIPT_ID in html:
+if START_STYLE_ID in html or REVEAL_SCRIPT_ID in html:
     print("DPort startup render gate already present.")
 else:
     head_pos = html.lower().find("<head")
