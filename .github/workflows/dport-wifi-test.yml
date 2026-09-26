@@ -25,28 +25,6 @@ jobs:
           ref: feature/wifi-test
           fetch-depth: 1
 
-      - name: Extract production source for Wi-Fi diagnostics
-        shell: pwsh
-        run: |
-          $d = Join-Path $env:RUNNER_TEMP 'dport-source-debug'
-          if (Test-Path $d) { Remove-Item $d -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $d | Out-Null
-          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $d -Force
-          $main = Get-ChildItem $d -Filter main.py -Recurse | Select-Object -First 1
-          if (-not $main) { throw 'main.py not found' }
-          Copy-Item $main.FullName 'wifi-debug-main.py' -Force
-          $map = Get-ChildItem $d -Filter map.html -Recurse | Select-Object -First 1
-          if (-not $map) { throw 'map.html not found' }
-          Copy-Item $map.FullName 'wifi-debug-map.html' -Force
-          Compress-Archive -Path 'wifi-debug-main.py','wifi-debug-map.html' -DestinationPath 'wifi-debug-source.zip' -Force
-
-      - name: Upload production source diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: DPort-WiFi-Source-Debug
-          path: wifi-debug-source.zip
-          retention-days: 2
-
       - name: Validate Wi-Fi patch syntax
         shell: pwsh
         run: python -m py_compile scripts\apply_wifi_test.py
@@ -58,8 +36,8 @@ jobs:
       - name: Upload direct package (no nested ZIP)
         uses: actions/upload-artifact@v4
         with:
-          name: DPort-WiFi-Test-6.9.30
-          path: DPort-WiFi-Test-6.9.30/*
+          name: DPort-WiFi-Test-6.9.31
+          path: DPort-WiFi-Test-6.9.31/*
           retention-days: 14
 
       - name: Delete failed Wi-Fi run
