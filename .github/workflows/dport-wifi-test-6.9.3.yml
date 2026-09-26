@@ -5,6 +5,9 @@ on:
     branches:
       - 'feature/wifi-test-6.9.3'
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
