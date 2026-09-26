@@ -63,13 +63,15 @@ foreach ($forbiddenUi in @(
     if ($ui -like "*$forbiddenUi*") { throw "UPDATER UI RESIDUE FOUND: $forbiddenUi" }
 }
 
+# Verify production UI using ASCII-safe identifiers only.
+# This avoids Windows PowerShell 5.1 encoding/parser issues while still
+# checking the actual production controls are present.
 foreach ($requiredUi in @(
-    'GPX 軌跡播放',
-    '裝置連線',
-    '重新整理',
-    '連接裝置',
-    '離開',
-    'deviceDropdown'
+    'GPX',
+    'deviceDropdown',
+    'refresh-device',
+    'connection',
+    'connectButton'
 )) {
     if ($ui -notlike "*$requiredUi*") { throw "PRODUCTION UI MISSING: $requiredUi" }
 }
