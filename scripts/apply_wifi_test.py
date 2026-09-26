@@ -94,36 +94,34 @@ if start < 0 or end < 0:
     raise SystemExit("Wi-Fi TCP tunnel function not found.")
 
 tcp = '''async def start_wifi_tcp_tunnel() -> None:
-    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_address, wifi_tunnel_error
+    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_tunnel_error
 
     lockdown = None
     service = None
     try:
         wifi_tunnel_error = None
 
-        host = str(wifi_address or "").strip()
-        port = int(wifi_port or 62078)
-
-        if not host:
-            raise RuntimeError("Wi-Fi 裝置沒有有效的 IP 位址。")
         if not udid:
             raise RuntimeError("Wi-Fi 裝置缺少 UDID。")
 
-        home = get_home_folder()
-        pair = get_preferred_pair_record(udid, home)
-        if pair is None:
-            raise RuntimeError("找不到 iPhone 配對紀錄，請先用 USB 連接一次。")
+        # Windows Wi-Fi path: use the Apple usbmux Network transport that
+        # already succeeded during Developer Mode checking. Do NOT bypass it
+        # with a raw create_using_tcp(IP) connection.
+        network_connection_type = (
+            connection_type
+            if connection_type in ("Network", "WiFi", "WIFI")
+            else "Network"
+        )
 
-        logger.info(f"Wi-Fi Lockdown connect: {host}:{port}, udid={udid}")
+        logger.info(
+            f"Wi-Fi CoreDeviceProxy: creating Network Lockdown "
+            f"(connection_type={network_connection_type}, udid={udid})"
+        )
 
-        lockdown = await create_using_tcp(
-            hostname=host,
-            identifier=udid,
-            autopair=False,
-            pair_record=pair,
-            pairing_records_cache_folder=home,
-            port=port,
-            keep_alive=True,
+        lockdown = await create_using_usbmux(
+            udid,
+            connection_type=network_connection_type,
+            autopair=True,
         )
 
         logger.info(
@@ -131,7 +129,10 @@ tcp = '''async def start_wifi_tcp_tunnel() -> None:
             f"iOS={lockdown.product_version}"
         )
 
+        # iOS 17.4+ exposes CoreDeviceProxy through Lockdown.
         service = await CoreDeviceTunnelProxy.create(lockdown)
+
+        logger.info("Wi-Fi CoreDeviceProxy service created")
 
         async with service.start_tcp_tunnel() as tunnel_result:
             rsd_host = tunnel_result.address
@@ -148,7 +149,7 @@ tcp = '''async def start_wifi_tcp_tunnel() -> None:
 
     except Exception as exc:
         wifi_tunnel_error = str(exc)
-        logger.exception(f"Wi-Fi TCP tunnel failed: {exc}")
+        logger.exception(f"Wi-Fi TCP/CoreDeviceProxy tunnel failed: {exc}")
         raise
     finally:
         if service is not None:
