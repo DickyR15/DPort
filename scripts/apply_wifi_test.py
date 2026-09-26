@@ -732,7 +732,7 @@ def _strip_updater_lines(text):
         )):
             continue
         kept.append(line)
-    return "\\n".join(kept) + "\\n"
+    return "\n".join(kept) + "\n"
 
 src = _strip_updater_lines(src)
 ui = _strip_updater_lines(ui)
