@@ -2,7 +2,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $version = '6.9.15'
-# Wi-Fi single-workflow test trigger`r`n# Start 6.9.15 build
+# Wi-Fi single-workflow test trigger
+# USB disconnect handler regex fix`r`n# Start 6.9.15 build
 $sourceZip = 'DPort-source-6.9.0.zip'
 $tmp = Join-Path $env:RUNNER_TEMP 'dport-wifi-clean-source'
 $stage = Join-Path $env:RUNNER_TEMP "DPort-WiFi-Test-$version"
