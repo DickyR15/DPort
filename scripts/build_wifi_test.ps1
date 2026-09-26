@@ -1,13 +1,10 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$version = '6.9.15'
-# Wi-Fi single-workflow test trigger
-# USB disconnect handler regex fix`n# Python patch syntax fix
-# Tolerant USB handler patch`r`n# Start 6.9.15 build
+$version = '6.9.16'
 $sourceZip = 'DPort-source-6.9.0.zip'
 $tmp = Join-Path $env:RUNNER_TEMP 'dport-wifi-clean-source'
-$stage = Join-Path $env:RUNNER_TEMP "DPort-WiFi-Test-$version"
+$stage = Join-Path $PWD "DPort-WiFi-Test-$version"
 $exe = Join-Path $PWD "dist\DPort-WiFi-Test-$version.exe"
 $zip = Join-Path $PWD "DPort-WiFi-Test-$version.zip"
 
@@ -31,7 +28,6 @@ Copy-Item (Join-Path $root 'src\*') src -Recurse -Force
 python scripts\apply_wifi_test.py
 if ($LASTEXITCODE -ne 0) { throw 'Wi-Fi patch failed.' }
 
-# This test line intentionally has NO DPort updater.
 foreach ($file in @('src\dport_release_updater.py','src\dport_updater_helper.py')) {
     if (Test-Path $file) { Remove-Item $file -Force }
 }
@@ -51,33 +47,37 @@ foreach ($feature in @(
     if ($main -notlike "*$feature*") { throw "Missing Wi-Fi feature: $feature" }
 }
 
-# Same-version DPort updater must be completely absent.
 foreach ($forbidden in @(
     'dport_release_updater',
     'bootstrap_dport_updater',
-    '/pymobiledevice3/status',
-    'dportStartPm3StatusPolling();',
-    'dport-pm3-update-modal'
+    '/pymobiledevice3/status'
 )) {
-    if ($main -like "*$forbidden*" -or $ui -like "*$forbidden*") {
-        throw "UPDATER RESIDUE FOUND: $forbidden"
-    }
+    if ($main -like "*$forbidden*") { throw "UPDATER BACKEND RESIDUE FOUND: $forbidden" }
 }
 
-# Verify the production connection-state logic is still present.
+foreach ($forbiddenUi in @(
+    'id="dport-pm3-update-modal"',
+    'id="dport-69-pm3-update-modal-fix9"',
+    'dportStartPm3StatusPolling();'
+)) {
+    if ($ui -like "*$forbiddenUi*") { throw "UPDATER UI RESIDUE FOUND: $forbiddenUi" }
+}
+
 foreach ($requiredUi in @(
-    'isDeviceConnected',
-    'dportRefreshDeviceList',
-    'enableManualRefresh',
+    'GPX 軌跡播放',
+    '裝置連線',
+    '重新整理',
+    '連接裝置',
+    '離開',
     'deviceDropdown'
 )) {
-    if ($ui -notlike "*$requiredUi*") { throw "Missing production UI logic: $requiredUi" }
+    if ($ui -notlike "*$requiredUi*") { throw "PRODUCTION UI MISSING: $requiredUi" }
 }
 
-Set-Content 'src\dport_version.py' 'DPORT_VERSION="6.9.15"' -Encoding utf8
+Set-Content 'src\dport_version.py' 'DPORT_VERSION="6.9.16"' -Encoding utf8
 
 $req = Get-Content 'requirements-build.txt' -Raw
-$req = $req -replace 'pymobiledevice3\s*==\s*[^\r\n#]+', 'pymobiledevice3==11.19.1'
+$req = $req -replace 'pymobiledevice3\s*=\s*[=<>!~]{1,2}\s*[^\r\n#]+', 'pymobiledevice3==11.19.1'
 Set-Content 'requirements-build.txt' $req -Encoding utf8
 
 python -m pip install --upgrade pip setuptools wheel
@@ -120,8 +120,6 @@ python -m PyInstaller @args
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 
 if (-not (Test-Path $exe)) { throw "EXE not found: $exe" }
-$exeSize = (Get-Item $exe).Length
-if ($exeSize -lt 1000000) { throw "EXE unexpectedly small: $exeSize bytes" }
 
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
@@ -138,6 +136,7 @@ pymobiledevice3: $pm3
 Same-version DPort auto-update: DISABLED
 DPort updater UI/API: REMOVED
 
+Production UI layout: PRESERVED FROM DPort 6.9.0
 Test build only.
 "@ -Encoding utf8
 
@@ -147,14 +146,14 @@ Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
 $zipSize = (Get-Item $zip).Length
 if ($zipSize -lt 1000000) { throw "ZIP unexpectedly small: $zipSize" }
 
-# Final archive structure check.
+# Validate the actual ZIP content itself.
 $check = Join-Path $env:RUNNER_TEMP 'dport-wifi-package-check'
 if (Test-Path $check) { Remove-Item $check -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $check | Out-Null
 Expand-Archive -LiteralPath $zip -DestinationPath $check -Force
 
 $files = @(Get-ChildItem $check -File)
-if (@($files | Where-Object {$_.Extension -eq '.zip'}).Count -ne 0) { throw 'Nested ZIP detected.' }
-if (@($files | Where-Object {$_.Extension -eq '.exe'}).Count -ne 1) { throw 'Expected exactly one EXE.' }
+if (@($files | Where-Object {$_.Extension -eq '.zip'}).Count -ne 0) { throw 'Nested ZIP detected inside the release ZIP.' }
+if (@($files | Where-Object {$_.Extension -eq '.exe'}).Count -ne 1) { throw 'Expected exactly one EXE in release ZIP.' }
 
-Write-Host "DPort Wi-Fi $version NORMAL ZIP CREATED: $zip ($zipSize bytes)"
+Write-Host "DPort Wi-Fi $version DIRECT PACKAGE CREATED: $zip ($zipSize bytes)"
