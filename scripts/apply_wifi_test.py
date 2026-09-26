@@ -648,6 +648,23 @@ if handler_start >= 0 and handler_end > handler_start:
         ui = ui[:handler_start] + handler + ui[handler_end:]
         print("USB disconnect Refresh state normalized.")
 
+# Final targeted updater residue cleanup. Remove only lines containing the
+# retired updater endpoint/polling identifiers; do not touch the production
+# DPort layout or connection code.
+def _strip_updater_lines(text):
+    kept = []
+    for line in text.splitlines():
+        if any(token in line for token in (
+            "/pymobiledevice3/status",
+            "dportStartPm3StatusPolling();",
+        )):
+            continue
+        kept.append(line)
+    return "\n".join(kept) + "\n"
+
+src = _strip_updater_lines(src)
+ui = _strip_updater_lines(ui)
+
 # Don't build if an updater residue is present.
 for forbidden in (
     "dport_release_updater",
