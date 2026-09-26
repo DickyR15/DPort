@@ -14,14 +14,18 @@ for line in src.splitlines():
     lines.append(line)
 src = "\n".join(lines) + "\n"
 
-src, route_count = re.subn(
-    r"@app\.route\('/pymobiledevice3/status'\)\s*"
-    r"def\s+pymobiledevice3_status\(\):.*?(?=@app\.route\('/'\))",
-    "",
-    src,
-    count=1,
-    flags=re.S,
-)
+# Remove any updater status route line, regardless of formatting in the bundled
+# DPort-source-6.9.0.zip snapshot. Do not depend on one exact decorator shape.
+route_lines_removed = 0
+filtered = []
+for line in src.splitlines():
+    if "/pymobiledevice3/status" in line:
+        route_lines_removed += 1
+        continue
+    filtered.append(line)
+src = "\n".join(filtered) + "\n"
+route_count = route_lines_removed
+
 
 # Add Wi-Fi discovery to the existing /list_devices endpoint.
 disabled = '''            # USB-ONLY: Wi-Fi / Network discovery intentionally disabled.
