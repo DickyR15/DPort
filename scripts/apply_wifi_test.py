@@ -461,6 +461,193 @@ for required_ui in (
         raise SystemExit("Production UI missing: " + required_ui)
 
 # ---------------------------------------------------------------------------
+# Final source-level UI correctness fixes:
+#   - USB options always sort ahead of Wi-Fi.
+#   - USB auto-detection compares USB-to-USB only.
+#   - Timeout modal is never left visible during initial page bootstrap.
+#   - Timeout modal Close no longer reloads the whole page.
+# ---------------------------------------------------------------------------
+
+# Stamp every option with its actual transport. The old template stored only
+# the deviceInfo object, which made Network and USB indistinguishable later.
+populate_for_each = "deviceInfoArray.forEach(deviceInfo => {"
+if populate_for_each not in ui:
+    raise SystemExit("populateDeviceList device loop not found.")
+transport_stamp = """deviceInfoArray.forEach(deviceInfo => {
+                    deviceInfo = Object.assign({}, deviceInfo, {
+                        ConnectionType: connectionType
+                    });
+"""
+if "ConnectionType: connectionType" not in ui[ui.find("async function populateDeviceList"):ui.find("async function populateDeviceList")+12000]:
+    ui = ui.replace(populate_for_each, transport_stamp, 1)
+
+# Sort the actual <option> nodes after population. USB is always first.
+sort_anchor = """        if (requestSerial !== deviceListRequestSerial) return false;
+        deviceDropdown.devicesInfo = devicesInfo;
+"""
+if sort_anchor not in ui:
+    raise SystemExit("populateDeviceList post-build anchor not found.")
+sort_code = """        if (requestSerial !== deviceListRequestSerial) return false;
+
+        const orderedOptions = Array.from(deviceDropdown.options).sort(function(a, b){
+            let ai = {};
+            let bi = {};
+            try { ai = JSON.parse(a.value || '{}'); } catch(e) {}
+            try { bi = JSON.parse(b.value || '{}'); } catch(e) {}
+
+            const at = String(ai.ConnectionType || '').toUpperCase();
+            const bt = String(bi.ConnectionType || '').toUpperCase();
+
+            // USB must be shown before Network/Wi-Fi whenever both exist.
+            if (at === 'USB' && bt !== 'USB') return -1;
+            if (at !== 'USB' && bt === 'USB') return 1;
+            return 0;
+        });
+
+        orderedOptions.forEach(function(option){
+            deviceDropdown.appendChild(option);
+        });
+
+        // On startup/re-enumeration, prefer USB automatically if it exists.
+        // Do not override a currently connected session.
+        if (!isDeviceConnected) {
+            const usbOption = orderedOptions.find(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    return String(info.ConnectionType || '').toUpperCase() === 'USB';
+                } catch(e) {
+                    return false;
+                }
+            });
+
+            if (usbOption) {
+                deviceDropdown.value = usbOption.value;
+            }
+        }
+
+        deviceDropdown.devicesInfo = devicesInfo;
+"""
+ui=ui.replace(sort_anchor,sort_code,1)
+
+# Ensure the USB watcher uses only USB options for displayedIds.
+display_pat=re.compile(
+    r"const displayedIds = Array.from(deviceDropdown.options)s*"
+    r".map(function(option){.*?
+s*.sort();",
+    re.S,
+)
+m=display_pat.search(ui)
+if not m:
+    raise SystemExit("USB watcher displayedIds block not found.")
+new_display="""const displayedIds = Array.from(deviceDropdown.options)
+            .map(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    const type = String(info.ConnectionType || '').toUpperCase();
+                    if (type !== 'USB') return '';
+                    return String(info.Identifier || '');
+                } catch (e) {
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .sort();"""
+ui=ui[:m.start()]+new_display+ui[m.end():]
+
+# Timeout modal: never force a full page navigation when closing.
+old_button='''<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = '/'">關閉</button>'''
+new_button='''<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="closeModalTimeoutAndReset()">關閉</button>'''
+if old_button in ui:
+    ui=ui.replace(old_button,new_button,1)
+else:
+    raise SystemExit("Timeout modal close button not found.")
+
+# Replace the timeout helper with a close/reset helper and add startup hide.
+old_timeout="""    // Function to show the modal
+    function showModalTimeout() {
+            $('#modalTimeout').modal('show');
+    }
+"""
+new_timeout="""    // Function to show the timeout modal only after an explicit connection
+    // attempt. It is never invoked during page bootstrap.
+    function showModalTimeout() {
+            $('#modalTimeout').modal('show');
+    }
+
+    function closeModalTimeoutAndReset() {
+        try {
+            $('#modalTimeout').modal('hide');
+        } catch (e) {
+            var modal = document.getElementById('modalTimeout');
+            if (modal) {
+                modal.style.display = 'none';
+                modal.classList.remove('show');
+                modal.setAttribute('aria-hidden', 'true');
+            }
+        }
+
+        if (typeof isDeviceConnected !== 'undefined') {
+            isDeviceConnected = false;
+        }
+
+        var connectButtonAfterTimeout = document.getElementById('connect');
+        var connectTextAfterTimeout = document.getElementById('connectText');
+        var spinnerAfterTimeout = document.getElementById('spinner');
+        if (connectButtonAfterTimeout) {
+            connectButtonAfterTimeout.disabled = false;
+        }
+        if (connectTextAfterTimeout) {
+            connectTextAfterTimeout.innerText = '連接裝置';
+        }
+        if (spinnerAfterTimeout) {
+            spinnerAfterTimeout.style.display = 'none';
+        }
+
+        try {
+            if (typeof startDeviceAutoDetect === 'function') {
+                startDeviceAutoDetect();
+            }
+        } catch (e) {}
+    }
+"""
+if old_timeout not in ui:
+    raise SystemExit("showModalTimeout helper not found.")
+ui=ui.replace(old_timeout,new_timeout,1)
+
+# Hide the timeout modal at bootstrap. This prevents a stale/cached modal from
+# surviving the first paint while the fresh DPort page initializes.
+bootstrap_anchor="""    document.addEventListener('DOMContentLoaded', function () {
+    console.log("test");
+"""
+bootstrap_insert="""    document.addEventListener('DOMContentLoaded', function () {
+    try {
+        var startupTimeoutModal = document.getElementById('modalTimeout');
+        if (startupTimeoutModal) {
+            $('#modalTimeout').modal('hide');
+            startupTimeoutModal.style.display = 'none';
+            startupTimeoutModal.classList.remove('show');
+            startupTimeoutModal.setAttribute('aria-hidden', 'true');
+        }
+    } catch (e) {}
+
+    console.log("test");
+"""
+if bootstrap_anchor not in ui:
+    raise SystemExit("DOMContentLoaded bootstrap anchor not found.")
+ui=ui.replace(bootstrap_anchor,bootstrap_insert,1)
+
+# Browser cache guard: do not reuse a previous DPort page during startup.
+head_anchor='<meta charset="utf-8">'
+if head_anchor not in ui:
+    raise SystemExit("HTML head marker not found.")
+cache_meta='''<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">'''
+ui=ui.replace(head_anchor,cache_meta,1)
+
+
+# ---------------------------------------------------------------------------
 # UI: remove only the retired updater elements by exact IDs.
 # This scanner removes one complete HTML element while preserving every other
 # element byte-for-byte, so the production header/layout cannot be swallowed.
