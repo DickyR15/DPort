@@ -551,11 +551,11 @@ ui = re.sub(
 
 # Successful connection explicitly locks Refresh.
 ui = ui.replace(
-"""        if (connectButton) {
+    """        if (connectButton) {
             connectButton.disabled = true;  // Disable the button
         }
         if (selectedDeviceConnType === 'USB') {""",
-"""        if (connectButton) {
+    """        if (connectButton) {
             connectButton.disabled = true;  // Disable the button
         }
 
@@ -564,10 +564,9 @@ ui = ui.replace(
             refreshButtonConnected.disabled = true;
             refreshButtonConnected.setAttribute('aria-disabled','true');
         }
-"""
 
         if (selectedDeviceConnType === 'USB') {""",
-1,
+    1,
 )
 
 # Replace the USB-disconnect handler so only USB entries are removed and the
