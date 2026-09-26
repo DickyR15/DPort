@@ -1,7 +1,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$version = '6.9.17'
+$version = '6.9.18'
 $sourceZip = 'DPort-source-6.9.0.zip'
 $tmp = Join-Path $env:RUNNER_TEMP 'dport-wifi-clean-source'
 $stage = Join-Path $PWD "DPort-WiFi-Test-$version"
