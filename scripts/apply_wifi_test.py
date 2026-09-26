@@ -314,17 +314,16 @@ for forbidden_ui in (
 # rewriting the production device-list code.
 # ---------------------------------------------------------------------------
 wifi_ui_guard = r"""
-<script id="dport-wifi-ui-guard-6-9-20">
+<script id="dport-wifi-ui-guard-6-9-21">
 (function () {
     'use strict';
 
     var deviceDropdown = document.getElementById('deviceDropdown');
     if (!deviceDropdown) return;
 
-    // Keep every discovered Network/Wi-Fi option for the lifetime of the
-    // page. The production USB refresh routine is allowed to rebuild the
-    // select, but must not make Wi-Fi disappear during the rebuild.
     var networkCache = new Map();
+    var refreshButton = null;
+    var connectButton = null;
 
     function parseOption(option) {
         try {
@@ -334,7 +333,7 @@ wifi_ui_guard = r"""
         }
     }
 
-    function getConnectionType(info) {
+    function connectionType(info) {
         return String(
             info && (
                 info.ConnectionType ||
@@ -347,7 +346,7 @@ wifi_ui_guard = r"""
 
     function isNetworkInfo(info) {
         if (!info) return false;
-        var t = getConnectionType(info);
+        var t = connectionType(info);
         return t === 'NETWORK' ||
                t === 'WIFI' ||
                !!info.wifiAddress ||
@@ -355,20 +354,19 @@ wifi_ui_guard = r"""
                !!info.wifiTransport;
     }
 
-    function keyForInfo(info) {
+    function networkKey(info) {
         if (!isNetworkInfo(info)) return '';
         return [
             String(info.Identifier || info.UniqueDeviceID || ''),
             String(info.wifiAddress || info.host || ''),
-            String(info.wifiPort || 62078),
-            getConnectionType(info) || 'NETWORK'
+            String(info.wifiPort || 62078)
         ].join('|');
     }
 
     function captureNetworkOptions() {
         Array.prototype.forEach.call(deviceDropdown.options, function (option) {
             var info = parseOption(option);
-            var key = keyForInfo(info);
+            var key = networkKey(info);
             if (!key) return;
 
             networkCache.set(key, {
@@ -384,7 +382,7 @@ wifi_ui_guard = r"""
         var present = new Set();
 
         Array.prototype.forEach.call(deviceDropdown.options, function (option) {
-            var key = keyForInfo(parseOption(option));
+            var key = networkKey(parseOption(option));
             if (key) present.add(key);
         });
 
@@ -397,32 +395,29 @@ wifi_ui_guard = r"""
             if (cached.title) option.title = cached.title;
             if (cached.className) option.className = cached.className;
             option.dataset.dportWifiGuard = '1';
+
+            // Insert without changing the currently selected USB option.
             deviceDropdown.appendChild(option);
         });
     }
 
     function findRefreshButton() {
-        var direct = document.getElementById('refresh-device');
-        if (direct) return direct;
+        var byId = document.getElementById('refresh-device');
+        if (byId) return byId;
 
         var nodes = document.querySelectorAll(
             'button, input[type="button"], input[type="submit"], [role="button"]'
         );
-
         for (var i = 0; i < nodes.length; i++) {
-            var node = nodes[i];
             var label = String(
-                node.textContent ||
-                node.value ||
-                node.getAttribute('aria-label') ||
+                nodes[i].textContent ||
+                nodes[i].value ||
+                nodes[i].getAttribute('aria-label') ||
                 ''
             ).replace(/\s+/g, '');
-
-            if (
-                label.indexOf('重新整理') >= 0 ||
-                label.indexOf('Refresh') >= 0
-            ) {
-                return node;
+            if (label.indexOf('重新整理') >= 0 ||
+                label.indexOf('Refresh') >= 0) {
+                return nodes[i];
             }
         }
         return null;
@@ -432,69 +427,40 @@ wifi_ui_guard = r"""
         var nodes = document.querySelectorAll(
             'button, input[type="button"], input[type="submit"], [role="button"]'
         );
-
         for (var i = 0; i < nodes.length; i++) {
-            var node = nodes[i];
             var label = String(
-                node.textContent ||
-                node.value ||
-                node.getAttribute('aria-label') ||
+                nodes[i].textContent ||
+                nodes[i].value ||
+                nodes[i].getAttribute('aria-label') ||
                 ''
             ).replace(/\s+/g, '');
-
-            if (
-                label.indexOf('連接裝置') >= 0 ||
+            if (label.indexOf('連接裝置') >= 0 ||
                 label.indexOf('已連接') >= 0 ||
-                label.indexOf('ConnectDevice') >= 0
-            ) {
-                return node;
+                label.indexOf('Connected') >= 0 ||
+                label.indexOf('ConnectDevice') >= 0) {
+                return nodes[i];
             }
         }
         return null;
     }
 
-    function selectedUsbDevice() {
+    function usbSelected() {
         var option = deviceDropdown.options[deviceDropdown.selectedIndex];
-        var info = option ? parseOption(option) : null;
-        return info &&
-            getConnectionType(info) === 'USB';
+        return connectionType(parseOption(option)) === 'USB';
     }
 
-    function statusSaysConnected() {
-        var nodes = document.querySelectorAll(
-            '[role="status"], [id*="status" i], [class*="status" i]'
-        );
-
-        for (var i = 0; i < nodes.length; i++) {
-            var text = String(nodes[i].textContent || '')
-                .replace(/\s+/g, '')
-                .trim();
-
-            if (
-                text === '已連接' ||
-                text.indexOf('已連接：') === 0 ||
-                text.indexOf('已連接') >= 0
-            ) {
+    function appReportsConnected() {
+        try {
+            if (typeof isDeviceConnected === 'boolean' && isDeviceConnected) {
                 return true;
             }
-        }
-
-        return false;
-    }
-
-    function dportConnectionState() {
-        var connected = false;
-
-        try {
-            if (typeof isDeviceConnected === 'boolean') {
-                connected = isDeviceConnected;
-            } else if (typeof isDeviceConnected === 'function') {
-                connected = !!isDeviceConnected();
+            if (typeof isDeviceConnected === 'function' && isDeviceConnected()) {
+                return true;
             }
         } catch (e) {}
 
         try {
-            var connectButton = findConnectButton();
+            connectButton = findConnectButton();
             if (connectButton) {
                 var label = String(
                     connectButton.textContent ||
@@ -502,56 +468,127 @@ wifi_ui_guard = r"""
                     connectButton.getAttribute('aria-label') ||
                     ''
                 ).replace(/\s+/g, '');
+                if (label.indexOf('已連接') >= 0 ||
+                    label.indexOf('Connected') >= 0) {
+                    return true;
+                }
 
-                if (
-                    label.indexOf('已連接') >= 0 ||
-                    label.indexOf('Connected') >= 0
-                ) {
-                    connected = true;
+                // Production UI disables Connect Device after connection.
+                // This is observed only on the connect button, so it cannot
+                // create an attribute-observer feedback loop.
+                if (connectButton.disabled === true && usbSelected()) {
+                    return true;
                 }
             }
         } catch (e) {}
 
-        if (selectedUsbDevice() && statusSaysConnected()) {
-            connected = true;
-        }
-
-        return connected;
+        return false;
     }
 
     function syncRefreshButton() {
-        var button = findRefreshButton();
-        if (!button) return;
+        refreshButton = findRefreshButton();
+        if (!refreshButton) return;
 
-        var connected = dportConnectionState();
+        var connected = appReportsConnected();
 
         if (connected) {
-            // Force the actual DOM property, not only aria-disabled.
-            button.disabled = true;
-            button.setAttribute('disabled', 'disabled');
-            button.setAttribute('aria-disabled', 'true');
-            button.setAttribute('data-dport-connection-lock', '1');
-        } else if (button.getAttribute('data-dport-connection-lock') === '1') {
-            button.disabled = false;
-            button.removeAttribute('disabled');
-            button.removeAttribute('aria-disabled');
-            button.removeAttribute('data-dport-connection-lock');
+            refreshButton.disabled = true;
+            refreshButton.setAttribute('disabled', 'disabled');
+            refreshButton.setAttribute('aria-disabled', 'true');
+            refreshButton.dataset.dportUsbConnected = '1';
+        } else if (
+            refreshButton.dataset.dportUsbConnected === '1'
+        ) {
+            refreshButton.disabled = false;
+            refreshButton.removeAttribute('disabled');
+            refreshButton.removeAttribute('aria-disabled');
+            delete refreshButton.dataset.dportUsbConnected;
         }
     }
 
-    function blockRefresh(event) {
-        var target = event.target;
-        var button = findRefreshButton();
-        if (!button || !target) return;
+    // Only observe the device SELECT's child list. No document-wide attribute
+    // observer and no high-frequency polling: this prevents the page from
+    // repeatedly repainting/flickering when USB connects.
+    var listObserver = new MutationObserver(function () {
+        captureNetworkOptions();
+        restoreNetworkOptions();
+    });
 
+    listObserver.observe(deviceDropdown, {
+        childList: true,
+        subtree: false
+    });
+
+    // Observe only Connect Device's disabled/text attributes so Refresh can
+    // track the actual production connection state without recursive writes.
+    function observeConnectButton() {
+        connectButton = findConnectButton();
+        if (!connectButton || connectButton.__dportObserved) return;
+
+        connectButton.__dportObserved = true;
+        var connectObserver = new MutationObserver(function () {
+            syncRefreshButton();
+        });
+        connectObserver.observe(connectButton, {
+            attributes: true,
+            attributeFilter: ['disabled', 'aria-label', 'class'],
+            childList: true,
+            subtree: true
+        });
+    }
+
+    // Hook the existing refresh function, when present. This preserves the
+    // real production refresh logic and only merges back cached Wi-Fi entries.
+    function hookRefreshFunction() {
+        var fn = window.dportRefreshDeviceList;
+        if (typeof fn !== 'function' || fn.__dportWifiWrapped) return;
+
+        var original = fn;
+        var wrapped = function () {
+            captureNetworkOptions();
+            var result;
+            try {
+                result = original.apply(this, arguments);
+            } catch (e) {
+                restoreNetworkOptions();
+                throw e;
+            }
+
+            if (result && typeof result.then === 'function') {
+                return result.then(function (value) {
+                    restoreNetworkOptions();
+                    syncRefreshButton();
+                    return value;
+                }, function (error) {
+                    restoreNetworkOptions();
+                    syncRefreshButton();
+                    throw error;
+                });
+            }
+
+            restoreNetworkOptions();
+            syncRefreshButton();
+            return result;
+        };
+
+        wrapped.__dportWifiWrapped = true;
+        window.dportRefreshDeviceList = wrapped;
+    }
+
+    // Block refresh input only while the app is actually connected over USB.
+    function blockRefresh(event) {
+        var button = findRefreshButton();
+        if (!button) return;
+
+        var target = event.target;
         if (
             target === button ||
-            (typeof button.contains === 'function' && button.contains(target))
+            (button.contains && button.contains(target))
         ) {
-            if (dportConnectionState()) {
+            if (appReportsConnected()) {
                 event.preventDefault();
                 event.stopPropagation();
-                if (typeof event.stopImmediatePropagation === 'function') {
+                if (event.stopImmediatePropagation) {
                     event.stopImmediatePropagation();
                 }
                 syncRefreshButton();
@@ -559,73 +596,47 @@ wifi_ui_guard = r"""
         }
     }
 
-    // Initial state + continuous state guard.
-    captureNetworkOptions();
-    restoreNetworkOptions();
-    syncRefreshButton();
-
     document.addEventListener('pointerdown', blockRefresh, true);
     document.addEventListener('mousedown', blockRefresh, true);
     document.addEventListener('click', blockRefresh, true);
+    document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
 
-    var observer = new MutationObserver(function () {
-        captureNetworkOptions();
-        restoreNetworkOptions();
-        syncRefreshButton();
-    });
+        var button = findRefreshButton();
+        if (!button) return;
 
-    observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['disabled', 'aria-disabled', 'class']
-    });
-
-    // Patch innerHTML on this exact SELECT so clearing/rebuilding the USB
-    // list cannot create a visible Wi-Fi flicker.
-    try {
-        var innerDesc = Object.getOwnPropertyDescriptor(
-            Element.prototype,
-            'innerHTML'
-        );
-        if (innerDesc && innerDesc.get && innerDesc.set) {
-            Object.defineProperty(deviceDropdown, 'innerHTML', {
-                configurable: true,
-                get: function () {
-                    return innerDesc.get.call(this);
-                },
-                set: function (value) {
-                    captureNetworkOptions();
-                    innerDesc.set.call(this, value);
-                    restoreNetworkOptions();
-                    syncRefreshButton();
-                }
-            });
+        if (
+            document.activeElement === button &&
+            appReportsConnected()
+        ) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.stopImmediatePropagation) {
+                event.stopImmediatePropagation();
+            }
+            syncRefreshButton();
         }
-    } catch (e) {}
+    }, true);
 
-    // Patch replaceChildren/append/remove only on the target select where
-    // available. This keeps the Wi-Fi cache intact while USB scanning runs.
-    try {
-        if (typeof deviceDropdown.replaceChildren === 'function') {
-            var originalReplaceChildren = deviceDropdown.replaceChildren;
-            deviceDropdown.replaceChildren = function () {
-                captureNetworkOptions();
-                var result = originalReplaceChildren.apply(this, arguments);
-                restoreNetworkOptions();
-                syncRefreshButton();
-                return result;
-            };
-        }
-    } catch (e) {}
+    captureNetworkOptions();
+    restoreNetworkOptions();
+    syncRefreshButton();
+    observeConnectButton();
+    hookRefreshFunction();
 
-    // Short interval is only a safety net for third-party code that assigns
-    // through a path MutationObserver cannot catch synchronously.
-    setInterval(function () {
-        captureNetworkOptions();
-        restoreNetworkOptions();
+    // Functions may be defined later by existing production script blocks.
+    // Retry only while establishing the hook, then stop.
+    var attempts = 0;
+    var bootTimer = setInterval(function () {
+        attempts += 1;
+        observeConnectButton();
+        hookRefreshFunction();
         syncRefreshButton();
-    }, 25);
+
+        if (attempts >= 40) {
+            clearInterval(bootTimer);
+        }
+    }, 250);
 })();
 </script>
 """
