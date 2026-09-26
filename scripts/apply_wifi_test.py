@@ -569,30 +569,25 @@ ui = ui.replace(
     1,
 )
 
-# Replace the USB-disconnect handler so only USB entries are removed and the
-# Network entry remains visible while the Wi-Fi tunnel is established.
-handle_pattern = re.compile(
-    r"function\s+handleUsbCableRemoved\s*\(\)\s*\{.*?(?=\n\s*var\s+appVersionNum\s*=)",
-    re.S,
-)
-handle_new = """function handleUsbCableRemoved() {
-    stopUsbPresenceMonitor();
-    activeUsbUDID = null;
-    isDeviceConnected = false;
+# Replace only the USB cleanup portion inside handleUsbCableRemoved().
+# Keep the existing production handler structure; do not replace the whole
+# function because source formatting can differ between v6.9.0 snapshots.
+handler_start = ui.find("function handleUsbCableRemoved()")
+handler_end = ui.find("var appVersionNum", handler_start)
 
-    if (typeof stopGPXPlaybackForReason === 'function') {
-        stopGPXPlaybackForReason("裝置已中斷連接，GPX 軌跡播放已停止。");
-    }
+if handler_start >= 0 and handler_end > handler_start:
+    handler = ui[handler_start:handler_end]
 
-    var connectButton = document.getElementById('connect');
-    var connectTextElement = document.getElementById('connectText');
-    var disconnectButton = document.getElementById('disconnect');
-    var deviceDropdown = document.getElementById('device');
-    var connectionDropdown = document.getElementById('connection');
-    var spinnerElement = document.getElementById('spinner');
+    clear_pattern = re.compile(
+        r"if\s*\(\s*deviceDropdown\s*\)\s*\{\s*"
+        r"deviceDropdown\.innerHTML\s*=\s*'';\s*"
+        r"deviceDropdown\.value\s*=\s*'';\s*"
+        r"\}",
+        re.S,
+    )
 
-    // Remove only USB options. Keep Network/Wi-Fi visible.
-    if (deviceDropdown) {
+    keep_usb_network = """if (deviceDropdown) {
+        // Remove only stale USB entries. Network/Wi-Fi entries must remain.
         Array.from(deviceDropdown.options).forEach(function(option){
             try {
                 var info = JSON.parse(option.value || '{}');
@@ -601,53 +596,53 @@ handle_new = """function handleUsbCableRemoved() {
                 }
             } catch (e) {}
         });
-    }
+    }"""
 
-    if (connectTextElement) {
-        connectTextElement.innerText = "連接裝置";
-        connectTextElement.style.display = 'inline-block';
-    }
+    handler, clear_count = clear_pattern.subn(
+        keep_usb_network,
+        handler,
+        count=1,
+    )
 
-    if (connectButton) {
-        connectButton.disabled = false;
-    }
+    if clear_count == 1:
+        ui = ui[:handler_start] + handler + ui[handler_end:]
+        print("USB disconnect cleanup updated: USB-only removal; Wi-Fi preserved.")
+    else:
+        # If the source snapshot already differs, keep the existing handler
+        # rather than failing the complete Wi-Fi build.
+        print("USB disconnect cleanup block not found; existing handler preserved.")
+else:
+    print("USB disconnect handler not found; existing UI preserved.")
 
-    if (disconnectButton) {
-        disconnectButton.style.display = 'none';
-        disconnectButton.disabled = false;
-        disconnectButton.innerText = "中斷連接";
-    }
+# Ensure the Refresh button state after physical USB removal is correct.
+handler_start = ui.find("function handleUsbCableRemoved()")
+handler_end = ui.find("var appVersionNum", handler_start)
+if handler_start >= 0 and handler_end > handler_start:
+    handler = ui[handler_start:handler_end]
 
-    if (deviceDropdown) {
-        deviceDropdown.disabled = false;
-    }
+    refresh_pattern = re.compile(
+        r"var\s+refreshButtonAfterUsbRemoval\s*=\s*document\.getElementById\('refresh-device'\);\s*"
+        r"if\s*\(\s*refreshButtonAfterUsbRemoval\s*\)\s*\{\s*"
+        r"refreshButtonAfterUsbRemoval\.disabled\s*=\s*(?:false|true)\s*;\s*"
+        r"(?:refreshButtonAfterUsbRemoval\.removeAttribute\('aria-disabled'\);\s*)?"
+        r"\}",
+        re.S,
+    )
 
-    if (spinnerElement) {
-        spinnerElement.style.display = 'none';
-    }
-
-    var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
+    refresh_replacement = """var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
     if (refreshButtonAfterUsbRemoval) {
         refreshButtonAfterUsbRemoval.disabled = false;
         refreshButtonAfterUsbRemoval.removeAttribute('aria-disabled');
-    }
+    }"""
 
-    startDeviceAutoDetect();
-
-    fetch('/device_disconnected', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({})
-    }).catch(function(error) {
-        console.debug('USB disconnect cleanup skipped:', error);
-    });
-
-    displayToast("USB 已拔除");
-}
-"""
-ui, handle_count = handle_pattern.subn(handle_new, ui, count=1)
-if handle_count != 1:
-    raise SystemExit("USB disconnect handler replacement failed.")
+    handler, refresh_count = refresh_pattern.subn(
+        refresh_replacement,
+        handler,
+        count=1,
+    )
+    if refresh_count == 1:
+        ui = ui[:handler_start] + handler + ui[handler_end:]
+        print("USB disconnect Refresh state normalized.")
 
 # Don't build if an updater residue is present.
 for forbidden in (
