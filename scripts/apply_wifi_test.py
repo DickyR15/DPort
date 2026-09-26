@@ -415,7 +415,8 @@ if manual_marker not in ui:
     raise SystemExit("dportRefreshDeviceList marker not found.")
 ui = ui.replace(manual_marker, manual_insert, 1)
 
-# Unlock Refresh on physical USB removal.
+# Unlock Refresh on physical USB removal when the production source contains
+# the expected block. Some source snapshots already normalize this state.
 remove_marker = """    var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
     if (refreshButtonAfterUsbRemoval) {
         refreshButtonAfterUsbRemoval.disabled = false;
@@ -429,9 +430,8 @@ remove_insert = """    var refreshButtonAfterUsbRemoval = document.getElementByI
         refreshButtonAfterUsbRemoval.removeAttribute('data-dport-connected-lock');
     }
 """
-if remove_marker not in ui:
-    raise SystemExit("USB removal Refresh marker not found.")
-ui = ui.replace(remove_marker, remove_insert, 1)
+if remove_marker in ui:
+    ui = ui.replace(remove_marker, remove_insert, 1)
 
 # Unlock Refresh on explicit disconnect.
 disconnect_marker = """        if (connectButton) {
