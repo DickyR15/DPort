@@ -569,3 +569,4 @@ Test build only.
           retention-days: 14
 
 # DPort release policy: current stable is 6.9.0; next release is 6.9.1.
+# Wi-Fi test trigger checkpoint 6.9.4
