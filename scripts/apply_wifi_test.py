@@ -633,14 +633,19 @@ if bootstrap_anchor not in ui:
 ui=ui.replace(bootstrap_anchor,bootstrap_insert,1)
 
 # Browser cache guard: do not reuse a previous DPort page during startup.
-head_anchor='<meta charset="utf-8">'
-if head_anchor not in ui:
-    raise SystemExit("HTML head marker not found.")
-cache_meta='''<meta charset="utf-8">
-<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+# Browser cache guard: locate the real <head> element instead of relying on
+# one particular charset formatting.
+head_pos = ui.lower().find("<head")
+if head_pos < 0:
+    raise SystemExit("HTML <head> marker not found.")
+head_end = ui.find(">", head_pos)
+if head_end < 0:
+    raise SystemExit("HTML <head> opening tag not found.")
+cache_meta = """<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
 <meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">'''
-ui=ui.replace(head_anchor,cache_meta,1)
+<meta http-equiv="Expires" content="0">
+"""
+ui = ui[:head_end + 1] + cache_meta + ui[head_end + 1:]
 
 
 # ---------------------------------------------------------------------------
