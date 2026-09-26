@@ -564,6 +564,7 @@ ui = ui.replace(
             refreshButtonConnected.disabled = true;
             refreshButtonConnected.setAttribute('aria-disabled','true');
         }
+"""
 
         if (selectedDeviceConnType === 'USB') {""",
 1,
