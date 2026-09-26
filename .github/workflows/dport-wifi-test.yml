@@ -51,6 +51,10 @@ jobs:
         shell: pwsh
         run: python -m py_compile scripts\apply_wifi_test.py
 
+      - name: Fix startup render flicker
+        shell: pwsh
+        run: python scripts\fix_startup_render.py
+
       - name: Build DPort Wi-Fi test ZIP
         shell: pwsh
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_wifi_test.ps1
@@ -58,8 +62,8 @@ jobs:
       - name: Upload direct package (no nested ZIP)
         uses: actions/upload-artifact@v4
         with:
-          name: DPort-WiFi-Test-6.9.29
-          path: DPort-WiFi-Test-6.9.29/*
+          name: DPort-WiFi-Test-6.9.30
+          path: DPort-WiFi-Test-6.9.30/*
           retention-days: 14
 
       - name: Delete failed Wi-Fi run
