@@ -3,7 +3,8 @@ $ErrorActionPreference = 'Stop'
 
 $version = '6.9.15'
 # Wi-Fi single-workflow test trigger
-# USB disconnect handler regex fix`n# Python patch syntax fix`r`n# Start 6.9.15 build
+# USB disconnect handler regex fix`n# Python patch syntax fix
+# Tolerant USB handler patch`r`n# Start 6.9.15 build
 $sourceZip = 'DPort-source-6.9.0.zip'
 $tmp = Join-Path $env:RUNNER_TEMP 'dport-wifi-clean-source'
 $stage = Join-Path $env:RUNNER_TEMP "DPort-WiFi-Test-$version"
