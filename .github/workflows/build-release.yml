@@ -17,7 +17,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: dport-wifi-one-shot-${{ github.sha }}
+  group: dport-build-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -449,30 +449,5 @@ jobs:
           Write-Host "Published DPort v$v to GitHub Releases."
 
 
-  build-wifi-test:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout Wi-Fi source
-        uses: actions/checkout@v4
-        with:
-          ref: feature/wifi-test-6.9.4
-          fetch-depth: 1
-
-      - name: Build Wi-Fi test ZIP
-        shell: pwsh
-        run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_wifi_test.ps1
-
-      - name: Upload Wi-Fi ZIP
-        uses: actions/upload-artifact@v4
-        with:
-          name: DPort-WiFi-Test-6.9.4
-          path: DPort-WiFi-Test-6.9.4.zip
-          retention-days: 14
 
 # DPort release policy: current stable is 6.9.0; next release is 6.9.1.
-# Wi-Fi source-root detection fix
-# Wi-Fi PowerShell syntax fix
-# Wi-Fi clean build script
-# Candidate array fix
-# Wi-Fi test trigger checkpoint 6.9.4
