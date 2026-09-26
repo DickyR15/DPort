@@ -13,10 +13,11 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
-      - name: Delete all legacy Wi-Fi runs
+      - name: Clean all legacy Wi-Fi runs
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -31,18 +32,53 @@ jobs:
             "DPort Wi-Fi Test 6.9.7"
             "DPort Wi-Fi Test 6.9.8"
             "DPort Wi-Fi Test Build"
+            "DPort Wi-Fi Source Inspect"
             "Wi-Fi Source Inspect"
           )
 
-          gh api --paginate "/repos/$REPO/actions/runs?per_page=100" --jq '.workflow_runs[] | [.id,.name] | @tsv' |
-          while IFS=$'	' read -r run_id run_name; do
-            for wanted in "${names[@]}"; do
-              if [[ "$run_name" == "$wanted" ]]; then
-                echo "Deleting $run_name run $run_id"
+          for attempt in 1 2 3; do
+            echo "Cleanup pass $attempt"
+
+            gh api --paginate "/repos/$REPO/actions/runs?per_page=100" --jq '.workflow_runs[] | [.id,.name,.status,.conclusion] | @tsv' |
+            while IFS=$'	' read -r run_id run_name run_status run_conclusion; do
+              [ -z "$run_id" ] && continue
+
+              matched=false
+              for wanted in "${names[@]}"; do
+                if [[ "$run_name" == "$wanted" ]]; then
+                  matched=true
+                  break
+                fi
+              done
+              [ "$matched" = true ] || continue
+
+              if [[ "$run_status" == "in_progress" || "$run_status" == "queued" || "$run_status" == "waiting" ]]; then
+                echo "Cancelling active Wi-Fi run $run_id ($run_name)"
+                gh api --method POST "/repos/$REPO/actions/runs/$run_id/cancel" || true
+              fi
+            done
+
+            sleep 8
+
+            gh api --paginate "/repos/$REPO/actions/runs?per_page=100" --jq '.workflow_runs[] | [.id,.name,.status,.conclusion] | @tsv' |
+            while IFS=$'	' read -r run_id run_name run_status run_conclusion; do
+              [ -z "$run_id" ] && continue
+
+              matched=false
+              for wanted in "${names[@]}"; do
+                if [[ "$run_name" == "$wanted" ]]; then
+                  matched=true
+                  break
+                fi
+              done
+              [ "$matched" = true ] || continue
+
+              if [[ "$run_id" != "$CURRENT_RUN_ID" ]]; then
+                echo "Deleting Wi-Fi run $run_id ($run_name)"
                 gh api --method DELETE "/repos/$REPO/actions/runs/$run_id" || true
-                break
               fi
             done
           done
 
-          echo "Legacy Wi-Fi run cleanup complete."
+          echo "Deleting this cleanup run itself: $CURRENT_RUN_ID"
+          gh api --method DELETE "/repos/$REPO/actions/runs/$CURRENT_RUN_ID" || true
