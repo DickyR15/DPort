@@ -1,0 +1,48 @@
+name: DPort Wi-Fi History Cleanup
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete all legacy Wi-Fi runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          names=(
+            "DPort Wi-Fi Clean Test 6.9.13"
+            "DPort Wi-Fi Clean Test 6.9.14"
+            "DPort Wi-Fi Normal Package 6.9.11"
+            "DPort Wi-Fi Source Inspect 6.9.13"
+            "DPort Wi-Fi Test 6.9.12"
+            "DPort Wi-Fi Test 6.9.5"
+            "DPort Wi-Fi Test 6.9.7"
+            "DPort Wi-Fi Test 6.9.8"
+            "DPort Wi-Fi Test Build"
+            "Wi-Fi Source Inspect"
+          )
+
+          gh api --paginate "/repos/$REPO/actions/runs?per_page=100" --jq '.workflow_runs[] | [.id,.name] | @tsv' |
+          while IFS=$'	' read -r run_id run_name; do
+            for wanted in "${names[@]}"; do
+              if [[ "$run_name" == "$wanted" ]]; then
+                echo "Deleting $run_name run $run_id"
+                gh api --method DELETE "/repos/$REPO/actions/runs/$run_id" || true
+                break
+              fi
+            done
+          done
+
+          echo "Legacy Wi-Fi run cleanup complete."
