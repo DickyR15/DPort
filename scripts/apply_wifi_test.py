@@ -540,16 +540,6 @@ for forbidden_ui in (
     if forbidden_ui in ui:
         raise SystemExit(f"Updater UI residue remains: {forbidden_ui}")
 
-# ---------------------------------------------------------------------------
-# Runtime guardrails for the existing production UI.
-# This is intentionally appended without changing any existing layout/CSS or
-# rewriting the production device-list code.
-# ---------------------------------------------------------------------------
-body_pos = ui.lower().rfind("</body>")
-if body_pos < 0:
-    raise SystemExit("Could not find </body> in production map.html")
-ui = ui[:body_pos] + wifi_ui_guard + ui[body_pos:]
-
 MAIN.write_text(src, encoding="utf-8")
 MAP.write_text(ui, encoding="utf-8")
 print("Wi-Fi patch applied. Production UI layout preserved; updater UI removed safely.")
