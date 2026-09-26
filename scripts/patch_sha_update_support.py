@@ -28,7 +28,7 @@ text = text.replace(
 
 marker = '''def _github_json(url: str) -> dict[str, Any]:
 '''
-helper = '''def _current_exe_sha256() -> str:
+helper = r'''def _current_exe_sha256() -> str:
     """Return the SHA-256 of the running DPort EXE."""
     if not getattr(sys, "frozen", False):
         return ""
@@ -59,7 +59,6 @@ def _read_release_sha256(url: str) -> str:
         if len(token) == 64 and all(c in "0123456789abcdefABCDEF" for c in token):
             return token.lower()
     raise RuntimeError("Release SHA-256 checksum file is invalid")
-
 
 '''
 if "_current_exe_sha256" not in text and marker in text:
