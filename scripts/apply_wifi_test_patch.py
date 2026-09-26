@@ -12,6 +12,7 @@ if not map_file.exists():
 src = main.read_text(encoding="utf-8")
 ui = map_file.read_text(encoding="utf-8")
 
+# --- Wi-Fi 6.9.3 build trigger / backend transport patch ---
 # --- Backend: enable Wi-Fi transport when USB is available ---
 wifi_state_old = """                            try:
                                 info["wifiState"] = await client.get_enable_wifi_connections()
