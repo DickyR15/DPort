@@ -474,4 +474,5 @@ jobs:
 # Wi-Fi source-root detection fix
 # Wi-Fi PowerShell syntax fix
 # Wi-Fi clean build script
+# Candidate array fix
 # Wi-Fi test trigger checkpoint 6.9.4
