@@ -114,7 +114,7 @@ jobs:
           if ('${{ github.ref_type }}' -eq 'tag') {
             $v = '${{ github.ref_name }}'.TrimStart('v')
           } elseif ('${{ github.event_name }}' -eq 'workflow_dispatch' -and '${{ inputs.version }}' -ne '') {
-            $v = '__INPUTVERSION__'
+            $v = '${{ inputs.version }}'
           } else {
             $raw = Get-Content -LiteralPath 'src/dport_version.py' -Raw
             if ($raw -notmatch 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') {
@@ -193,6 +193,11 @@ jobs:
             Write-Host 'Source package already matches the cleaned build source.'
           }
 
+      - name: Full Python syntax audit
+        shell: pwsh
+        run: |
+          python -m compileall -q src scripts
+          Write-Host 'Full Python syntax audit passed for src/ and scripts.'
       - name: Validate source
         shell: pwsh
         run: |
@@ -303,6 +308,75 @@ jobs:
           if (-not (Test-Path $exe)) { throw "Build output missing: $exe" }
           if ((Get-Item $exe).Length -lt 1000000) { throw 'Build output is unexpectedly small.' }
 
+      - name: Audit packaged pymobiledevice3 content
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $exe = "dist/DPort-$v.exe"
+          $listing = "dist/DPort-$v.archive.txt"
+          if (-not (Get-Command pyi-archive_viewer -ErrorAction SilentlyContinue)) {
+            throw 'pyi-archive_viewer was not found after PyInstaller installation.'
+          }
+          pyi-archive_viewer $exe | Out-File -FilePath $listing -Encoding utf8
+          $archive = Get-Content -LiteralPath $listing -Raw
+          if ($archive -notmatch 'pymobiledevice3') { throw 'Packaged EXE does not contain pymobiledevice3 archive entries.' }
+          if ($archive -notmatch 'pytun_pmd3') { throw 'Packaged EXE does not contain pytun_pmd3 archive entries.' }
+          if ($archive -notmatch 'pyimg4') { throw 'Packaged EXE does not contain pyimg4 archive entries.' }
+          Write-Host 'Packaged dependency audit passed.'
+
+      - name: Simulate DPort updater 6.9.0 -> 6.9.1
+        shell: pwsh
+        run: |
+          @'
+          import importlib.util
+          from pathlib import Path
+
+          root = Path.cwd()
+          mod_path = root / 'src' / 'dport_release_updater.py'
+          spec = importlib.util.spec_from_file_location('dport_release_updater', mod_path)
+          mod = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+
+          fake_release = {
+              'draft': False,
+              'prerelease': False,
+              'tag_name': 'v6.9.1',
+              'html_url': 'https://example.invalid/DPort/releases/tag/v6.9.1',
+              'assets': [
+                  {'name': 'DPort-6.9.1.exe', 'browser_download_url': 'https://example.invalid/DPort-6.9.1.exe'},
+                  {'name': 'DPort-6.9.1.exe.sha256', 'browser_download_url': 'https://example.invalid/DPort-6.9.1.exe.sha256'},
+              ],
+          }
+          mod._github_json = lambda _url: fake_release
+          candidate = mod._get_update_candidate('6.9.0')
+          assert candidate is not None, '6.9.0 should detect fake 6.9.1'
+          assert candidate[0] == '6.9.1', candidate
+          assert mod._get_update_candidate('6.9.1') is None, '6.9.1 must be up to date'
+          print('Updater version logic simulation passed: 6.9.0 -> 6.9.1.')
+
+          req = (root / 'requirements-build.txt').read_text(encoding='utf-8', errors='replace')
+          assert 'pymobiledevice3==11.19.1' in req, req
+          version_text = (root / 'src' / 'dport_version.py').read_text(encoding='utf-8')
+          assert 'DPORT_VERSION="6.9.0"' in version_text, version_text
+          assert (root / 'scripts' / 'finalize_pm3_update.py').exists()
+          '@ | Set-Content audit_updater.py -Encoding utf8
+          python audit_updater.py
+
+      - name: Smoke-test built DPort executable
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $exe = Join-Path $PWD "dist\DPort-$v.exe"
+          if (-not (Test-Path $exe)) { throw "Missing EXE: $exe" }
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 6
+          if ($p.HasExited) {
+            if ($p.ExitCode -ne 0) { throw "DPort exited during smoke test with code $($p.ExitCode)" }
+            Write-Host 'DPort exited cleanly during smoke test.'
+          } else {
+            Stop-Process -Id $p.Id -Force
+            Write-Host 'DPort remained running during smoke test; executable launch passed.'
+          }
       - name: Generate SHA-256
         shell: pwsh
         run: |
