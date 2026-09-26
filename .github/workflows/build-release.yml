@@ -173,10 +173,10 @@ jobs:
           $expected = $line.Trim().Substring('pymobiledevice3=='.Length).Trim()
           if ($pm3 -ne $expected) { throw "Expected pymobiledevice3 $expected, got $pm3" }
 
-      - name: Remove same-version SHA auto-update
+      - name: Enable SHA-aware same-version updater
         shell: pwsh
         run: |
-          python scripts/disable_same_version_sha_update.py
+          python scripts/patch_sha_update_support.py
 
       - name: Fix device refresh state
         shell: pwsh
@@ -226,10 +226,11 @@ jobs:
         run: |
           python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
           $updater = Get-Content -LiteralPath 'src/dport_release_updater.py' -Raw
-          foreach ($forbidden in @('_current_exe_sha256','_read_release_sha256','current_sha256','latest_sha256','same_version_build')) {
-            if ($updater.Contains($forbidden)) { throw "Forbidden same-version SHA updater token remains: $forbidden" }
+          foreach ($requiredToken in @('_current_exe_sha256','_read_release_sha256','current_sha256','latest_sha256','same_version_build')) {
+            if (-not $updater.Contains($requiredToken)) { throw "Required same-version SHA updater token is missing: $requiredToken" }
           }
-          Write-Host 'Updater validation passed: version-only update detection.'
+          if ($updater -notmatch 'latest_key\s*==\s*current_key') { throw 'Same-version SHA comparison logic is missing.' }
+          Write-Host 'Updater validation passed: version + same-version SHA detection.'
 
       - name: Validate final header layout
         shell: pwsh
