@@ -231,26 +231,13 @@ if old_wifi_discovery in src:
 
 # ---------------------------------------------------------------------------
 
+
 # ---------------------------------------------------------------------------
-# UI state fixes. Patch the production functions directly.
-# No high-frequency polling, no document-wide MutationObserver, and no layout
-# rewriting. All selectors below use the actual DPort 6.9.0 IDs (#device and
-# #refresh-device).
+# UI state fixes. Patch the actual production functions directly.
+# No high-frequency polling and no document-wide MutationObserver.
 # ---------------------------------------------------------------------------
 
-def patch_inside_function(text, function_name, patcher):
-    start_i = text.find(function_name)
-    if start_i < 0:
-        return text, False
-    next_i = text.find("\nfunction ", start_i + len(function_name))
-    next_async_i = text.find("\nasync function ", start_i + len(function_name))
-    candidates = [i for i in (next_i, next_async_i) if i >= 0]
-    end_i = min(candidates) if candidates else len(text)
-    block = text[start_i:end_i]
-    new_block, changed = patcher(block)
-    return text[:start_i] + new_block + text[end_i:], changed
-
-# 1) Lock Refresh immediately after a successful device connection.
+# Lock Refresh immediately after successful connection.
 success_marker = """        isDeviceConnected = true;
         stopDeviceAutoDetect();
 """
@@ -264,10 +251,12 @@ success_insert = """        isDeviceConnected = true;
             refreshButtonConnected.setAttribute('data-dport-connected-lock', '1');
         }
 """
-if success_marker in ui and "data-dport-connected-lock" not in ui[ui.find(success_marker):ui.find(success_marker)+800]:
+if success_marker not in ui:
+    raise SystemExit("USB connection success marker not found.")
+if "data-dport-connected-lock" not in ui[ui.find(success_marker):ui.find(success_marker)+800]:
     ui = ui.replace(success_marker, success_insert, 1)
 
-# 2) Manual Refresh: visual + functional guard.
+# Guard the manual Refresh function using the same real #refresh-device control.
 manual_marker = """async function dportRefreshDeviceList() {
     if (typeof isDeviceConnected !== 'undefined' && isDeviceConnected) {
 """
@@ -279,82 +268,91 @@ manual_insert = """async function dportRefreshDeviceList() {
             refreshWhileConnected.setAttribute('aria-disabled', 'true');
         }
 """
-if manual_marker in ui and "refreshWhileConnected" not in ui[ui.find(manual_marker):ui.find(manual_marker)+900]:
+if manual_marker not in ui:
+    raise SystemExit("dportRefreshDeviceList marker not found.")
+if "refreshWhileConnected" not in ui[ui.find(manual_marker):ui.find(manual_marker)+700]:
     ui = ui.replace(manual_marker, manual_insert, 1)
 
-# 3) Connect failure unlocks Refresh.
-def patch_connect_function(block):
-    marker = """            if (connectButton) {
-                connectButton.disabled = false;
-            }
+# On connect error, restore Refresh.
+error_marker = """            // Stop processing the rest of the JavaScript
+            return;
 """
-    if marker not in block or "refreshButtonConnectError" in block:
-        return block, False
-    repl = marker + """
-            var refreshButtonConnectError = document.getElementById('refresh-device');
+error_insert = """            var refreshButtonConnectError = document.getElementById('refresh-device');
             if (refreshButtonConnectError) {
                 refreshButtonConnectError.disabled = false;
                 refreshButtonConnectError.removeAttribute('aria-disabled');
                 refreshButtonConnectError.removeAttribute('data-dport-connected-lock');
             }
+
+            // Stop processing the rest of the JavaScript
+            return;
 """
-    return block.replace(marker, repl, 1), True
+if error_marker in ui and "refreshButtonConnectError" not in ui:
+    ui = ui.replace(error_marker, error_insert, 1)
 
-ui, _ = patch_inside_function(ui, "function connectDevice()", patch_connect_function)
-
-# 4) Physical USB removal: unlock Refresh if the source has a refresh reset.
-def patch_usb_remove(block):
-    marker = "var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');"
-    if marker in block and "removeAttribute('data-dport-connected-lock')" not in block:
-        block = block.replace(
-            """        refreshButtonAfterUsbRemoval.disabled = false;
-        refreshButtonAfterUsbRemoval.removeAttribute('aria-disabled');""",
-            """        refreshButtonAfterUsbRemoval.disabled = false;
+# On physical USB removal, restore Refresh.
+remove_marker = """    var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
+    if (refreshButtonAfterUsbRemoval) {
+        refreshButtonAfterUsbRemoval.disabled = false;
         refreshButtonAfterUsbRemoval.removeAttribute('aria-disabled');
-        refreshButtonAfterUsbRemoval.removeAttribute('data-dport-connected-lock');""",
-            1,
-        )
-    return block, True
+    }
+"""
+remove_insert = """    var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
+    if (refreshButtonAfterUsbRemoval) {
+        refreshButtonAfterUsbRemoval.disabled = false;
+        refreshButtonAfterUsbRemoval.removeAttribute('aria-disabled');
+        refreshButtonAfterUsbRemoval.removeAttribute('data-dport-connected-lock');
+    }
+"""
+if remove_marker in ui and "data-dport-connected-lock" not in ui[ui.find(remove_marker):ui.find(remove_marker)+500]:
+    ui = ui.replace(remove_marker, remove_insert, 1)
 
-ui, _ = patch_inside_function(ui, "function handleUsbCableRemoved()", patch_usb_remove)
-
-# 5) Explicit disconnect: unlock Refresh in the disconnect function itself.
-def patch_disconnect(block):
+# Explicit disconnect: restore Refresh where the production disconnect routine
+# already restores the Connect button.
+disconnect_start = ui.find("function disconnectDevice()")
+disconnect_end = ui.find("
+    async function handleFuelTypeChange()", disconnect_start)
+if disconnect_start >= 0 and disconnect_end > disconnect_start:
+    block = ui[disconnect_start:disconnect_end]
     marker = """        if (connectButton) {
             connectButton.disabled = false;
         }
 """
-    if marker not in block or "refreshButtonAfterDisconnect" in block:
-        return block, False
-    repl = marker + """
+    if marker in block and "refreshButtonAfterDisconnect" not in block:
+        block = block.replace(
+            marker,
+            marker + """
         var refreshButtonAfterDisconnect = document.getElementById('refresh-device');
         if (refreshButtonAfterDisconnect) {
             refreshButtonAfterDisconnect.disabled = false;
             refreshButtonAfterDisconnect.removeAttribute('aria-disabled');
             refreshButtonAfterDisconnect.removeAttribute('data-dport-connected-lock');
         }
-"""
-    return block.replace(marker, repl, 1), True
+""",
+            1,
+        )
+        ui = ui[:disconnect_start] + block + ui[disconnect_end:]
 
-ui, _ = patch_inside_function(ui, "function disconnectDevice()", patch_disconnect)
-
-# 6) Preserve Wi-Fi entries inside populateDeviceList(). This is the root UI
-#    producer; keeping the cache here prevents Wi-Fi from disappearing during
-#    USB re-enumeration instead of trying to repaint it later.
+# Preserve Network/Wi-Fi options inside populateDeviceList().
 pop_start = ui.find("async function populateDeviceList(options)")
-if pop_start >= 0:
-    pop_end_candidates = [
-        i for i in (
-            ui.find("\nasync function ", pop_start + 20),
-            ui.find("\nfunction ", pop_start + 20),
-        ) if i >= 0
-    ]
-    pop_end = min(pop_end_candidates) if pop_end_candidates else len(ui)
-    pop = ui[pop_start:pop_end]
+if pop_start < 0:
+    raise SystemExit("populateDeviceList() not found.")
+pop_end_candidates = [
+    i for i in (
+        ui.find("
+async function ", pop_start + 20),
+        ui.find("
+function ", pop_start + 20),
+    ) if i >= 0
+]
+pop_end = min(pop_end_candidates) if pop_end_candidates else len(ui)
+pop = ui[pop_start:pop_end]
 
-    clear_i = pop.find("deviceDropdown.innerHTML = '';")
-    if clear_i >= 0 and "cachedNetworkOptions" not in pop:
-        cache_code = """        // Preserve Network/Wi-Fi options before rebuilding the USB list.
+clear_i = pop.find("deviceDropdown.innerHTML = '';")
+if clear_i < 0:
+    raise SystemExit("populateDeviceList() clear not found.")
+
+cache_code = """        // Preserve the last known Network/Wi-Fi option before rebuilding the list.
         const cachedNetworkOptions = [];
         Array.from(deviceDropdown.options).forEach(function(option){
             try {
@@ -382,12 +380,15 @@ if pop_start >= 0:
         });
 
 """
-        pop = pop[:clear_i] + cache_code + pop[clear_i:]
+if "const cachedNetworkOptions" not in pop:
+    pop = pop[:clear_i] + cache_code + pop[clear_i:]
 
-    devices_info_i = pop.find("deviceDropdown.devicesInfo = devicesInfo;")
-    if devices_info_i >= 0 and "A /list_devices response can be USB-only" not in pop:
-        merge_code = """        // A /list_devices response can be USB-only while Bonjour is between
-        // advertisements. Keep the last known Wi-Fi entry visible.
+info_i = pop.find("deviceDropdown.devicesInfo = devicesInfo;")
+if info_i < 0:
+    raise SystemExit("populateDeviceList() devicesInfo marker not found.")
+
+merge_code = """        // Keep the last known Wi-Fi entry when this enumeration response is
+        // temporarily USB-only while Bonjour/mobdev2 is between advertisements.
         const hasNetworkOption = Array.from(deviceDropdown.options).some(function(option){
             try {
                 const info = JSON.parse(option.value || '{}');
@@ -420,35 +421,32 @@ if pop_start >= 0:
         }
 
 """
-        pop = pop[:devices_info_i] + merge_code + pop[devices_info_i:]
+if "Keep the last known Wi-Fi entry" not in pop:
+    pop = pop[:info_i] + merge_code + pop[info_i:]
 
-    ui = ui[:pop_start] + pop + ui[pop_end:]
-else:
-    raise SystemExit("populateDeviceList() not found.")
+ui = ui[:pop_start] + pop + ui[pop_end:]
 
-# 7) Do not let an empty USB presence snapshot clear a live Wi-Fi option.
+# Do not clear Wi-Fi because USB presence temporarily reports empty.
 auto_start = ui.find("async function checkDeviceAutoDetect()")
 if auto_start >= 0:
-    auto_end = ui.find("\nfunction startDeviceAutoDetect()", auto_start)
+    auto_end = ui.find("
+function startDeviceAutoDetect()", auto_start)
     auto = ui[auto_start:auto_end if auto_end >= 0 else len(ui)]
     empty_start = auto.find("if (rawIds.length === 0) {")
     if empty_start >= 0:
-        empty_end = auto.find("\n        }", empty_start)
-        # Locate the end of the whole if-block by brace counting.
-        brace_pos = auto.find("{", empty_start)
+        brace = auto.find("{", empty_start)
         depth = 0
-        pos = brace_pos
-        while pos >= 0 and pos < len(auto):
+        end_block = -1
+        for pos in range(brace, len(auto)):
             if auto[pos] == "{":
                 depth += 1
             elif auto[pos] == "}":
                 depth -= 1
                 if depth == 0:
-                    empty_end = pos + 1
+                    end_block = pos + 1
                     break
-            pos += 1
-        if depth == 0 and empty_end > empty_start:
-            old_block = auto[empty_start:empty_end]
+        if end_block > empty_start:
+            old_block = auto[empty_start:end_block]
             if "hasNetworkEntry" not in old_block:
                 new_block = """if (rawIds.length === 0) {
             const hasNetworkEntry = Array.from(deviceDropdown.options).some(function(option){
@@ -493,11 +491,10 @@ if auto_start >= 0:
             }
             return;
         }"""
-                auto = auto[:empty_start] + new_block + auto[empty_end:]
+                auto = auto[:empty_start] + new_block + auto[end_block:]
                 ui = ui[:auto_start] + auto + ui[auto_end:]
 
-# Build-time sanity checks use actual production identifiers, not localized
-# text, to avoid PowerShell encoding issues.
+# Build-time sanity checks use actual production element IDs.
 for required_ui in (
     'id="device"',
     'id="refresh-device"',
