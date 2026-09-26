@@ -33,11 +33,11 @@ jobs:
         shell: pwsh
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_wifi_test.ps1
 
-      - name: Upload normal ZIP
+      - name: Upload direct package (no nested ZIP)
         uses: actions/upload-artifact@v4
         with:
-          name: DPort-WiFi-Test
-          path: DPort-WiFi-Test-6.9.15.zip
+          name: DPort-WiFi-Test-6.9.16
+          path: DPort-WiFi-Test-6.9.16/*
           retention-days: 14
 
       - name: Delete failed Wi-Fi run
