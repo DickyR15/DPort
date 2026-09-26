@@ -88,81 +88,9 @@ if disabled not in src:
 src = src.replace(disabled, discovery, 1)
 
 # iOS 17.4+ Wi-Fi tunnel: Lockdown over TCP -> CoreDeviceProxy -> TCP tunnel.
-start = src.find("async def start_wifi_tcp_tunnel() -> None:")
-end = src.find("\n\nasync def start_wifi_quic_tunnel", start)
-if start < 0 or end < 0:
-    raise SystemExit("Wi-Fi TCP tunnel function not found.")
-
-# Keep the proven baseline implementation from DPort-source-6.9.0:
-# mobdev2 Bonjour -> paired TcpLockdownClient -> CoreDeviceProxy -> TCP tunnel.
-# Do NOT replace this with create_using_tcp() or create_using_usbmux(Network);
-# those paths do not carry the mobdev2-resolved Wi-Fi lockdown endpoint.
-tcp = '''async def start_wifi_tcp_tunnel() -> None:
-    """Start the official iOS 17.4+ CoreDeviceProxy TCP tunnel over mobdev2 Wi-Fi."""
-    logger.warning("Start Wi-Fi TCP tunnel via mobdev2 + CoreDeviceProxy")
-    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_address
-
-    lockdown = None
-    service = None
-    try:
-        # Resolve and handshake the actual paired Wi-Fi lockdown service in
-        # THIS event loop. Do not reuse the discovery client's loop-bound object
-        # from the Flask request thread.
-        home = get_home_folder()
-        async for ip, candidate in get_mobdev2_lockdowns(
-            udid=udid,
-            pair_records=home,
-            only_paired=True,
-            timeout=timeout,
-        ):
-            logger.info(
-                f"mobdev2 tunnel candidate: {ip}, "
-                f"udid={candidate.udid}, "
-                f"iOS={candidate.product_version}"
-            )
-            wifi_address = str(ip)
-            lockdown = candidate
-            break
-
-        if lockdown is None:
-            raise RuntimeError(
-                f"找不到已配對的 Wi-Fi Lockdown：{udid}"
-            )
-
-        # CoreDeviceProxy is the iOS 17.4+ tunnel entry point.
-        service = await CoreDeviceTunnelProxy.create(lockdown)
-        logger.info("CoreDeviceProxy service created over Wi-Fi Lockdown")
-
-        async with service.start_tcp_tunnel() as tunnel_result:
-            resume_remoted_if_required()
-
-            rsd_host = tunnel_result.address
-            rsd_port = str(tunnel_result.port)
-
-            logger.info(
-                f"Wi-Fi RSD tunnel ready: "
-                f"address={rsd_host}, port={rsd_port}, "
-                f"interface={tunnel_result.interface}"
-            )
-
-            while not terminate_tunnel_thread:
-                await asyncio.sleep(0.5)
-
-    finally:
-        resume_remoted_if_required()
-
-        if service is not None:
-            try:
-                await service.close()
-            except Exception:
-                pass
-        elif lockdown is not None:
-            try:
-                await lockdown.close()
-            except Exception:
-                pass
-'''
-
+# Keep the baseline DPort 6.9.0 Wi-Fi tunnel implementation unchanged.
+# It already uses get_mobdev2_lockdowns() in the tunnel's own event loop,
+# returns a paired TcpLockdownClient, then creates CoreDeviceTunnelProxy.
 # Fail fast when the Wi-Fi tunnel worker reports an error.
 start = src.find("def check_rsd_data():")
 end = src.find("\n\ndef connect_usb(data):", start)
@@ -203,34 +131,8 @@ src = src.replace(
     1,
 )
 
-# Use the selected Wi-Fi endpoint directly. Do not perform a second discovery
-# during connect, which can race the UI selection.
-old_wifi_discovery = '''            try:
-                devices = get_wifi_with_retry()
-                logger.info(f"Connect Wifi Devices: {devices}")
-                logger.info(f"Wifi Address:  {wifi_address}")
-            except RuntimeError as e:
-                error_message = str(e)
-                logger.error(f"Error: {error_message}")
-                return jsonify({'error': 'No Devices Found', 'details': error_message}), 404
-'''
-if old_wifi_discovery in src:
-    src = src.replace(old_wifi_discovery, '''            if not wifi_address:
-                return jsonify({
-                    'error': 'Wi-Fi 裝置沒有有效的 IP 位址',
-                    'connection_retryable': True
-                }), 400
-
-            logger.info(
-                f"Using selected Wi-Fi endpoint directly: "
-                f"{wifi_address}:{wifi_port}"
-            )
-''', 1)
-
-
-# ---------------------------------------------------------------------------
-
-
+# Keep the original connect_wifi() discovery/validation flow from DPort 6.9.0.
+# It calls get_wifi_with_retry(), then starts the Wi-Fi tunnel thread.
 # ---------------------------------------------------------------------------
 # UI state fixes. Apply only exact production-source substitutions.
 # ---------------------------------------------------------------------------
