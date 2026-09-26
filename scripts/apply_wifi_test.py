@@ -645,6 +645,9 @@ handle_new = """function handleUsbCableRemoved() {
     displayToast("USB 已拔除");
 }
 """
+ui, handle_count = handle_pattern.subn(handle_new, ui, count=1)
+if handle_count != 1:
+    raise SystemExit("USB disconnect handler replacement failed.")
 
 # Don't build if an updater residue is present.
 for forbidden in (
