@@ -227,11 +227,12 @@ jobs:
         run: |
           python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
           $updater = Get-Content -LiteralPath 'src/dport_release_updater.py' -Raw
-          foreach ($requiredToken in @('_current_exe_sha256','_read_release_sha256','current_sha256','latest_sha256','same_version_build')) {
-            if (-not $updater.Contains($requiredToken)) { throw "Required same-version SHA updater token is missing: $requiredToken" }
+          foreach ($requiredToken in @('_current_exe_sha256','_release_exe_sha256','current_sha256')) {
+            if (-not $updater.Contains($requiredToken)) { throw "Required SHA updater token is missing: $requiredToken" }
           }
           if ($updater -notmatch '_get_update_candidate\(current:\s*str,\s*current_sha256') { throw 'SHA-aware candidate signature is missing.' }
-          Write-Host 'Updater validation passed: version + same-version SHA detection.'
+          if ($updater -notmatch '_get_update_candidate_version_only') { throw 'Original version-only candidate function was not preserved.' }
+          Write-Host 'Updater validation passed: normal version updates + same-version SHA updates.'
 
       - name: Validate final header layout
         shell: pwsh
