@@ -1,4 +1,5 @@
 name: DPort Wi-Fi ZIP Build
+# Trigger checkpoint: Wi-Fi discovery patch 6.9.4
 
 on:
   push:
