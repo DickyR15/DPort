@@ -48,7 +48,7 @@ body{
 <style id="dport-prepaint-reveal-style">
 html.dport-ready body{visibility:visible!important;}
 </style>''';
- not in html and '<head' in html:
+if 'id="dport-prepaint-critical"' not in html and '<head' in html:
     html = re.sub(r'(<head[^>]*>)', r'\1\n' + critical_prepaint, html, count=1, flags=re.I)
 elif 'id="dport-prepaint-critical"' in html:
     pass
