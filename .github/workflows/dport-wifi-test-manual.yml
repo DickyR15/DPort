@@ -1,11 +1,14 @@
 name: DPort Wi-Fi Test Build (Manual)
 
 on:
+  push:
+    branches:
+      - 'main'
   workflow_dispatch:
     inputs:
       ref:
         description: 'Wi-Fi test branch'
-        required: true
+        required: false
         default: 'feature/wifi-test-6.9.4'
 
 permissions:
@@ -23,7 +26,7 @@ jobs:
       - name: Checkout Wi-Fi test branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || 'feature/wifi-test-6.9.4' }}
           fetch-depth: 1
 
       - name: Restore v6.9.0 source
