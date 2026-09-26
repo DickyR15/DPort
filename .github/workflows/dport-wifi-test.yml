@@ -1,0 +1,48 @@
+name: DPort Wi-Fi Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feature/wifi-test'
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: dport-wifi-test
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Wi-Fi source
+        uses: actions/checkout@v4
+        with:
+          ref: feature/wifi-test
+          fetch-depth: 1
+
+      - name: Build DPort Wi-Fi test ZIP
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_wifi_test.ps1
+
+      - name: Upload normal ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-WiFi-Test
+          path: DPort-WiFi-Test-6.9.15.zip
+          retention-days: 14
+
+      - name: Delete failed Wi-Fi run
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          echo "Deleting failed Wi-Fi run $RUN_ID"
+          gh api --method DELETE "/repos/$REPO/actions/runs/$RUN_ID" || true
