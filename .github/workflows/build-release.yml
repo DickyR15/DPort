@@ -229,7 +229,7 @@ jobs:
           foreach ($requiredToken in @('_current_exe_sha256','_read_release_sha256','current_sha256','latest_sha256','same_version_build')) {
             if (-not $updater.Contains($requiredToken)) { throw "Required same-version SHA updater token is missing: $requiredToken" }
           }
-          if ($updater -notmatch 'latest_key\s*==\s*current_key') { throw 'Same-version SHA comparison logic is missing.' }
+          if ($updater -notmatch '_get_update_candidate\(current:\s*str,\s*current_sha256') { throw 'SHA-aware candidate signature is missing.' }
           Write-Host 'Updater validation passed: version + same-version SHA detection.'
 
       - name: Validate final header layout
