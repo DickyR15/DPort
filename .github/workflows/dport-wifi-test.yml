@@ -35,7 +35,10 @@ jobs:
           $main = Get-ChildItem $d -Filter main.py -Recurse | Select-Object -First 1
           if (-not $main) { throw 'main.py not found' }
           Copy-Item $main.FullName 'wifi-debug-main.py' -Force
-          Compress-Archive -Path 'wifi-debug-main.py' -DestinationPath 'wifi-debug-source.zip' -Force
+          $map = Get-ChildItem $d -Filter map.html -Recurse | Select-Object -First 1
+          if (-not $map) { throw 'map.html not found' }
+          Copy-Item $map.FullName 'wifi-debug-map.html' -Force
+          Compress-Archive -Path 'wifi-debug-main.py','wifi-debug-map.html' -DestinationPath 'wifi-debug-source.zip' -Force
 
       - name: Upload production source diagnostics
         uses: actions/upload-artifact@v4
