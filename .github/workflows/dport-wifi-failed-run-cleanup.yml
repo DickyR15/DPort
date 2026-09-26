@@ -1,4 +1,5 @@
 name: DPort Wi-Fi Failed Run Cleanup
+# One-time historical cleanup trigger
 
 on:
   push:
