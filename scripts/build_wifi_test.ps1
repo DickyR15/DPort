@@ -28,6 +28,9 @@ Copy-Item (Join-Path $root 'src\*') src -Recurse -Force
 python scripts\apply_wifi_test.py
 if ($LASTEXITCODE -ne 0) { throw 'Wi-Fi patch failed.' }
 
+python scripts\fix_startup_render.py
+if ($LASTEXITCODE -ne 0) { throw 'Startup render gate patch failed.' }
+
 foreach ($file in @('src\dport_release_updater.py','src\dport_updater_helper.py')) {
     if (Test-Path $file) { Remove-Item $file -Force }
 }
