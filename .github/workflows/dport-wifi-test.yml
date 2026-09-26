@@ -25,6 +25,25 @@ jobs:
           ref: feature/wifi-test
           fetch-depth: 1
 
+      - name: Extract production source for Wi-Fi diagnostics
+        shell: pwsh
+        run: |
+          $d = Join-Path $env:RUNNER_TEMP 'dport-source-debug'
+          if (Test-Path $d) { Remove-Item $d -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $d | Out-Null
+          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $d -Force
+          $main = Get-ChildItem $d -Filter main.py -Recurse | Select-Object -First 1
+          if (-not $main) { throw 'main.py not found' }
+          Copy-Item $main.FullName 'wifi-debug-main.py' -Force
+          Compress-Archive -Path 'wifi-debug-main.py' -DestinationPath 'wifi-debug-source.zip' -Force
+
+      - name: Upload production source diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-WiFi-Source-Debug
+          path: wifi-debug-source.zip
+          retention-days: 2
+
       - name: Validate Wi-Fi patch syntax
         shell: pwsh
         run: python -m py_compile scripts\apply_wifi_test.py
