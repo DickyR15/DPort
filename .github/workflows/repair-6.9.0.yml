@@ -1,6 +1,9 @@
 name: Repair DPort 6.9.0
 
 on:
+  push:
+    paths:
+      - '.github/workflows/repair-6.9.0.yml'
   workflow_dispatch:
 
 permissions:
