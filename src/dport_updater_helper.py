@@ -85,7 +85,9 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     parser.add_argument("--exe-url", required=True)
     parser.add_argument("--sha256-url")
-    parser.add_argument("--args-json", default="[]")
+    parser.add_argument("--args-json", default=None)
+    parser.add_argument("--port", type=int, default=None)
+    parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
 
     target = Path(args.target).resolve()
@@ -94,9 +96,16 @@ def main() -> int:
     work_dir = target.parent / ".dport-update"
     work_dir.mkdir(parents=True, exist_ok=True)
     downloaded = work_dir / f"DPort-{args.version}-download-{os.getpid()}.exe"
-    relaunch_args = json.loads(args.args_json)
-    if not isinstance(relaunch_args, list):
+    if args.args_json:
+        relaunch_args = json.loads(args.args_json)
+        if not isinstance(relaunch_args, list):
+            relaunch_args = []
+    else:
         relaunch_args = []
+        if args.port is not None:
+            relaunch_args.extend(["--port", str(args.port)])
+        if args.no_browser:
+            relaunch_args.append("--no-browser")
 
     def relaunch() -> None:
         env = os.environ.copy()
