@@ -59,7 +59,7 @@ jobs:
           if ($helper -notmatch 'def relaunch') { throw "Standalone updater is missing relaunch logic." }
           if ($repair -notmatch 'DPort-Updater\.exe') { throw "DPort release updater does not reference standalone helper." }
           if ($repair -notmatch 'subprocess\.Popen\(') { throw "DPort release updater must launch standalone helper via subprocess.Popen." }
-          if ($repair -notmatch 'CREATE_BREAKAWAY_FROM_JOB') { throw "DPort release updater must detach helper from parent job." }
+          if ($repair -notmatch '0x01000000') { throw "DPort release updater must request CREATE_BREAKAWAY_FROM_JOB (0x01000000)." }
           if ($repair -match 'os\.startfile\(str\(helper\)') { throw "Shell-based helper launch must not be used." }
           if ($repair -match 'DPort-update\.ps1') { throw "Legacy DPort-update.ps1 updater must not be generated." }
           if ($repair -notmatch 'window\.exitApp\(true\)') { throw "Update dialog must reuse the Leave shutdown path." }
