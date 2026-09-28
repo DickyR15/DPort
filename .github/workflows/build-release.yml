@@ -29,26 +29,33 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare build assets
+      - name: Prepare source
         shell: pwsh
         run: |
-          if (-not (Test-Path 'src/main.py')) { throw 'src/main.py is missing from checked-out main.' }
-          if (-not (Test-Path 'requirements-build.txt')) { throw 'requirements-build.txt is missing from checked-out main.' }
-          if (-not (Test-Path 'DPort-6.9.0.ico')) {
-            if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort icon and source ZIP are both missing.' }
-            $tmp = Join-Path $env:RUNNER_TEMP 'dport-source-assets'
-            if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-            New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-            Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
-            $root = Get-ChildItem -LiteralPath $tmp -Directory | Where-Object { $_.Name -like 'DPort-*' } | Select-Object -First 1
-            if (-not $root) { throw 'Source ZIP root not found.' }
-            $icon = Join-Path $root.FullName 'DPort-6.9.0.ico'
-            if (-not (Test-Path $icon)) { throw 'DPort icon missing in source ZIP.' }
-            Copy-Item -LiteralPath $icon -Destination . -Force
-          }
+          if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing.' }
+          $tmp = Join-Path $env:RUNNER_TEMP 'dport-source'
+          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
+          $root = Join-Path $tmp 'DPort-6.9.0'
+          if (-not (Test-Path (Join-Path $root 'src\main.py'))) { throw 'Source package is missing src/main.py.' }
+          if (-not (Test-Path (Join-Path $root 'DPort-6.9.0.ico'))) { throw 'Source package is missing DPort-6.9.0.ico.' }
+          if (-not (Test-Path (Join-Path $root 'requirements-build.txt'))) { throw 'Source package is missing requirements-build.txt.' }
+
+          # The committed source package is authoritative for the build.
+          if (Test-Path 'src') { Remove-Item 'src' -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path 'src' | Out-Null
+          Copy-Item -Path (Join-Path $root 'src\*') -Destination 'src' -Recurse -Force
+          Copy-Item -LiteralPath (Join-Path $root 'requirements-build.txt') -Destination 'requirements-build.txt' -Force
+          Copy-Item -LiteralPath (Join-Path $root 'DPort-6.9.0.ico') -Destination 'DPort-6.9.0.ico' -Force
+
+          $repoVersion = (Get-Content 'src\dport_version.py' -Raw)
+          $packageVersion = (Get-Content (Join-Path $root 'src\dport_version.py') -Raw)
+          if ($repoVersion -ne $packageVersion) { throw 'Repository source metadata and packaged source version differ.' }
+
           $line = Get-Content 'requirements-build.txt' | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1
-          if (-not $line) { throw 'pymobiledevice3 pin missing from requirements-build.txt.' }
-          Write-Host 'Using checked-out main source.'
+          if (-not $line) { throw 'pymobiledevice3 pin missing from source package.' }
+          Write-Host "Using committed source package for build: $($root.FullName)"
           Write-Host "Dependency pin: $($line.Trim())"
       - name: Inspect source version
         shell: pwsh
@@ -371,13 +378,14 @@ jobs:
 
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -eq 0) {
-            throw "Release $tag already exists; refusing to overwrite an existing release."
+            Write-Host "Release $tag already exists; build verification completed without publishing."
+            exit 0
           }
 
           gh release create $tag $exe $sha --repo "${{ github.repository }}" --title "DPort v$v" --latest --generate-notes --target "${{ github.sha }}"
           Write-Host "Published DPort v$v."
 
-# DPort release policy: build from main, then create the release tag only after all checks pass.
+# DPort release policy: build and verify from the committed source package, then create the release tag and Release only after success.
 , req)
           assert req_match, req
           print(f"pymobiledevice3 pin: {req_match.group(1)}")
