@@ -236,7 +236,9 @@ def request_update() -> dict[str, Any]:
     if getattr(sys, "frozen", False):
         current_exe = current_exe.parent / f"DPort-{VERSION}.exe"
 
-    update_dir = current_exe.parent / ".dport-update"
+    windows_temp = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Temp"
+    windows_temp.mkdir(parents=True, exist_ok=True)
+    update_dir = windows_temp / ".dport-update"
     update_dir.mkdir(parents=True, exist_ok=True)
     helper = update_dir / "DPort-Updater.exe"
     helper_sha = update_dir / "DPort-Updater.exe.sha256"
@@ -572,14 +574,15 @@ UPDATE_UI = r'''
           if(title) title.textContent='DPort 正在更新';
           var msg=document.getElementById('dport-update-message');
           if(msg) msg.textContent='正在關閉目前版本並啟動 DPort '+result.version+'…';
-          // Reuse the same /exit route used by the top-right 「離開」 button.
+          // Use the same /exit route as the top-right 「離開」 button,
+          // but give the standalone updater time to start first.
           setTimeout(function(){
             if(typeof window.exitApp === 'function'){
               window.exitApp(true);
             }else if(navigator.sendBeacon){
               navigator.sendBeacon('/exit', JSON.stringify({reason:'update'}));
             }
-          },120);
+          },800);
           waitForRestart();
         }else{
           if(title) title.textContent='DPort 更新失敗';
