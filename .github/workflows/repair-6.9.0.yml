@@ -132,14 +132,6 @@ jobs:
           $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
           if ($LASTEXITCODE -ne 0) { throw 'pymobiledevice3 metadata lookup failed.' }
           if ($pm3 -ne '11.19.4') { throw "Expected pymobiledevice3 11.19.4, got $pm3" }
-          python -m pip install -r requirements-build-ci.txt
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to install build requirements for DPort 6.9.1.' }
-          python -m pip install --index-url https://pypi.org/simple pyimg4==0.8.8
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to install pyimg4 0.8.8.' }
-          python -m pip install lzfse==0.4.2
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to install lzfse 0.4.2.' }
-          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
-          if ($LASTEXITCODE -ne 0) { throw 'pymobiledevice3 metadata lookup failed.' }
           $vi = @(
             '# UTF-8',
             'VSVersionInfo(',
