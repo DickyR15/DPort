@@ -35,48 +35,39 @@ jobs:
         shell: pwsh
         run: |
           git status --short
-          if (-not (Test-Path 'DPort-source-6.9.0.zip')) {
-            throw 'DPort-source-6.9.0.zip is missing from the checked-out source.'
+          if (-not (Test-Path 'src/main.py')) { throw 'src/main.py is missing from checked-out source.' }
+          if (-not (Test-Path 'requirements-build.txt')) { throw 'requirements-build.txt is missing from checked-out source.' }
+
+          if (-not (Test-Path 'DPort-6.9.0.ico')) {
+            if (-not (Test-Path 'DPort-source-6.9.0.zip')) {
+              throw 'DPort icon and source package are both missing.'
+            }
+
+            $tmp = Join-Path $env:RUNNER_TEMP 'dport-source-assets'
+            if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+            New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+            Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
+
+            $sourceRoot = Get-ChildItem -LiteralPath $tmp -Directory |
+              Where-Object { $_.Name -like 'DPort-*' } |
+              Select-Object -First 1
+
+            if (-not $sourceRoot) { throw 'Could not locate DPort source root in source ZIP.' }
+
+            foreach ($item in @('DPort-6.9.0.ico','build_final_live.bat','python_runtime.txt','DPort_CHANGELOG.txt','version_info.txt')) {
+              $p = Join-Path $sourceRoot.FullName $item
+              if (Test-Path $p) { Copy-Item -LiteralPath $p -Destination . -Force }
+            }
           }
 
-          # The checked-out main branch is the authoritative source of code,
-          # version, and dependencies. The ZIP is used only for legacy build
-          # assets (icon, batch file, metadata templates).
-          $tmp = Join-Path $env:RUNNER_TEMP 'dport-source-assets'
-          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
-
-          $sourceRoot = Get-ChildItem -LiteralPath $tmp -Directory |
-            Where-Object { $_.Name -like 'DPort-*' } |
-            Select-Object -First 1
-          if (-not $sourceRoot) {
-            throw 'Could not locate DPort source root inside DPort-source-6.9.0.zip.'
-          }
-
-          Write-Host "Using checked-out main source for build: src/"
-          Write-Host "Using checked-out main requirements: requirements-build.txt"
-
-          $copy = @('DPort-6.9.0.ico','build_final_live.bat','python_runtime.txt','DPort_CHANGELOG.txt','version_info.txt')
-          foreach ($item in $copy) {
-            $p = Join-Path $sourceRoot.FullName $item
-            if (Test-Path $p) { Copy-Item -LiteralPath $p -Destination . -Force }
-          }
-
-          if (-not (Test-Path 'src/main.py')) {
-            Write-Host 'Checked-out source tree:'
-            Get-ChildItem -Recurse -Depth 3 'src' | Select-Object FullName
-            throw 'Checked-out source is missing src/main.py.'
-          }
-          if (-not (Test-Path 'requirements-build.txt')) {
-            throw 'Checked-out source is missing requirements-build.txt.'
-          }
+          if (-not (Test-Path 'DPort-6.9.0.ico')) { throw 'DPort-6.9.0.ico is missing.' }
 
           $reqLine = Get-Content 'requirements-build.txt' |
             Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } |
             Select-Object -First 1
-          if (-not $reqLine) { throw 'Could not find pymobiledevice3 pin in checked-out requirements-build.txt.' }
-          Write-Host "Build dependency pin: $($reqLine.Trim())"
+          if (-not $reqLine) { throw 'pymobiledevice3 pin missing from requirements-build.txt.' }
+          Write-Host "Using checked-out main source."
+          Write-Host "Dependency pin: $($reqLine.Trim())"
 
       - name: Inspect source version
         shell: pwsh
@@ -187,23 +178,28 @@ jobs:
         run: |
           python scripts/fix_startup_render.py
 
-      - name: Sync clean DPort source package
+      - name: Sync DPort source package
         if: github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
           $sourceRoot = Join-Path $env:RUNNER_TEMP 'dport-source\DPort-6.9.0'
           if (-not (Test-Path $sourceRoot)) {
-            throw "Restored source root missing: $sourceRoot"
+            New-Item -ItemType Directory -Force -Path $sourceRoot | Out-Null
           }
 
-          # Make the committed source package mirror the exact source and
-          # dependency files that were actually checked out and built.
           $sourceSrc = Join-Path $sourceRoot 'src'
           if (Test-Path $sourceSrc) { Remove-Item $sourceSrc -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $sourceSrc | Out-Null
           Copy-Item -Path 'src\*' -Destination $sourceSrc -Recurse -Force
 
-          foreach ($item in @('requirements-build.txt','build_final_live.bat','python_runtime.txt','DPort_CHANGELOG.txt','version_info.txt','DPort-6.9.0.ico')) {
+          foreach ($item in @(
+            'requirements-build.txt',
+            'build_final_live.bat',
+            'python_runtime.txt',
+            'DPort_CHANGELOG.txt',
+            'version_info.txt',
+            'DPort-6.9.0.ico'
+          )) {
             if (Test-Path $item) {
               Copy-Item -LiteralPath $item -Destination $sourceRoot -Force
             }
@@ -218,11 +214,12 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add DPort-source-6.9.0.zip
+
           if (-not (git diff --cached --quiet)) {
             git commit -m 'chore: sync DPort source package [skip ci]'
             git push origin HEAD:main
           } else {
-            Write-Host 'Source package already matches the cleaned build source.'
+            Write-Host 'Source package already matches the checked-out build source.'
           }
 
       - name: Full Python syntax audit
@@ -362,7 +359,6 @@ jobs:
         run: |
           @'
           import importlib.util
-          import re
           from pathlib import Path
 
           root = Path.cwd()
@@ -388,15 +384,82 @@ jobs:
           assert mod._get_update_candidate('6.9.1') is None, '6.9.1 must be up to date'
           print('Updater version logic simulation passed: 6.9.0 -> 6.9.1.')
 
+          import re
+
           req = (root / 'requirements-build.txt').read_text(encoding='utf-8', errors='replace')
-          req_match = re.search(r'(?m)^\s*pymobiledevice3==([^\s#]+)\s*$', req)
+          req_match = re.search(r'(?m)^\\s*pymobiledevice3==([^\\s#]+)\\s*          '@ | Set-Content audit_updater.py -Encoding utf8
+          python audit_updater.py
+
+      - name: Smoke-test built DPort executable
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $exe = Join-Path $PWD "dist\DPort-$v.exe"
+          if (-not (Test-Path $exe)) { throw "Missing EXE: $exe" }
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 6
+          if ($p.HasExited) {
+            if ($p.ExitCode -ne 0) { throw "DPort exited during smoke test with code $($p.ExitCode)" }
+            Write-Host 'DPort exited cleanly during smoke test.'
+          } else {
+            Stop-Process -Id $p.Id -Force
+            Write-Host 'DPort remained running during smoke test; executable launch passed.'
+          }
+      - name: Generate SHA-256
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $exe = "dist/DPort-$v.exe"
+          (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() | Set-Content "dist/DPort-$v.exe.sha256" -Encoding ascii
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-${{ steps.version.outputs.version }}-windows
+          path: |
+            dist/DPort-${{ steps.version.outputs.version }}.exe
+            dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
+
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/main' || github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $tag = "v$v"
+          $exe = "dist/DPort-$v.exe"
+          $sha = "dist/DPort-$v.exe.sha256"
+
+          if (-not (Test-Path $exe)) { throw "Missing release asset: $exe" }
+          if (-not (Test-Path $sha)) { throw "Missing checksum: $sha" }
+
+
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag exists; replacing assets."
+            gh release upload $tag $exe $sha --repo "${{ github.repository }}" --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upload assets to $tag" }
+            gh release edit $tag --repo "${{ github.repository }}" --title "DPort v$v" --latest
+          } else {
+            Write-Host "Creating release $tag."
+            gh release create $tag $exe $sha --repo "${{ github.repository }}" --title "DPort v$v" --latest --generate-notes --target "${{ github.sha }}"
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag" }
+          }
+
+          Write-Host "Published DPort v$v to GitHub Releases."
+
+
+
+# DPort release policy: publish the version declared by the checked-out source.
+, req)
           assert req_match, req
-          print(f"Packaged requirements pymobiledevice3: {req_match.group(1)}")
+          print(f"pymobiledevice3 pin: {req_match.group(1)}")
 
           version_text = (root / 'src' / 'dport_version.py').read_text(encoding='utf-8')
           version_match = re.search(r'DPORT_VERSION="([^"]+)"', version_text)
           assert version_match, version_text
-          print(f"Source DPort version: {version_match.group(1)}")
+          print(f"DPort version: {version_match.group(1)}")
 
           assert (root / 'scripts' / 'finalize_pm3_update.py').exists()
           '@ | Set-Content audit_updater.py -Encoding utf8
@@ -463,5 +526,4 @@ jobs:
 
 
 
-
-# DPort release policy: publish the version declared by the checked-out source.
+# DPort release policy: current stable is 6.9.0; next release is 6.9.1.
