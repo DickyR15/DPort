@@ -1,3 +1,4 @@
+# ci: rebuild after versioned filename install fix
 # ci: use Python 3.9 for pymobiledevice3 11.19.1 compatibility
 # ci: fix map_text initialization before release patch
 # ci: final exit-button patch syntax fix
@@ -57,7 +58,7 @@ jobs:
           if ($helper -notmatch 'add_argument\("--version"') { throw "Standalone updater is missing --version." }
           if ($helper -notmatch 'add_argument\("--exe-url"') { throw "Standalone updater is missing --exe-url." }
           if ($helper -notmatch 'def _wait_for_pid_exit') { throw "Standalone updater is missing process wait logic." }
-          if ($helper -notmatch 'def _replace_file') { throw "Standalone updater is missing replacement logic." }
+          if ($helper -notmatch 'def _install_new_version') { throw "Standalone updater is missing versioned install logic." }
           if ($helper -notmatch 'def relaunch') { throw "Standalone updater is missing relaunch logic." }
           if ($repair -notmatch 'DPort-Updater\.exe') { throw "DPort release updater does not reference standalone helper." }
           if ($repair -notmatch 'subprocess\.Popen\(') { throw "DPort release updater must launch standalone helper via subprocess.Popen." }
