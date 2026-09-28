@@ -1,5 +1,6 @@
 # DPort repair pipeline: release repair + startup smoke test + UI layout validation.
 # Rebuild after updater path/manual-update UI hardening.
+# Re-run when generated updater source is repaired.
 name: DPort Repair Releases
 
 on:
