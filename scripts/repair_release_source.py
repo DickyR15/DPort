@@ -274,10 +274,10 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
         new_process_group = 0x00000200
         log_file = temp_dir / "DPort-update.log"
         script.write_text(
-            script.read_text(encoding="utf-8") +
-            "
-Add-Content -LiteralPath '" + str(log_file).replace("'", "''") + "' -Value ('Updater finished at ' + (Get-Date -Format s)) -ErrorAction SilentlyContinue
-",
+            script.read_text(encoding="utf-8")
+            + "\nAdd-Content -LiteralPath '"
+            + str(log_file).replace("'", "''")
+            + "' -Value ('Updater finished at ' + (Get-Date -Format s)) -ErrorAction SilentlyContinue\n",
             encoding="utf-8",
         )
         with log_file.open("a", encoding="utf-8") as log:
@@ -654,6 +654,8 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
             raise RuntimeError("Expected exactly one pymobiledevice3 pin")
         req_file.write_text(req2, encoding="utf-8")
 
+        # Validate the generated updater source before embedding it into the package.
+        compile(SAFE_UPDATER, "dport_release_updater.py", "exec")
         updater_file.write_text(SAFE_UPDATER, encoding="utf-8")
 
         main_text = main_file.read_text(encoding="utf-8", errors="replace")
