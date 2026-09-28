@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '.github/workflows/repair-6.9.0.yml'
+      - 'scripts/repair_release_source.py'
+      - 'scripts/fix_release_updater_prompt.py'
   workflow_dispatch:
     inputs:
       version:
