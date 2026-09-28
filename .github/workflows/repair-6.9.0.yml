@@ -189,6 +189,50 @@ jobs:
           }
 
           Write-Host 'Repaired 6.9.0/6.9.1 source and EXEs passed user-confirmed updater + persistence audit.'
+      - name: Publish repaired releases
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          function Set-SourceBaseline([string]$package, [string]$version) {
+            $tmp = Join-Path $env:RUNNER_TEMP ("publish-" + $version)
+            if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+            New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+            Expand-Archive -LiteralPath $package -DestinationPath $tmp -Force
+            $root = Get-ChildItem -LiteralPath $tmp -Directory | Select-Object -First 1
+            if (-not $root) { throw "Source root missing for $version" }
+
+            if (Test-Path 'src') { Remove-Item 'src' -Recurse -Force }
+            New-Item -ItemType Directory -Force -Path 'src' | Out-Null
+            Copy-Item -Path (Join-Path $root 'src\*') -Destination 'src' -Recurse -Force
+            Copy-Item -LiteralPath (Join-Path $root 'requirements-build.txt') -Destination 'requirements-build.txt' -Force
+            Copy-Item -LiteralPath $package -Destination 'DPort-source-6.9.0.zip' -Force
+
+            git add src requirements-build.txt DPort-source-6.9.0.zip
+            if (-not (git diff --cached --quiet)) {
+              git commit -m "[repair-$version] publish repaired source baseline [skip ci]"
+            }
+            $sha = git rev-parse HEAD
+            git tag -f "v$version" $sha
+            git push origin "refs/tags/v$version" --force
+            return $sha
+          }
+
+          $sha690 = Set-SourceBaseline 'repair/DPort-source-6.9.0.zip' '6.9.0'
+          gh release upload v6.9.0 repair-bin/DPort-6.9.0.exe repair-bin/DPort-6.9.0.exe.sha256 --repo "${{ github.repository }}" --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to publish DPort v6.9.0 assets.' }
+          gh release edit v6.9.0 --repo "${{ github.repository }}" --title 'DPort v6.9.0' --latest=false
+
+          $sha691 = Set-SourceBaseline 'repair/DPort-source-6.9.1.zip' '6.9.1'
+          gh release upload v6.9.1 repair-bin/DPort-6.9.1.exe repair-bin/DPort-6.9.1.exe.sha256 --repo "${{ github.repository }}" --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to publish DPort v6.9.1 assets.' }
+          gh release edit v6.9.1 --repo "${{ github.repository }}" --title 'DPort v6.9.1' --latest=true
+
+          Write-Host "Published repaired releases: v6.9.0=$sha690 ; v6.9.1=$sha691."
       - name: Upload repaired artifacts
         uses: actions/upload-artifact@v4
         with:
