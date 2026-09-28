@@ -1,3 +1,4 @@
+# ci: fix map_text initialization before release patch
 # ci: final exit-button patch syntax fix
 # ci: final update shutdown-path fix
 # ci: direct detached updater launch
