@@ -89,7 +89,9 @@ def main() -> int:
     args = parser.parse_args()
 
     target = Path(args.target).resolve()
-    work_dir = Path(tempfile.gettempdir()) / "DPort" / "updates"
+    # Keep the downloaded EXE on the same volume as the installed DPort EXE.
+    # os.replace() cannot atomically replace a file across different drives.
+    work_dir = target.parent / ".dport-update"
     work_dir.mkdir(parents=True, exist_ok=True)
     downloaded = work_dir / f"DPort-{args.version}-download-{os.getpid()}.exe"
     relaunch_args = json.loads(args.args_json)
@@ -99,13 +101,18 @@ def main() -> int:
     def relaunch() -> None:
         env = os.environ.copy()
         env["DPORT_RESTARTED"] = "1"
+        env["DPORT_UPDATE_TARGET"] = str(target)
         subprocess.Popen(
             [str(target), *[str(x) for x in relaunch_args]],
             cwd=str(target.parent),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            creationflags=(
+                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            ),
             close_fds=True,
             env=env,
         )
@@ -117,9 +124,9 @@ def main() -> int:
         expected = _read_expected_sha256(args.sha256_url)
         if actual.lower() != expected:
             raise RuntimeError("DPort EXE SHA-256 驗證失敗")
-        # Give the main app a moment to flush files/logs, then wait for its PID to vanish.
+        # Wait for the running DPort process to terminate before replacing its EXE.
         time.sleep(1)
-        _wait_for_pid_exit(args.pid)
+        _wait_for_pid_exit(args.pid, timeout=180)
         _replace_file(downloaded, target)
         relaunch()
         return 0
