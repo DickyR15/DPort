@@ -229,9 +229,9 @@ def request_update() -> dict[str, Any]:
 
         script = temp_dir / "DPort-update.ps1"
         script.write_text(
-            """param([int]$Pid,[string]$NewExe,[string]$OldExe,[string]$TargetExe,[string]$Port)
+            """param([int]$ParentPid,[string]$NewExe,[string]$OldExe,[string]$TargetExe,[string]$Port)
 $ErrorActionPreference = 'Stop'
-while (Get-Process -Id $Pid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
+while (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
 
 if (Test-Path -LiteralPath $TargetExe) {
     Remove-Item -LiteralPath $TargetExe -Force
@@ -302,7 +302,7 @@ try {{
                 "-NoProfile",
                 "-ExecutionPolicy", "Bypass",
                 "-File", script_path,
-                "-Pid", str(os.getpid()),
+                "-ParentPid", str(os.getpid()),
                 "-NewExe", str(new_exe),
                 "-OldExe", str(current_exe),
                 "-TargetExe", str(target_exe),
