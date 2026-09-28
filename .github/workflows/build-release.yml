@@ -31,7 +31,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Restore DPort source
+      - name: Restore DPort build assets
         shell: pwsh
         run: |
           git status --short
@@ -39,11 +39,10 @@ jobs:
             throw 'DPort-source-6.9.0.zip is missing from the checked-out source.'
           }
 
-          $zip = Get-Item 'DPort-source-6.9.0.zip'
-          Write-Host "Using repository source package: $($zip.FullName)"
-          Write-Host "Source ZIP size: $($zip.Length) bytes"
-
-          $tmp = Join-Path $env:RUNNER_TEMP 'dport-source'
+          # The checked-out main branch is the authoritative source of code,
+          # version, and dependencies. The ZIP is used only for legacy build
+          # assets (icon, batch file, metadata templates).
+          $tmp = Join-Path $env:RUNNER_TEMP 'dport-source-assets'
           if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
           Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
@@ -51,31 +50,33 @@ jobs:
           $sourceRoot = Get-ChildItem -LiteralPath $tmp -Directory |
             Where-Object { $_.Name -like 'DPort-*' } |
             Select-Object -First 1
-
           if (-not $sourceRoot) {
             throw 'Could not locate DPort source root inside DPort-source-6.9.0.zip.'
           }
 
-          Write-Host "Using source root: $($sourceRoot.FullName)"
+          Write-Host "Using checked-out main source for build: src/"
+          Write-Host "Using checked-out main requirements: requirements-build.txt"
 
-          $copy = @('DPort-6.9.0.ico','requirements-build.txt','build_final_live.bat','python_runtime.txt','DPort_CHANGELOG.txt','version_info.txt')
+          $copy = @('DPort-6.9.0.ico','build_final_live.bat','python_runtime.txt','DPort_CHANGELOG.txt','version_info.txt')
           foreach ($item in $copy) {
             $p = Join-Path $sourceRoot.FullName $item
             if (Test-Path $p) { Copy-Item -LiteralPath $p -Destination . -Force }
           }
 
-          $sourceSrc = Join-Path $sourceRoot.FullName 'src'
-          if (Test-Path $sourceSrc) {
-            if (Test-Path 'src') { Remove-Item 'src' -Recurse -Force }
-            New-Item -ItemType Directory -Force -Path 'src' | Out-Null
-            Copy-Item -Path (Join-Path $sourceSrc '*') -Destination 'src' -Recurse -Force
+          if (-not (Test-Path 'src/main.py')) {
+            Write-Host 'Checked-out source tree:'
+            Get-ChildItem -Recurse -Depth 3 'src' | Select-Object FullName
+            throw 'Checked-out source is missing src/main.py.'
+          }
+          if (-not (Test-Path 'requirements-build.txt')) {
+            throw 'Checked-out source is missing requirements-build.txt.'
           }
 
-          if (-not (Test-Path 'src/main.py')) {
-            Write-Host 'Restored source tree:'
-            Get-ChildItem -Recurse -Depth 3 $sourceRoot.FullName | Select-Object FullName
-            throw 'Source restore failed: src/main.py is missing.'
-          }
+          $reqLine = Get-Content 'requirements-build.txt' |
+            Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } |
+            Select-Object -First 1
+          if (-not $reqLine) { throw 'Could not find pymobiledevice3 pin in checked-out requirements-build.txt.' }
+          Write-Host "Build dependency pin: $($reqLine.Trim())"
 
       - name: Inspect source version
         shell: pwsh
@@ -191,12 +192,22 @@ jobs:
         shell: pwsh
         run: |
           $sourceRoot = Join-Path $env:RUNNER_TEMP 'dport-source\DPort-6.9.0'
-          if (-not (Test-Path $sourceRoot)) { throw "Restored source root missing: $sourceRoot" }
+          if (-not (Test-Path $sourceRoot)) {
+            throw "Restored source root missing: $sourceRoot"
+          }
 
+          # Make the committed source package mirror the exact source and
+          # dependency files that were actually checked out and built.
           $sourceSrc = Join-Path $sourceRoot 'src'
           if (Test-Path $sourceSrc) { Remove-Item $sourceSrc -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $sourceSrc | Out-Null
           Copy-Item -Path 'src\*' -Destination $sourceSrc -Recurse -Force
+
+          foreach ($item in @('requirements-build.txt','build_final_live.bat','python_runtime.txt','DPort_CHANGELOG.txt','version_info.txt','DPort-6.9.0.ico')) {
+            if (Test-Path $item) {
+              Copy-Item -LiteralPath $item -Destination $sourceRoot -Force
+            }
+          }
 
           $tmpZip = Join-Path $env:RUNNER_TEMP 'DPort-source-6.9.0.cleaned.zip'
           if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force }
@@ -208,7 +219,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add DPort-source-6.9.0.zip
           if (-not (git diff --cached --quiet)) {
-            git commit -m 'chore: sync clean DPort 6.9.0 source package [skip ci]'
+            git commit -m 'chore: sync DPort source package [skip ci]'
             git push origin HEAD:main
           } else {
             Write-Host 'Source package already matches the cleaned build source.'
