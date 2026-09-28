@@ -64,30 +64,30 @@ def _wait_for_pid_exit(pid: int, timeout: int = 180) -> None:
         time.sleep(0.5)
 
 
-def _replace_file(downloaded: Path, target: Path) -> None:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    backup = target.with_name(target.name + ".update-backup")
-    for _ in range(20):
+def _install_new_version(downloaded: Path, old_target: Path, new_target: Path) -> None:
+    """Install the new version under its own versioned filename.
+
+    Do not overwrite the 6.9.0 file in-place. The expected on-disk result is
+    DPort-6.9.0.exe -> DPort-6.9.1.exe, with the old file removed only after
+    the new process has started successfully.
+    """
+    new_target.parent.mkdir(parents=True, exist_ok=True)
+
+    for _ in range(40):
         try:
-            if backup.exists():
-                backup.unlink()
-            if target.exists():
-                os.replace(target, backup)
-            os.replace(downloaded, target)
-            try:
-                backup.unlink(missing_ok=True)
-            except Exception:
-                pass
-            return
+            if new_target.exists():
+                os.replace(new_target, new_target.with_name(new_target.name + ".old"))
+                try:
+                    new_target.with_name(new_target.name + ".old").unlink(missing_ok=True)
+                except Exception:
+                    pass
+            os.replace(downloaded, new_target)
+            if new_target.exists():
+                return
         except Exception:
             time.sleep(0.5)
-    # Best-effort rollback if replacement never completed.
-    if not target.exists() and backup.exists():
-        try:
-            os.replace(backup, target)
-        except Exception:
-            pass
-    raise RuntimeError("無法替換 DPort 執行檔，原版本已保留")
+
+    raise RuntimeError("無法將新版 DPort 放入應用程式資料夾，舊版本已保留")
 
 
 def main() -> int:
@@ -103,6 +103,7 @@ def main() -> int:
     args = parser.parse_args()
 
     target = Path(args.target).resolve()
+    new_target = target.parent / f"DPort-{args.version}.exe"
     log_file = target.parent / "DPort-update.log"
 
     def log(message: str) -> None:
@@ -132,8 +133,8 @@ def main() -> int:
         env["DPORT_RESTARTED"] = "1"
         env["DPORT_UPDATE_TARGET"] = str(target)
         subprocess.Popen(
-            [str(target), *[str(x) for x in relaunch_args]],
-            cwd=str(target.parent),
+            [str(new_target), *[str(x) for x in relaunch_args]],
+            cwd=str(new_target.parent),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -160,10 +161,20 @@ def main() -> int:
         time.sleep(1)
         _wait_for_pid_exit(args.pid, timeout=180)
         log("Parent DPort process exited.")
-        _replace_file(downloaded, target)
-        log("New executable copied into application folder.")
+        _install_new_version(downloaded, target, new_target)
+        log(f"New executable installed as {new_target}.")
         relaunch()
-        log("New DPort process launched.")
+        time.sleep(3)
+
+        # Only delete 6.9.0 after the new version has actually started.
+        if target.exists() and target != new_target:
+            try:
+                target.unlink()
+                log(f"Old executable removed: {target}")
+            except Exception as exc:
+                log(f"Old executable could not be removed yet: {exc!r}")
+
+        log("New DPort process launched successfully.")
         return 0
     except Exception as exc:
         log(f"Updater failed: {exc!r}")
@@ -174,7 +185,8 @@ def main() -> int:
         # Never leave the user without DPort after a failed update.
         try:
             _wait_for_pid_exit(args.pid, timeout=10)
-            relaunch()
+            if target.exists():
+                relaunch()
         except Exception:
             pass
         return 30
