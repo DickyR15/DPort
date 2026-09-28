@@ -33,7 +33,7 @@ jobs:
       - name: Prepare build dependencies
         shell: pwsh
         env:
-          MOENV_API_KEY: ${'${'}{ secrets.MOENV_API_KEY }}
+          MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:MOENV_API_KEY)) { throw 'Missing MOENV_API_KEY secret.' }
           [IO.File]::WriteAllText((Join-Path $PWD 'moenv_api_key.txt'), $env:MOENV_API_KEY.Trim(), (New-Object Text.UTF8Encoding($false)))
@@ -109,8 +109,8 @@ VSVersionInfo(
       - name: Republish v6.9.0
         shell: pwsh
         env:
-          GH_TOKEN: ${'${'}{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload v6.9.0 dist/DPort-6.9.0.exe dist/DPort-6.9.0.exe.sha256 --repo ${'${'}{ github.repository }} --clobber
+          gh release upload v6.9.0 dist/DPort-6.9.0.exe dist/DPort-6.9.0.exe.sha256 --repo ${{ github.repository }} --clobber
           gh release edit v6.9.0 --repo ${'${'}{ github.repository }} --title 'DPort v6.9.0' --latest
           Write-Host 'DPort v6.9.0 repaired and republished.'
