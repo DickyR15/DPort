@@ -289,6 +289,49 @@ __all__ = [
 '''
 
 
+
+
+BRAND_STATUS_LAYOUT_FIX = """
+<style id="dport-brand-meta-row-stack-final">
+/* Keep the live DPort update status fully visible in the narrow brand column.
+   Caption and update status intentionally occupy separate rows so the GPX card
+   can never cover the orange update text. */
+.dport-brand-meta-row{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-template-rows:auto auto!important;
+    align-items:center!important;
+    gap:2px!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    margin:0!important;
+    padding:0!important;
+    overflow:hidden!important;
+}
+.dport-brand-meta-row .dport-caption,
+.dport-brand-meta-row #dport-pm3-status{
+    grid-column:1!important;
+    min-width:0!important;
+    width:100%!important;
+    max-width:100%!important;
+    margin:0!important;
+    padding:0!important;
+    box-sizing:border-box!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+}
+.dport-brand-meta-row .dport-caption{grid-row:1!important;}
+.dport-brand-meta-row #dport-pm3-status{
+    grid-row:2!important;
+    display:block!important;
+    font-size:10px!important;
+    line-height:1.15!important;
+}
+</style>
+"""
+
 UPDATE_UI = r'''
 <style id="dport-user-update-dialog-override">
 /* The legacy pymobiledevice3 update overlay is display-only and must never block
@@ -493,6 +536,12 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
                 map_text = map_text.replace("</body>", UPDATE_UI + "\n</body>", 1)
             else:
                 map_text += UPDATE_UI
+        if "dport-brand-meta-row-stack-final" not in map_text:
+            if "</body>" in map_text:
+                map_text = map_text.replace("</body>", BRAND_STATUS_LAYOUT_FIX + "\n</body>", 1)
+            else:
+                map_text += BRAND_STATUS_LAYOUT_FIX
+
         map_file.write_text(map_text, encoding="utf-8")
 
         if output.exists():
