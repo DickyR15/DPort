@@ -236,14 +236,16 @@ def request_update() -> dict[str, Any]:
         # Launch the helper through the Windows shell instead of inheriting the
         # DPort/CMD process tree. The helper owns the complete wait/replace/
         # relaunch sequence after DPort exits.
-        args_json = json.dumps(["--no-browser"], ensure_ascii=False)
+        port = os.environ.get("DPORT_PORT") or "54321"
+        target_sha_url = f"https://github.com/{REPO}/releases/download/v{latest}/DPort-{latest}.exe.sha256"
         command = (
             f'--pid {os.getpid()} '
             f'--target "{current_exe}" '
             f'--version "{latest}" '
             f'--exe-url "{exe_url}" '
-            f'--sha256-url "{helper_sha_url.rsplit("/", 1)[0]}/DPort-{latest}.exe.sha256" '
-            f'--args-json "{args_json.replace(chr(34), chr(92)+chr(34))}"'
+            f'--sha256-url "{target_sha_url}" '
+            f'--port {port} '
+            f'--no-browser'
         )
 
         os.startfile(str(helper), "open", command)
