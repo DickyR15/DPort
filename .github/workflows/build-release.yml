@@ -213,7 +213,7 @@ jobs:
           if (-not (Test-Path $sha)) { throw "Missing release checksum: $sha" }
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -eq 0) {
-            if ('${{ github.event.head_commit.message }}' -like '*[repair-6.9.1]*') {
+            if ('${{ github.event.head_commit.message }}'.Contains('[repair-6.9.1]')) {
               Write-Host "One-time 6.9.1 repair: replacing existing assets."
               gh release upload $tag $exe $sha --repo "${{ github.repository }}" --clobber
               if ($LASTEXITCODE -ne 0) { throw "Failed to replace assets in $tag" }
