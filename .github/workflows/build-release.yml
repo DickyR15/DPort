@@ -209,29 +209,18 @@ jobs:
           $tag = "v$v"
           $exe = "dist/DPort-$v.exe"
           $sha = "dist/DPort-$v.exe.sha256"
-          $repair = '${{ github.event.head_commit.message }}'.Contains('[repair-6.9.1]')
-
           if (-not (Test-Path $exe)) { throw "Missing release asset: $exe" }
           if (-not (Test-Path $sha)) { throw "Missing release checksum: $sha" }
 
           gh release view $tag --repo "${{ github.repository }}" *> $null
-          if ($LASTEXITCODE -eq 0 -and -not $repair) {
-            Write-Host "Release $tag already exists; build/test completed without changing the existing release."
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag already exists; build/test completed without modifying the release."
             exit 0
           }
 
-          if ($repair) {
-            Write-Host "Repair release: aligning $tag to the exact commit used for this build."
-            git tag -f $tag "${{ github.sha }}"
-            git push origin "refs/tags/$tag" --force
-            gh release upload $tag $exe $sha --repo "${{ github.repository }}" --clobber
-            if ($LASTEXITCODE -ne 0) { throw "Failed to replace assets in $tag" }
-            gh release edit $tag --repo "${{ github.repository }}" --title "DPort v$v" --latest
-          } else {
-            gh release create $tag $exe $sha --repo "${{ github.repository }}" --title "DPort v$v" --latest --generate-notes --target "${{ github.sha }}"
-          }
-
+          # This is reached only after all build and validation steps have passed.
+          # gh release create creates the tag at the exact commit that produced this EXE.
+          gh release create $tag $exe $sha --repo "${{ github.repository }}" --title "DPort v$v" --latest --generate-notes --target "${{ github.sha }}"
           Write-Host "Published DPort v$v."
 
 # Release policy: build and verify the committed source package first; create vX.Y.Z only after all checks succeed.
-# 6.9.1 repair: release assets are replaced only for the explicit repair marker.
