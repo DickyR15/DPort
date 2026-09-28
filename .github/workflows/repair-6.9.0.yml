@@ -19,6 +19,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate repair script syntax
+        shell: pwsh
+        run: |
+          python -m py_compile scripts/repair_release_source.py
+          if ($LASTEXITCODE -ne 0) { throw 'repair_release_source.py syntax validation failed.' }
+
       - name: Prepare repaired source packages
         shell: pwsh
         run: |
