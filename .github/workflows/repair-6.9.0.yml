@@ -1,3 +1,4 @@
+# ci: standalone updater helper release rebuild
 # ci: validate browser reconnect after updater
 # ci: validate copy-based updater across drive letters
 name: DPort Repair Releases
