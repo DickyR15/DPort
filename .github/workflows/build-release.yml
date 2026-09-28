@@ -31,41 +31,37 @@ jobs:
         shell: pwsh
         run: |
           $repair = '${{ github.event.head_commit.message }}'.Contains('[repair-6.9.1]')
-          $sourceZip = Join-Path $env:RUNNER_TEMP 'dport-source-input.zip'
-
-          if ($repair) {
-            $knownGood = '68a95030bb1f23accb53bf542ac0f59433b754a7'
-            Write-Host "6.9.1 repair: recovering known-good source package from $knownGood"
-            git show "$knownGood`:DPort-source-6.9.0.zip" > $sourceZip
-            $tmp0 = Join-Path $env:RUNNER_TEMP 'dport-source-known-good'
-            if (Test-Path $tmp0) { Remove-Item $tmp0 -Recurse -Force }
-            New-Item -ItemType Directory -Force -Path $tmp0 | Out-Null
-            Expand-Archive -LiteralPath $sourceZip -DestinationPath $tmp0 -Force
-            $root0 = Get-ChildItem -LiteralPath $tmp0 -Directory | Select-Object -First 1
-            if (-not $root0) { throw 'Known-good source root not found.' }
-            Set-Content -LiteralPath (Join-Path $root0 'src\dport_version.py') -Value 'DPORT_VERSION="6.9.1"' -Encoding utf8
-            $req0 = Join-Path $root0 'requirements-build.txt'
-            $reqText0 = Get-Content $req0 -Raw
-            $reqText0 = [regex]::Replace($reqText0, '(?m)^\s*pymobiledevice3\s*==\s*[^\r\n#]+', 'pymobiledevice3==11.19.4')
-            Set-Content -LiteralPath $req0 -Value $reqText0 -Encoding utf8
-            $fixedZip = Join-Path $env:RUNNER_TEMP 'dport-source-repair.zip'
-            Compress-Archive -Path $root0 -DestinationPath $fixedZip -CompressionLevel Optimal -Force
-            Copy-Item -LiteralPath $fixedZip -Destination 'DPort-source-6.9.0.zip' -Force
-            Copy-Item -LiteralPath $fixedZip -Destination $sourceZip -Force
-          } else {
-            if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing.' }
-            Copy-Item -LiteralPath 'DPort-source-6.9.0.zip' -Destination $sourceZip -Force
-          }
-
           $tmp = Join-Path $env:RUNNER_TEMP 'dport-source'
+          $zip = Join-Path $env:RUNNER_TEMP 'dport-source-input.zip'
           if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-          Expand-Archive -LiteralPath $sourceZip -DestinationPath $tmp -Force
+
+          if ($repair) {
+            # 6.9.1 repair baseline: this is the source package used by the
+            # last confirmed-good 6.9.0 build (Run #274).
+            $knownGood = '68a95030bb1f23accb53bf542ac0f59433b754a7'
+            Write-Host "Repair mode: recovering known-good source package from $knownGood"
+            git show "$knownGood`:DPort-source-6.9.0.zip" > $zip
+          } else {
+            if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing.' }
+            Copy-Item -LiteralPath 'DPort-source-6.9.0.zip' -Destination $zip -Force
+          }
+
+          Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
           $root = Get-ChildItem -LiteralPath $tmp -Directory | Select-Object -First 1
           if (-not $root) { throw 'DPort source root not found.' }
           foreach ($required in @('src\main.py','src\dport_version.py','src\dport_release_updater.py','requirements-build.txt','DPort-6.9.0.ico')) {
             if (-not (Test-Path (Join-Path $root $required))) { throw "Source package missing: $required" }
           }
+
+          if ($repair) {
+            Set-Content -LiteralPath (Join-Path $root 'src\dport_version.py') -Value 'DPORT_VERSION="6.9.1"' -Encoding utf8
+            $req = Join-Path $root 'requirements-build.txt'
+            $reqText = Get-Content $req -Raw
+            $reqText = [regex]::Replace($reqText, '(?m)^\s*pymobiledevice3\s*==\s*[^\r\n#]+', 'pymobiledevice3==11.19.4')
+            Set-Content -LiteralPath $req -Value $reqText -Encoding utf8
+          }
+
           if (Test-Path 'src') { Remove-Item 'src' -Recurse -Force }
           New-Item -ItemType Directory -Force -Path 'src' | Out-Null
           Copy-Item -Path (Join-Path $root 'src\*') -Destination 'src' -Recurse -Force
@@ -76,9 +72,8 @@ jobs:
           if ($repoVersion -ne $packageVersion) { throw 'Source version mismatch.' }
           $line = Get-Content 'requirements-build.txt' | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1
           if (-not $line) { throw 'pymobiledevice3 pin missing.' }
-          Write-Host "Using committed source package: $root"
+          Write-Host "Using source package: $root"
           Write-Host "Dependency pin: $($line.Trim())"
-
       - name: Resolve version
         id: version
         shell: pwsh
