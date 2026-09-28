@@ -78,7 +78,7 @@ jobs:
             "    StringStruct('ProductName','DPort'),",
             "    StringStruct('ProductVersion','6.9.0'),",
             "    StringStruct('Comments','Dicky')])]),",
-            "    VarFileInfo([VarStruct('Translation',[0x0404,1200])])]',
+            "    VarFileInfo([VarStruct('Translation',[0x0404,1200])])]",
             ')'
           )
           $vi | Set-Content version_info.690.txt -Encoding utf8
@@ -123,7 +123,7 @@ jobs:
             "    StringStruct('ProductName','DPort'),",
             "    StringStruct('ProductVersion','6.9.1'),",
             "    StringStruct('Comments','Dicky')])]),",
-            "    VarFileInfo([VarStruct('Translation',[0x0404,1200])])]',
+            "    VarFileInfo([VarStruct('Translation',[0x0404,1200])])]",
             ')'
           )
           $vi | Set-Content version_info.691.txt -Encoding utf8
