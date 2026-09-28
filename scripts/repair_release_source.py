@@ -128,7 +128,7 @@ def _cleanup_restart_temp() -> None:
         return
 
     def cleanup() -> None:
-        time.sleep(2.5)
+        time.sleep(8.0)
         folder = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Temp" / ".dport-update"
         try:
             if folder.exists():
@@ -233,78 +233,80 @@ def _download(url: str, destination: Path) -> None:
 
 
 def request_update() -> dict[str, Any]:
-    # This function is called only after explicit user confirmation.
+    # Explicit user action only.
+    # Full order:
+    # 1) download DPort-<latest>.exe into C:\Windows\Temp\.dport-update
+    # 2) verify its SHA-256
+    # 3) download + verify DPort-Updater.exe
+    # 4) start the detached updater
+    # 5) return; the /dport/update route shuts down DPort
     status = check_now()
     latest = str(status.get("latest_version") or VERSION)
     if status.get("state") != "update_available" or not _is_newer(VERSION, latest):
-        return {
-            "ok": False,
-            "state": status.get("state"),
-            "message": "目前沒有可用更新。",
-        }
+        return {"ok": False, "state": status.get("state"), "message": "目前沒有可用更新。"}
 
     exe_url = str(status.get("latest_url") or "")
     release_url = str(status.get("release_url") or "")
     if not exe_url:
-        return {
-            "ok": False,
-            "state": "update_failed",
-            "message": "找不到新版 DPort 安裝檔。",
-        }
+        return {"ok": False, "state": "update_failed", "message": "找不到新版 DPort 安裝檔。"}
 
-    current_exe = Path(
-        sys.executable if getattr(sys, "frozen", False) else __file__
-    ).resolve()
+    current_exe = Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve()
     if getattr(sys, "frozen", False):
         current_exe = current_exe.parent / f"DPort-{VERSION}.exe"
 
     windows_temp = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Temp"
-    windows_temp.mkdir(parents=True, exist_ok=True)
     update_dir = windows_temp / ".dport-update"
     update_dir.mkdir(parents=True, exist_ok=True)
+
+    # Remove leftovers from a previous failed update.
+    for item in list(update_dir.iterdir()):
+        try:
+            if item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+            else:
+                item.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    new_exe = update_dir / f"DPort-{latest}.exe"
+    sha_file = update_dir / f"DPort-{latest}.exe.sha256"
     helper = update_dir / "DPort-Updater.exe"
     helper_sha = update_dir / "DPort-Updater.exe.sha256"
+    helper_url = f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe"
+    helper_sha_url = f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe.sha256"
 
-    helper_url = (
-        f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe"
-    )
-    helper_sha_url = (
-        f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe.sha256"
-    )
     try:
         _set_state(
             state="updating",
-            message=f"正在準備 DPort {latest} 更新器…",
+            message=f"正在下載 DPort {latest}…",
             latest_version=latest,
             release_url=release_url,
             restart_required=True,
         )
 
-        new_exe = update_dir / f"DPort-{latest}.exe"
-        sha_file = update_dir / f"DPort-{latest}.exe.sha256"
-
-        # Download and verify 6.9.1 BEFORE EXIT.
+        # 1. Download new DPort EXE before any EXIT.
         _download(exe_url, new_exe)
+
+        # 2. Verify new DPort EXE before any EXIT.
         sha_url = exe_url.rsplit("/", 1)[0] + f"/DPort-{latest}.exe.sha256"
         _download(sha_url, sha_file)
         expected_exe = sha_file.read_text(
             encoding="utf-8", errors="replace"
         ).strip().split()[0].lower()
-        if _sha256(new_exe) != expected_exe:
+        actual_exe = _sha256(new_exe)
+        if actual_exe != expected_exe:
             raise RuntimeError(f"DPort-{latest}.exe SHA-256 驗證失敗。")
 
-        # Then download and verify the standalone helper.
+        # 3. Download and verify the standalone updater before EXIT.
         _download(helper_url, helper)
         _download(helper_sha_url, helper_sha)
-
-        expected = helper_sha.read_text(
+        helper_expected = helper_sha.read_text(
             encoding="utf-8", errors="replace"
         ).strip().split()[0].lower()
-        actual = _sha256(helper)
-        if actual != expected:
+        if _sha256(helper) != helper_expected:
             raise RuntimeError("DPort-Updater.exe SHA-256 驗證失敗。")
 
-        # Pass the exact application path and port to the standalone updater.
+        # 4. Start standalone updater. It performs all post-EXIT file operations.
         port = os.environ.get("DPORT_PORT") or "54321"
         updater_args = [
             str(helper),
@@ -323,7 +325,7 @@ def request_update() -> dict[str, Any]:
         )
         subprocess.Popen(
             updater_args,
-            cwd=str(current_exe.parent),
+            cwd=str(update_dir),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -333,7 +335,7 @@ def request_update() -> dict[str, Any]:
 
         _set_state(
             state="restarting",
-            message=f"正在更新到 DPort {latest}，程式即將重新啟動…",
+            message=f"下載完成，正在關閉 DPort 並啟動 {latest}…",
             latest_version=latest,
             release_url=release_url,
             restart_required=True,
@@ -343,15 +345,11 @@ def request_update() -> dict[str, Any]:
             "ok": True,
             "state": "restarting",
             "version": latest,
-            "message": f"正在更新到 DPort {latest}，程式即將重新啟動…",
+            "message": f"下載完成，正在關閉 DPort 並啟動 {latest}…",
         }
     except Exception as exc:
         LOGGER.exception("DPort update failed")
-        return {
-            "ok": False,
-            "state": "update_failed",
-            "message": str(exc),
-        }
+        return {"ok": False, "state": "update_failed", "message": str(exc)}
 
 
 __all__ = [
@@ -363,6 +361,9 @@ __all__ = [
     "_get_update_candidate",
 ]
 '''
+
+
+
 
 
 
@@ -607,18 +608,10 @@ UPDATE_UI = r'''
       .then(function(r){return r.json();})
       .then(function(result){
         if(result && result.ok){
-          if(title) title.textContent='DPort 正在更新';
+          if(title) title.textContent='DPort 正在關閉';
           var msg=document.getElementById('dport-update-message');
-          if(msg) msg.textContent='正在關閉目前版本並啟動 DPort '+result.version+'…';
-          // Use the same /exit route as the top-right 「離開」 button,
-          // but give the standalone updater time to start first.
-          setTimeout(function(){
-            if(typeof window.exitApp === 'function'){
-              window.exitApp(true);
-            }else if(navigator.sendBeacon){
-              navigator.sendBeacon('/exit', JSON.stringify({reason:'update'}));
-            }
-          },800);
+          if(msg) msg.textContent='6.9.1 已下載並驗證，正在關閉 6.9.0…';
+          // The backend now shuts down DPort after the verified download.
           waitForRestart();
         }else{
           if(title) title.textContent='DPort 更新失敗';
@@ -673,6 +666,37 @@ def patch_main(main_text: str) -> str:
     )
 
     if "/dport/update" in main_text:
+        main_text = re.sub(
+            r'(?ms)^@app\.get\("/dport/update"\)\s*def _dport_user_confirmed_update\(\):.*?(?=^@app\.|^def |^if __name__ ==)',
+            '''@app.get("/dport/update")
+def _dport_user_confirmed_update():
+    try:
+        result = dport_release_updater.request_update()
+        if isinstance(result, tuple):
+            payload = result[0]
+            status = result[1] if len(result) > 1 else 200
+        else:
+            payload = result
+            status = 200
+
+        if isinstance(payload, dict) and payload.get("ok"):
+            def delayed_update_shutdown():
+                time.sleep(0.8)
+                shutdown_server()
+            threading.Thread(
+                target=delayed_update_shutdown,
+                name="DPort-update-shutdown",
+                daemon=True,
+            ).start()
+
+        return (jsonify(payload) if isinstance(payload, dict) else payload), status
+    except Exception as exc:
+        return {"ok": False, "state": "update_failed", "message": str(exc)}, 500
+
+''',
+            main_text,
+            count=1,
+        )
         return main_text
 
     match = re.search(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*Flask\(", main_text, flags=re.M)
