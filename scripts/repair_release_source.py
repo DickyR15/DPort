@@ -483,6 +483,7 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
 
 
 def main() -> int:
+    global KNOWN_GOOD_COMMIT
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
     parser.add_argument("--pm3", required=True)
@@ -490,7 +491,6 @@ def main() -> int:
     parser.add_argument("--source-commit", default=KNOWN_GOOD_COMMIT)
     args = parser.parse_args()
 
-    global KNOWN_GOOD_COMMIT
     KNOWN_GOOD_COMMIT = args.source_commit
 
     source_zip = get_good_zip()
