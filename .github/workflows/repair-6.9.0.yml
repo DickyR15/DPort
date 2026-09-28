@@ -260,12 +260,21 @@ jobs:
             if (-not (git diff --cached --quiet)) {
               git commit -m "[repair-$version] publish exact source baseline [skip ci]"
             }
-            git fetch origin main
-            git rebase origin/main
-            if ($LASTEXITCODE -ne 0) { throw "Failed to rebase repaired v$version source baseline onto latest main." }
+            $pushed = $false
+            for ($attempt=1; $attempt -le 5; $attempt++) {
+              git fetch origin main
+              git rebase origin/main
+              if ($LASTEXITCODE -ne 0) { throw "Failed to rebase repaired v$version source baseline onto latest main." }
 
-            git push origin HEAD:main
-            if ($LASTEXITCODE -ne 0) { throw "Failed to push v$version source baseline." }
+              git push origin HEAD:main
+              if ($LASTEXITCODE -eq 0) {
+                $pushed = $true
+                break
+              }
+              Write-Host "Remote main changed during publish; retrying push ($attempt/5)..."
+              Start-Sleep -Seconds 3
+            }
+            if (-not $pushed) { throw "Failed to push v$version source baseline after retries." }
 
             $sha = git rev-parse HEAD
             $ref = "repos/${{ github.repository }}/git/refs/tags/v$version"
