@@ -234,3 +234,4 @@ jobs:
           Write-Host "Published DPort v$v."
 
 # Release policy: build and verify the committed source package first; create vX.Y.Z only after all checks succeed.
+# 6.9.1 repair: release assets are replaced only for the explicit repair marker.
