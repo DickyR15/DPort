@@ -1,0 +1,192 @@
+name: DPort 6.9.1 Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dport-6-9-1-release
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare source package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip not found.' }
+          $tmp = Join-Path $env:RUNNER_TEMP 'dport-6.9.1-source'
+          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
+          $root = Join-Path $tmp 'DPort-6.9.0'
+          if (-not (Test-Path (Join-Path $root 'src/main.py'))) { throw 'Source package is missing src/main.py.' }
+
+          $req = Join-Path $root 'requirements-build.txt'
+          $reqText = Get-Content $req -Raw
+          $reqText = [regex]::Replace($reqText, '(?m)^\s*pymobiledevice3\s*==\s*[^\r\n#]+', 'pymobiledevice3==11.19.4')
+          Set-Content -LiteralPath $req -Value $reqText -Encoding utf8
+
+          $versionFile = Join-Path $root 'src/dport_version.py'
+          Set-Content -LiteralPath $versionFile -Value 'DPORT_VERSION="6.9.1"' -Encoding utf8
+
+          if (Test-Path 'src') { Remove-Item 'src' -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path 'src' | Out-Null
+          Copy-Item -Path (Join-Path $root 'src/*') -Destination 'src' -Recurse -Force
+          Copy-Item -LiteralPath $req -Destination 'requirements-build.txt' -Force
+          Copy-Item -LiteralPath (Join-Path $root 'DPort-6.9.0.ico') -Destination 'DPort-6.9.0.ico' -Force
+          Copy-Item -LiteralPath (Join-Path $root 'build_final_live.bat') -Destination 'build_final_live.bat' -Force -ErrorAction SilentlyContinue
+          Copy-Item -LiteralPath (Join-Path $root 'python_runtime.txt') -Destination 'python_runtime.txt' -Force -ErrorAction SilentlyContinue
+          $env:DPORT_SOURCE_ROOT = $root
+          Write-Host 'Prepared DPort 6.9.1 source from the known-good 6.9.0 package.'
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Prepare MOENV API key
+        shell: pwsh
+        env:
+          MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:MOENV_API_KEY)) { throw 'Missing MOENV_API_KEY secret.' }
+          [IO.File]::WriteAllText((Join-Path $PWD 'moenv_api_key.txt'), $env:MOENV_API_KEY.Trim(), (New-Object Text.UTF8Encoding($false)))
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements-build.txt
+          python -m pip install lzfse==0.4.2
+          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
+          if ($pm3 -ne '11.19.4') { throw "Expected pymobiledevice3 11.19.4, got $pm3" }
+
+      - name: Validate source
+        shell: pwsh
+        run: |
+          python -m compileall -q src scripts
+          python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
+          $v = Get-Content src/dport_version.py -Raw
+          if ($v -notmatch 'DPORT_VERSION="6\.9\.1"') { throw 'Source version is not 6.9.1.' }
+          $r = Get-Content requirements-build.txt -Raw
+          if ($r -notmatch '(?m)^\s*pymobiledevice3==11\.19\.4\s*$') { throw 'Source dependency is not pymobiledevice3 11.19.4.' }
+
+      - name: Validate version-only updater
+        shell: pwsh
+        run: |
+          $u = Get-Content src/dport_release_updater.py -Raw
+          foreach ($token in @('_current_exe_sha256','_release_exe_sha256','current_sha256','latest_sha256','same_version_build','_get_update_candidate_version_only')) {
+            if ($u.Contains($token)) { throw "Forbidden same-version SHA updater token remains: $token" }
+          }
+          if ($u -notmatch 'def _get_update_candidate\(current:\s*str\)') { throw 'Version-only updater signature missing.' }
+
+      - name: Generate version metadata
+        shell: pwsh
+        run: |
+          @(
+            '# UTF-8',
+            'VSVersionInfo(',
+            '  ffi=FixedFileInfo(',
+            '    filevers=(6,9,1,0),',
+            '    prodvers=(6,9,1,0),',
+            '    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)',
+            '  ),',
+            "  kids=[StringFileInfo([StringTable('040404B0',[",
+            "    StringStruct('CompanyName','Dicky'),",
+            "    StringStruct('FileDescription','DPort'),",
+            "    StringStruct('FileVersion','6.9.1'),",
+            "    StringStruct('InternalName','DPort-6.9.1'),",
+            "    StringStruct('LegalCopyright','Dicky'),",
+            "    StringStruct('OriginalFilename','DPort-6.9.1.exe'),",
+            "    StringStruct('ProductName','DPort'),",
+            "    StringStruct('ProductVersion','6.9.1'),",
+            "    StringStruct('Comments','Dicky')])]),",
+            '    VarFileInfo([VarStruct(''Translation'',[0x0404,1200])])]',
+            ')'
+          ) -join [Environment]::NewLine | Set-Content version_info.generated.txt -Encoding utf8
+
+      - name: Build updater
+        shell: pwsh
+        run: |
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          python -m PyInstaller --noconfirm --clean --onefile --name DPortUpdater --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
+          New-Item -ItemType Directory -Force -Path build/updater | Out-Null
+          Copy-Item dist/DPortUpdater.exe build/updater/DPortUpdater.exe -Force
+
+      - name: Build DPort
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --name DPort-6.9.1 --icon DPort-6.9.0.ico --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import pymobiledevice3.remote.userspace_tunnel --hidden-import pymobiledevice3.services.dvt.instruments.dvt_provider --hidden-import pymobiledevice3.services.dvt.instruments.location_simulation --hidden-import pymobiledevice3.usbmux --hidden-import dport_release_updater --hidden-import dport_version --add-data 'src/templates;templates' --add-data 'moenv_api_key.txt;.' --add-binary 'build/updater/DPortUpdater.exe;dport_updater' --version-file version_info.generated.txt src/main.py
+
+      - name: Verify EXE
+        shell: pwsh
+        run: |
+          $exe = 'dist/DPort-6.9.1.exe'
+          if (-not (Test-Path $exe)) { throw 'DPort-6.9.1.exe missing.' }
+          if ((Get-Item $exe).Length -lt 1000000) { throw 'EXE is unexpectedly small.' }
+          pyi-archive_viewer $exe | Out-File 'dist/DPort-6.9.1.archive.txt' -Encoding utf8
+          $archive = Get-Content 'dist/DPort-6.9.1.archive.txt' -Raw
+          foreach ($name in @('pymobiledevice3','pytun_pmd3','pyimg4')) { if ($archive -notmatch $name) { throw "EXE missing $name" } }
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath 'dist\DPort-6.9.1.exe' -PassThru
+          Start-Sleep -Seconds 6
+          if ($p.HasExited -and $p.ExitCode -ne 0) { throw "DPort exited with code $($p.ExitCode)" }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+
+      - name: Generate SHA-256
+        shell: pwsh
+        run: |
+          (Get-FileHash 'dist/DPort-6.9.1.exe' -Algorithm SHA256).Hash.ToLower() | Set-Content 'dist/DPort-6.9.1.exe.sha256' -Encoding ascii
+
+      - name: Update source package
+        shell: pwsh
+        run: |
+          $zipRoot = Join-Path $env:RUNNER_TEMP 'dport-6.9.1-source/DPort-6.9.0'
+          if (Test-Path $zipRoot) { Remove-Item $zipRoot -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $zipRoot | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $zipRoot 'src') | Out-Null
+          Copy-Item -Path 'src\*' -Destination (Join-Path $zipRoot 'src') -Recurse -Force
+          foreach ($item in @('requirements-build.txt','DPort-6.9.0.ico','build_final_live.bat','python_runtime.txt','DPort_CHANGELOG.txt','version_info.txt')) {
+            if (Test-Path $item) { Copy-Item -LiteralPath $item -Destination $zipRoot -Force }
+          }
+          $newZip = Join-Path $env:RUNNER_TEMP 'DPort-source-6.9.0.new.zip'
+          Compress-Archive -Path $zipRoot -DestinationPath $newZip -CompressionLevel Optimal -Force
+          Copy-Item $newZip 'DPort-source-6.9.0.zip' -Force
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add DPort-source-6.9.0.zip
+          if (-not (git diff --cached --quiet)) { git commit -m 'chore: sync DPort 6.9.1 source package [skip ci]'; git push origin HEAD:main }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-6.9.1-windows
+          path: |
+            dist/DPort-6.9.1.exe
+            dist/DPort-6.9.1.exe.sha256
+
+      - name: Publish v6.9.1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view v6.9.1 --repo '${{ github.repository }}' *> $null
+          if ($LASTEXITCODE -eq 0) { throw 'Release v6.9.1 already exists.' }
+          gh release create v6.9.1 dist/DPort-6.9.1.exe dist/DPort-6.9.1.exe.sha256 --repo '${{ github.repository }}' --title 'DPort v6.9.1' --latest --generate-notes --target '${{ github.sha }}'
+          Write-Host 'Published DPort v6.9.1'
