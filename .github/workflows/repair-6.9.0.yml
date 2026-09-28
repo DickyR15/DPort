@@ -154,6 +154,10 @@ jobs:
           if (-not $map.Contains('dport-user-update-dialog')) { throw 'User update dialog is missing.' }
           if (-not $main.Contains('/dport/update')) { throw 'User-confirmed update endpoint is missing.' }
           if (-not $updater.Contains('def request_update()')) { throw 'Explicit request_update handler is missing.' }
+          if ($updater -notmatch 'def bootstrap_dport_updater\(\)') { throw 'Updater bootstrap_dport_updater() is missing.' }
+          if ($main.Contains('from dport_release_updater import bootstrap as bootstrap_dport_updater')) { throw 'Legacy bootstrap import remains in main.py.' }
+          if ($main -notmatch 'from dport_release_updater import bootstrap_dport_updater') { throw 'main.py does not import bootstrap_dport_updater.' }
+          if ($main -notmatch 'bootstrap_dport_updater\(\)') { throw 'main.py does not invoke bootstrap_dport_updater().' }
           if ($updater -match 'state="update_available"[sS]{0,1200}_launch_update\(') { throw 'Startup update_available path still launches updater automatically.' }
           if ($updater -notmatch 'state="update_available"') { throw 'Updater availability state is missing.' }
 
@@ -175,10 +179,14 @@ jobs:
               throw "$exe disappeared while running."
             }
 
-            if (-not $p.HasExited) {
-              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            if ($p.HasExited) {
+              if ($p.ExitCode -ne 0) {
+                throw "$exe exited during the runner smoke test with code $($p.ExitCode)."
+              }
+              Write-Host "$exe exited cleanly during the runner smoke test."
             } else {
-              Write-Host "$exe remained on disk but exited with code $($p.ExitCode) during the runner smoke test."
+              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+              Write-Host "$exe remained running during the runner smoke test."
             }
 
             if (-not (Test-Path $exe)) {
