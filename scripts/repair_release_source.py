@@ -334,11 +334,9 @@ BRAND_STATUS_LAYOUT_FIX = """
 
 
 
-BRAND_HEADER_HEIGHT_FIX = """
+BRAND_HEADER_HEIGHT_FIX = r'''
 <style id="dport-brand-header-height-final">
-/* Give the brand column enough vertical room for the title, subtitle,
-   caption and live update status. This prevents the last orange line from
-   being clipped by the fixed 100px header height. */
+/* Give the brand column enough vertical room for all four text rows. */
 @media (min-width:1600px){
   .dport-hero{
     height:112px!important;
@@ -355,15 +353,12 @@ BRAND_HEADER_HEIGHT_FIX = """
     max-height:100px!important;
     overflow:hidden!important;
   }
-  .dport-brand-meta-row{
-    row-gap:3px!important;
-  }
+  .dport-brand-meta-row{row-gap:3px!important;}
   .dport-brand-meta-row #dport-pm3-status{
     line-height:1.2!important;
     min-height:12px!important;
   }
 }
-
 @media (min-width:2200px){
   .dport-hero{
     height:116px!important;
@@ -375,11 +370,10 @@ BRAND_HEADER_HEIGHT_FIX = """
     min-height:104px!important;
     max-height:104px!important;
   }
-  .dport-brand-text{
-    max-height:104px!important;
-  }
+  .dport-brand-text{max-height:104px!important;}
 }
 </style>
+'''
 
 UPDATE_UI = r'''
 <style id="dport-user-update-dialog-override">
