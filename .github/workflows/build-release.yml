@@ -362,6 +362,7 @@ jobs:
         run: |
           @'
           import importlib.util
+          import re
           from pathlib import Path
 
           root = Path.cwd()
@@ -388,72 +389,7 @@ jobs:
           print('Updater version logic simulation passed: 6.9.0 -> 6.9.1.')
 
           req = (root / 'requirements-build.txt').read_text(encoding='utf-8', errors='replace')
-          req_match = re.search(r'(?m)^\\s*pymobiledevice3==([^\\s#]+)\\s*          '@ | Set-Content audit_updater.py -Encoding utf8
-          python audit_updater.py
-
-      - name: Smoke-test built DPort executable
-        shell: pwsh
-        run: |
-          $v = '${{ steps.version.outputs.version }}'
-          $exe = Join-Path $PWD "dist\DPort-$v.exe"
-          if (-not (Test-Path $exe)) { throw "Missing EXE: $exe" }
-          $p = Start-Process -FilePath $exe -PassThru
-          Start-Sleep -Seconds 6
-          if ($p.HasExited) {
-            if ($p.ExitCode -ne 0) { throw "DPort exited during smoke test with code $($p.ExitCode)" }
-            Write-Host 'DPort exited cleanly during smoke test.'
-          } else {
-            Stop-Process -Id $p.Id -Force
-            Write-Host 'DPort remained running during smoke test; executable launch passed.'
-          }
-      - name: Generate SHA-256
-        shell: pwsh
-        run: |
-          $v = '${{ steps.version.outputs.version }}'
-          $exe = "dist/DPort-$v.exe"
-          (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() | Set-Content "dist/DPort-$v.exe.sha256" -Encoding ascii
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: DPort-${{ steps.version.outputs.version }}-windows
-          path: |
-            dist/DPort-${{ steps.version.outputs.version }}.exe
-            dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
-
-      - name: Publish GitHub Release
-        if: github.ref == 'refs/heads/main' || github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $v = '${{ steps.version.outputs.version }}'
-          $tag = "v$v"
-          $exe = "dist/DPort-$v.exe"
-          $sha = "dist/DPort-$v.exe.sha256"
-
-          if (-not (Test-Path $exe)) { throw "Missing release asset: $exe" }
-          if (-not (Test-Path $sha)) { throw "Missing checksum: $sha" }
-
-
-          gh release view $tag --repo "${{ github.repository }}" *> $null
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "Release $tag exists; replacing assets."
-            gh release upload $tag $exe $sha --repo "${{ github.repository }}" --clobber
-            if ($LASTEXITCODE -ne 0) { throw "Failed to upload assets to $tag" }
-            gh release edit $tag --repo "${{ github.repository }}" --title "DPort v$v" --latest
-          } else {
-            Write-Host "Creating release $tag."
-            gh release create $tag $exe $sha --repo "${{ github.repository }}" --title "DPort v$v" --latest --generate-notes --target "${{ github.sha }}"
-            if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag" }
-          }
-
-          Write-Host "Published DPort v$v to GitHub Releases."
-
-
-
-# DPort release policy: publish the version declared by the checked-out source.
-, req)
+          req_match = re.search(r'(?m)^\s*pymobiledevice3==([^\s#]+)\s*$', req)
           assert req_match, req
           print(f"Packaged requirements pymobiledevice3: {req_match.group(1)}")
 
@@ -527,4 +463,5 @@ jobs:
 
 
 
-# DPort release policy: current stable is 6.9.0; next release is 6.9.1.
+
+# DPort release policy: publish the version declared by the checked-out source.
