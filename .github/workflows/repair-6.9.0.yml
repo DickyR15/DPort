@@ -198,52 +198,84 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-          function Set-SourceBaseline([string]$package, [string]$version) {
-            $tmp = Join-Path $env:RUNNER_TEMP ("publish-" + $version)
+          function Normalize-SourcePackage([string]$inputZip, [string]$version, [string]$pm3) {
+            $tmp = Join-Path $env:RUNNER_TEMP ("normalize-" + $version)
             if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
             New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-            Expand-Archive -LiteralPath $package -DestinationPath $tmp -Force
+            Expand-Archive -LiteralPath $inputZip -DestinationPath $tmp -Force
             $root = Get-ChildItem -LiteralPath $tmp -Directory | Select-Object -First 1
-            if (-not $root) { throw "Source root missing for $version" }
+            if (-not $root) { throw "Source root missing for v$version" }
+
+            $verFile = Join-Path $root.FullName 'src\dport_version.py'
+            $reqFile = Join-Path $root.FullName 'requirements-build.txt'
+            $mapFile = Join-Path $root.FullName 'src\templates\map.html'
+            foreach ($p in @($verFile,$reqFile,$mapFile)) { if (-not (Test-Path $p)) { throw "Missing source file for v$version`: $p" } }
+
+            Set-Content -LiteralPath $verFile -Value ('DPORT_VERSION="{0}"' -f $version) -Encoding utf8
+            $reqText = Get-Content $reqFile -Raw
+            $reqText = [regex]::Replace($reqText, '(?m)^\s*pymobiledevice3\s*==\s*[^\r\n#]+', ('pymobiledevice3=={0}' -f $pm3))
+            Set-Content -LiteralPath $reqFile -Value $reqText -Encoding utf8
+
+            if (-not (Get-Content $mapFile -Raw).Contains('dport-user-update-dialog')) { throw "User-choice update dialog missing from v$version source." }
+            if (-not (Get-Content $reqFile -Raw).Contains(('pymobiledevice3=={0}' -f $pm3))) { throw "pymobiledevice3 pin mismatch in v$version source." }
+            if ((Get-Content $verFile -Raw).Trim() -ne ('DPORT_VERSION="{0}"' -f $version)) { throw "DPort version mismatch in v$version source." }
+
+            $outZip = Join-Path $env:RUNNER_TEMP ("normalized-{0}.zip" -f $version)
+            if (Test-Path $outZip) { Remove-Item $outZip -Force }
+            Compress-Archive -Path $root -DestinationPath $outZip -CompressionLevel Optimal -Force
+            return $outZip
+          }
+
+          function Publish-Baseline([string]$package, [string]$version, [string]$pm3) {
+            $normalized = Normalize-SourcePackage $package $version $pm3
+
+            $tmp = Join-Path $env:RUNNER_TEMP ("repo-baseline-" + $version)
+            if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+            New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+            Expand-Archive -LiteralPath $normalized -DestinationPath $tmp -Force
+            $root = Get-ChildItem -LiteralPath $tmp -Directory | Select-Object -First 1
 
             if (Test-Path 'src') { Remove-Item 'src' -Recurse -Force }
             New-Item -ItemType Directory -Force -Path 'src' | Out-Null
-            Copy-Item -Path (Join-Path $root 'src\*') -Destination 'src' -Recurse -Force
-            Copy-Item -LiteralPath (Join-Path $root 'requirements-build.txt') -Destination 'requirements-build.txt' -Force
-            Copy-Item -LiteralPath $package -Destination 'DPort-source-6.9.0.zip' -Force
+            Copy-Item -Path (Join-Path $root.FullName 'src\*') -Destination 'src' -Recurse -Force
+            Copy-Item -LiteralPath (Join-Path $root.FullName 'requirements-build.txt') -Destination 'requirements-build.txt' -Force
+            Copy-Item -LiteralPath $normalized -Destination 'DPort-source-6.9.0.zip' -Force
+
+            $actualV = (Get-Content 'src\dport_version.py' -Raw).Trim()
+            $actualR = (Get-Content 'requirements-build.txt' -Raw)
+            $expectedV = 'DPORT_VERSION="{0}"' -f $version
+            $expectedR = 'pymobiledevice3=={0}' -f $pm3
+            if ($actualV -ne $expectedV) { throw "Repository version mismatch before tag: expected $expectedV got $actualV" }
+            if (-not $actualR.Contains($expectedR)) { throw "Repository dependency mismatch before tag: expected $expectedR" }
 
             git add src requirements-build.txt DPort-source-6.9.0.zip
             if (-not (git diff --cached --quiet)) {
-              git commit -m "[repair-$version] publish repaired source baseline [skip ci]"
+              git commit -m "[repair-$version] publish exact source baseline [skip ci]"
             }
-            # The tag API can only point at a commit that already exists on the remote.
             git push origin HEAD:main
-            if ($LASTEXITCODE -ne 0) { throw "Failed to push repaired source baseline for v$version" }
+            if ($LASTEXITCODE -ne 0) { throw "Failed to push v$version source baseline." }
+
             $sha = git rev-parse HEAD
             $ref = "repos/${{ github.repository }}/git/refs/tags/v$version"
-
-            # Use GitHub's refs API instead of a raw git tag push so the repaired
-            # Release tag is deterministically moved to the exact source commit.
             gh api --method PATCH $ref -f sha=$sha -F force=true | Out-Host
-            if ($LASTEXITCODE -ne 0) { throw "Failed to move tag v$version to $sha" }
+            if ($LASTEXITCODE -ne 0) { throw "Failed to move v$version tag." }
+            $tagSha = gh api $ref --jq '.object.sha'
+            if ($tagSha -ne $sha) { throw "Tag/source mismatch for v${version}: $tagSha != $sha" }
 
-            $actual = gh api $ref --jq '.object.sha'
-            if ($actual -ne $sha) { throw "Tag verification failed for v${version}: expected $sha, got $actual" }
-
-            return $sha
+            return @{ Sha=$sha; Zip=$normalized }
           }
 
-          $sha690 = Set-SourceBaseline 'repair/DPort-source-6.9.0.zip' '6.9.0'
-          gh release upload v6.9.0 repair-bin/DPort-6.9.0.exe repair-bin/DPort-6.9.0.exe.sha256 --repo "${{ github.repository }}" --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to publish DPort v6.9.0 assets.' }
-          gh release edit v6.9.0 --repo "${{ github.repository }}" --title 'DPort v6.9.0' --latest=false
+          $r690 = Publish-Baseline 'repair/DPort-source-6.9.0.zip' '6.9.0' '11.19.1'
+          gh release upload v6.9.0 repair-bin/DPort-6.9.0.exe repair-bin/DPort-6.9.0.exe.sha256 --repo '${{ github.repository }}' --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to upload repaired 6.9.0 assets.' }
+          gh release edit v6.9.0 --repo '${{ github.repository }}' --title 'DPort v6.9.0' --latest=false
 
-          $sha691 = Set-SourceBaseline 'repair/DPort-source-6.9.1.zip' '6.9.1'
-          gh release upload v6.9.1 repair-bin/DPort-6.9.1.exe repair-bin/DPort-6.9.1.exe.sha256 --repo "${{ github.repository }}" --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to publish DPort v6.9.1 assets.' }
-          gh release edit v6.9.1 --repo "${{ github.repository }}" --title 'DPort v6.9.1' --latest=true
+          $r691 = Publish-Baseline 'repair/DPort-source-6.9.1.zip' '6.9.1' '11.19.4'
+          gh release upload v6.9.1 repair-bin/DPort-6.9.1.exe repair-bin/DPort-6.9.1.exe.sha256 --repo '${{ github.repository }}' --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to upload repaired 6.9.1 assets.' }
+          gh release edit v6.9.1 --repo '${{ github.repository }}' --title 'DPort v6.9.1' --latest=true
 
-          Write-Host "Published repaired releases: v6.9.0=$sha690 ; v6.9.1=$sha691."
+          Write-Host "Published exact repaired baselines: v6.9.0=$($r690.Sha), v6.9.1=$($r691.Sha)."
       - name: Upload repaired artifacts
         uses: actions/upload-artifact@v4
         with:
