@@ -1,3 +1,4 @@
+# ci: use Python 3.9 for pymobiledevice3 11.19.1 compatibility
 # ci: fix map_text initialization before release patch
 # ci: final exit-button patch syntax fix
 # ci: final update shutdown-path fix
@@ -32,7 +33,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.13.14"
+          python-version: "3.9.13"
 
       - name: Validate repair script
         shell: pwsh
@@ -88,7 +89,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           if ($LASTEXITCODE -ne 0) { throw "Failed to upgrade Python build tools." }
-          python -m pip install pyinstaller
+          python -m pip install "pyinstaller<7"
           if ($LASTEXITCODE -ne 0) { throw "Failed to install PyInstaller." }
 
       - name: Build DPort 6.9.0
