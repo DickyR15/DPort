@@ -1,3 +1,4 @@
+# ci: validate browser reconnect after updater
 name: DPort Repair Releases
 
 on:
