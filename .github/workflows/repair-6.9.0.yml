@@ -167,6 +167,8 @@ jobs:
           if ($main -notmatch 'from dport_release_updater import bootstrap_dport_updater') { throw 'main.py does not import bootstrap_dport_updater.' }
           if ($main -notmatch 'bootstrap_dport_updater\(\)') { throw 'main.py does not invoke bootstrap_dport_updater().' }
           if ($updater -match 'state="update_available"[sS]{0,1200}_launch_update\(') { throw 'Startup update_available path still launches updater automatically.' }
+          if ($updater -notmatch 'detached_process') { throw 'Windows updater must be detached from the DPort console.' }
+          if ($updater -notmatch 'new_process_group') { throw 'Windows updater must use a separate process group.' }
           if ($updater -notmatch 'state="update_available"') { throw 'Updater availability state is missing.' }
           if (-not $map.Contains('dport-brand-meta-row-stack-final')) { throw 'Brand update status layout fix is missing.' }
           if ($map -notmatch 'grid-template-rows:auto auto') { throw 'Brand update status must use separate caption/status rows.' }
