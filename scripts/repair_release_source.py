@@ -266,38 +266,49 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
             encoding="utf-8",
         )
 
-        # Launch the updater as a truly detached Windows process. The main
-        # DPort process intentionally exits shortly after this call, so the
-        # updater must not depend on the console/CMD lifetime.
+        # Launch a fully detached updater. Do not pass a Python-owned file handle
+        # to the child process: the DPort parent exits shortly afterward, and a
+        # closed/invalid redirected handle can surface as "I/O operation on
+        # closed file" before the update even starts.
         create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         detached_process = 0x00000008
         new_process_group = 0x00000200
+
         log_file = temp_dir / "DPort-update.log"
+        script_path = str(script).replace("'", "''")
+        log_path = str(log_file).replace("'", "''")
         script.write_text(
             script.read_text(encoding="utf-8")
-            + "\nAdd-Content -LiteralPath '"
-            + str(log_file).replace("'", "''")
-            + "' -Value ('Updater finished at ' + (Get-Date -Format s)) -ErrorAction SilentlyContinue\n",
+            + f"""
+$LogFile = '{log_path}'
+function Write-DPortLog([string]$Message) {{
+    try {{ Add-Content -LiteralPath $LogFile -Value ('[' + (Get-Date -Format s) + '] ' + $Message) -ErrorAction SilentlyContinue }} catch {{}}
+}}
+Write-DPortLog 'Updater started.'
+try {{
+    Write-DPortLog 'Updater finished.'
+}} catch {{
+    Write-DPortLog ('Updater error: ' + $_.Exception.Message)
+    exit 1
+}}
+""",
             encoding="utf-8",
         )
-        with log_file.open("a", encoding="utf-8") as log:
-            log.write(f"Starting DPort update to {latest}\\n")
-            log.flush()
 
         subprocess.Popen(
             [
                 "powershell.exe",
                 "-NoProfile",
                 "-ExecutionPolicy", "Bypass",
-                "-File", str(script),
+                "-File", script_path,
                 "-Pid", str(os.getpid()),
                 "-NewExe", str(new_exe),
                 "-OldExe", str(current_exe),
                 "-TargetExe", str(target_exe),
             ],
             stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=subprocess.STDOUT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             creationflags=create_no_window | detached_process | new_process_group,
             close_fds=True,
         )
@@ -539,6 +550,7 @@ UPDATE_UI = r'''
   }
   function start(){
     var btn=document.getElementById('dport-update-now');
+    var title=document.querySelector('#dport-update-dialog h3');
     if(!btn) return;
     btn.disabled=true;
     btn.textContent='更新中…';
@@ -546,17 +558,22 @@ UPDATE_UI = r'''
       .then(function(r){return r.json();})
       .then(function(result){
         if(result && result.ok){
+          if(title) title.textContent='DPort 正在更新';
           var msg=document.getElementById('dport-update-message');
           if(msg) msg.textContent='正在更新到 DPort '+result.version+'，程式即將重新啟動…';
         }else{
+          if(title) title.textContent='DPort 更新失敗';
           btn.disabled=false;
-          btn.textContent='立即更新';
+          btn.textContent='立即重試';
           var msg=document.getElementById('dport-update-message');
           if(msg) msg.textContent=(result && result.message) ? result.message : '更新失敗，請稍後再試。';
         }
       }).catch(function(){
+        if(title) title.textContent='DPort 更新失敗';
         btn.disabled=false;
-        btn.textContent='立即更新';
+        btn.textContent='立即重試';
+        var msg=document.getElementById('dport-update-message');
+        if(msg) msg.textContent='無法完成更新，請再次嘗試。';
       });
   }
 
