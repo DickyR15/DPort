@@ -123,9 +123,11 @@ jobs:
           if (Test-Path dist) { Remove-Item dist -Recurse -Force }
           if (Test-Path build) { Remove-Item build -Recurse -Force }
 
-          python -m PyInstaller --noconfirm --clean --onefile --name DPort-Updater src/dport_updater_helper.py
+          python -m PyInstaller --noconfirm --clean --onefile --name DPort-Updater --hidden-import dport_updater_helper src/dport_updater_helper.py
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed for DPort-Updater." }
           if (-not (Test-Path dist/DPort-Updater.exe)) { throw "DPort-Updater.exe missing." }
+          python dist/DPort-Updater.exe --help
+          if ($LASTEXITCODE -ne 0) { throw "DPort-Updater.exe self-test failed to start." }
           Copy-Item dist/DPort-Updater.exe repair-bin/DPort-Updater.exe -Force
           (Get-FileHash dist/DPort-Updater.exe -Algorithm SHA256).Hash.ToLower() | Set-Content repair-bin/DPort-Updater.exe.sha256 -Encoding ascii
 
