@@ -217,8 +217,16 @@ jobs:
               git commit -m "[repair-$version] publish repaired source baseline [skip ci]"
             }
             $sha = git rev-parse HEAD
-            git tag -f "v$version" $sha
-            git push origin "refs/tags/v$version" --force
+            $ref = "repos/${{ github.repository }}/git/refs/tags/v$version"
+
+            # Use GitHub's refs API instead of a raw git tag push so the repaired
+            # Release tag is deterministically moved to the exact source commit.
+            gh api --method PATCH $ref -f sha=$sha -F force=true | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "Failed to move tag v$version to $sha" }
+
+            $actual = gh api $ref --jq '.object.sha'
+            if ($actual -ne $sha) { throw "Tag verification failed for v$version: expected $sha, got $actual" }
+
             return $sha
           }
 
