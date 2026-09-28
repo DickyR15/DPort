@@ -332,6 +332,55 @@ BRAND_STATUS_LAYOUT_FIX = """
 </style>
 """
 
+
+
+BRAND_HEADER_HEIGHT_FIX = """
+<style id="dport-brand-header-height-final">
+/* Give the brand column enough vertical room for the title, subtitle,
+   caption and live update status. This prevents the last orange line from
+   being clipped by the fixed 100px header height. */
+@media (min-width:1600px){
+  .dport-hero{
+    height:112px!important;
+    min-height:112px!important;
+    max-height:112px!important;
+  }
+  .dport-brand{
+    height:100px!important;
+    min-height:100px!important;
+    max-height:100px!important;
+    align-self:center!important;
+  }
+  .dport-brand-text{
+    max-height:100px!important;
+    overflow:hidden!important;
+  }
+  .dport-brand-meta-row{
+    row-gap:3px!important;
+  }
+  .dport-brand-meta-row #dport-pm3-status{
+    line-height:1.2!important;
+    min-height:12px!important;
+  }
+}
+
+@media (min-width:2200px){
+  .dport-hero{
+    height:116px!important;
+    min-height:116px!important;
+    max-height:116px!important;
+  }
+  .dport-brand{
+    height:104px!important;
+    min-height:104px!important;
+    max-height:104px!important;
+  }
+  .dport-brand-text{
+    max-height:104px!important;
+  }
+}
+</style>
+
 UPDATE_UI = r'''
 <style id="dport-user-update-dialog-override">
 /* The legacy pymobiledevice3 update overlay is display-only and must never block
@@ -541,6 +590,12 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
                 map_text = map_text.replace("</body>", BRAND_STATUS_LAYOUT_FIX + "\n</body>", 1)
             else:
                 map_text += BRAND_STATUS_LAYOUT_FIX
+
+        if "dport-brand-header-height-final" not in map_text:
+            if "</body>" in map_text:
+                map_text = map_text.replace("</body>", BRAND_HEADER_HEIGHT_FIX + "\n</body>", 1)
+            else:
+                map_text += BRAND_HEADER_HEIGHT_FIX
 
         map_file.write_text(map_text, encoding="utf-8")
 
