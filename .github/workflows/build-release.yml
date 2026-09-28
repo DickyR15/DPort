@@ -209,7 +209,7 @@ jobs:
           $tag = "v$v"
           $exe = "dist/DPort-$v.exe"
           $sha = "dist/DPort-$v.exe.sha256"
-          $repair = '${{ github.event.head_commit.message }}' -like '*[repair-6.9.1]*'
+          $repair = '${{ github.event.head_commit.message }}'.Contains('[repair-6.9.1]')
 
           if (-not (Test-Path $exe)) { throw "Missing release asset: $exe" }
           if (-not (Test-Path $sha)) { throw "Missing release checksum: $sha" }
