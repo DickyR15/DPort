@@ -38,12 +38,18 @@ jobs:
       - name: Validate updater design
         shell: pwsh
         run: |
-          $src = Get-Content scripts/repair_release_source.py -Raw
-          if ($src -notmatch '\[int\]\$ParentPid') { throw "Updater must use ParentPid for the PowerShell parent process ID." }
-          if ($src -match '\[int\]\$Pid\b') { throw "PowerShell reserved PID parameter remains in updater." }
-          if ($src -notmatch '"-ParentPid", str\(os\.getpid\(\)\)') { throw "Python launcher is not passing ParentPid." }
-          if ($src -notmatch 'breakaway_from_job') { throw "Updater must use job-breakaway process creation." }
-          if ($src -notmatch 'Copy-Item -LiteralPath \$NewExe -Destination \$TargetExe -Force') { throw "Updater must copy the new EXE into the application folder." }
+          $helper = Get-Content src/dport_updater_helper.py -Raw
+          $repair = Get-Content scripts/repair_release_source.py -Raw
+          if ($helper -notmatch 'add_argument\("--pid"') { throw "Standalone updater is missing --pid." }
+          if ($helper -notmatch 'add_argument\("--target"') { throw "Standalone updater is missing --target." }
+          if ($helper -notmatch 'add_argument\("--version"') { throw "Standalone updater is missing --version." }
+          if ($helper -notmatch 'add_argument\("--exe-url"') { throw "Standalone updater is missing --exe-url." }
+          if ($helper -notmatch 'def _wait_for_pid_exit') { throw "Standalone updater is missing process wait logic." }
+          if ($helper -notmatch 'def _replace_file') { throw "Standalone updater is missing replacement logic." }
+          if ($helper -notmatch 'def relaunch') { throw "Standalone updater is missing relaunch logic." }
+          if ($repair -notmatch 'DPort-Updater\.exe') { throw "DPort release updater does not reference standalone helper." }
+          if ($repair -notmatch 'os\.startfile\(str\(helper\)') { throw "DPort release updater does not launch standalone helper." }
+          if ($repair -match 'dport_release_updater\.request_update\(\).*DPort-update\.ps1') { throw "Legacy PowerShell updater path is still referenced." }
 
       - name: Prepare API key and source packages
         shell: pwsh
