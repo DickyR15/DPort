@@ -235,50 +235,56 @@ $LogFile = Join-Path (Split-Path -Parent $TargetExe) 'DPort-update.log'
 function Write-DPortLog([string]$Message) {
     try { Add-Content -LiteralPath $LogFile -Value ('[' + (Get-Date -Format s) + '] ' + $Message) -ErrorAction SilentlyContinue } catch {}
 }
-Write-DPortLog 'Updater started.'
+
 try {
+    Write-DPortLog 'Updater started.'
     Write-DPortLog ("Waiting for parent PID " + $ParentPid)
-    while (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
-
-    Write-DPortLog ("Copying " + $NewExe + " to " + $TargetExe)
- 
-    if (Test-Path -LiteralPath $TargetExe) {
-    Remove-Item -LiteralPath $TargetExe -Force
-}
-
-$copyOk = $false
-for ($i = 0; $i -lt 40; $i++) {
-    try {
-        Copy-Item -LiteralPath $NewExe -Destination $TargetExe -Force
-        if (Test-Path -LiteralPath $TargetExe) {
-            $copyOk = $true
-            break
-        }
-    } catch {
+    while (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) {
         Start-Sleep -Milliseconds 300
     }
-}
-if (-not $copyOk -or -not (Test-Path -LiteralPath $TargetExe)) {
-    throw "Unable to copy the new DPort executable into the application folder."
-}
 
-$started = Start-Process -FilePath $TargetExe -ArgumentList @("--port",$Port,"--no-browser") -PassThru
-Start-Sleep -Seconds 3
-if ($started.HasExited) {
-    throw "The updated DPort executable exited immediately with code $($started.ExitCode)."
-}
+    if (Test-Path -LiteralPath $TargetExe) {
+        Remove-Item -LiteralPath $TargetExe -Force -ErrorAction SilentlyContinue
+    }
 
-if ((Test-Path -LiteralPath $OldExe) -and ($OldExe -ne $TargetExe)) {
-    Remove-Item -LiteralPath $OldExe -Force -ErrorAction SilentlyContinue
-}
+    $copyOk = $false
+    for ($i = 0; $i -lt 40; $i++) {
+        try {
+            Copy-Item -LiteralPath $NewExe -Destination $TargetExe -Force
+            if (Test-Path -LiteralPath $TargetExe) {
+                $copyOk = $true
+                break
+            }
+        } catch {
+            Write-DPortLog ("Copy retry: " + $_.Exception.Message)
+            Start-Sleep -Milliseconds 300
+        }
+    }
 
-Write-DPortLog 'New DPort process started successfully.'
-if ((Test-Path -LiteralPath $OldExe) -and ($OldExe -ne $TargetExe)) {
-    Remove-Item -LiteralPath $OldExe -Force -ErrorAction SilentlyContinue
+    if (-not $copyOk) {
+        throw "Unable to copy the new DPort executable into the application folder."
+    }
+
+    $started = Start-Process -FilePath $TargetExe -ArgumentList @("--port",$Port,"--no-browser") -PassThru
+    Start-Sleep -Seconds 3
+
+    if ($started.HasExited) {
+        throw "The updated DPort executable exited immediately with code $($started.ExitCode)."
+    }
+
+    if ((Test-Path -LiteralPath $OldExe) -and ($OldExe -ne $TargetExe)) {
+        Remove-Item -LiteralPath $OldExe -Force -ErrorAction SilentlyContinue
+    }
+
+    Write-DPortLog 'New DPort process started successfully.'
+    Write-DPortLog 'Old DPort executable removed.'
+    Write-DPortLog 'Updater completed.'
+    Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 }
-Write-DPortLog 'Old DPort executable removed.'
-Write-DPortLog 'Updater completed.'
-Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+catch {
+    Write-DPortLog ("Updater failed: " + $_.Exception.Message)
+    exit 1
+}
 """,
             encoding="utf-8",
         )
