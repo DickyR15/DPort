@@ -1,3 +1,4 @@
+# ci: rebuild pre-exit update handoff
 # ci: predownload 6.9.1 before exit
 # ci: enforce final temp-folder and versioned-exe contract
 # ci: rebuild after versioned filename install fix
