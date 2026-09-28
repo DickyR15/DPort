@@ -1,3 +1,4 @@
+# ci: direct detached updater launch
 # ci: verify parent PID detection
 # ci: updater helper runtime diagnostics
 # FORCE REPAIR RELEASE REBUILD - standalone updater helper
@@ -55,8 +56,10 @@ jobs:
           if ($helper -notmatch 'def _replace_file') { throw "Standalone updater is missing replacement logic." }
           if ($helper -notmatch 'def relaunch') { throw "Standalone updater is missing relaunch logic." }
           if ($repair -notmatch 'DPort-Updater\.exe') { throw "DPort release updater does not reference standalone helper." }
-          if ($repair -notmatch 'os\.startfile\(str\(helper\)') { throw "DPort release updater does not launch standalone helper." }
-          if ($repair -match 'dport_release_updater\.request_update\(\).*DPort-update\.ps1') { throw "Legacy PowerShell updater path is still referenced." }
+          if ($repair -notmatch 'subprocess\.Popen\(') { throw "DPort release updater must launch standalone helper via subprocess.Popen." }
+          if ($repair -notmatch 'CREATE_BREAKAWAY_FROM_JOB') { throw "DPort release updater must detach helper from parent job." }
+          if ($repair -match 'os\.startfile\(str\(helper\)') { throw "Shell-based helper launch must not be used." }
+          if ($repair -match 'DPort-update\.ps1') { throw "Legacy PowerShell updater path is still referenced." }
 
       - name: Prepare API key and source packages
         shell: pwsh
