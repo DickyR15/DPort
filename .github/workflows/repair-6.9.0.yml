@@ -31,6 +31,14 @@ jobs:
           python -m py_compile scripts/repair_release_source.py
           if ($LASTEXITCODE -ne 0) { throw "repair_release_source.py syntax validation failed." }
 
+      - name: Validate updater design
+        shell: pwsh
+        run: |
+          $src = Get-Content scripts/repair_release_source.py -Raw
+          if ($src -notmatch '\[int\]\$ParentPid') { throw "Updater must use ParentPid for the PowerShell parent process ID." }
+          if ($src -match '\[int\]\$Pid\b') { throw "PowerShell reserved PID parameter remains in updater." }
+          if ($src -notmatch '"-ParentPid", str\(os\.getpid\(\)\)') { throw "Python launcher is not passing ParentPid." }
+
       - name: Prepare API key and source packages
         shell: pwsh
         env:
