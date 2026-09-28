@@ -122,6 +122,27 @@ def _get_update_candidate(current: str) -> tuple[str, str, str, str] | None:
     )
 
 
+def _cleanup_restart_temp() -> None:
+    if os.environ.get("DPORT_RESTARTED") != "1":
+        return
+
+    def cleanup() -> None:
+        time.sleep(2.5)
+        folder = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Temp" / ".dport-update"
+        try:
+            if folder.exists():
+                shutil.rmtree(folder, ignore_errors=True)
+        except Exception:
+            LOGGER.debug("Unable to remove update temp directory", exc_info=True)
+
+
+    threading.Thread(
+        target=cleanup,
+        name="DPort-update-cleanup",
+        daemon=True,
+    ).start()
+
+
 def check_now() -> dict[str, Any]:
     try:
         candidate = _get_update_candidate(VERSION)
@@ -181,7 +202,7 @@ def start_background_update_check() -> None:
 
 
 def bootstrap_dport_updater() -> None:
-    # Startup performs detection only. Nothing is downloaded or replaced here.
+    _cleanup_restart_temp()
     start_background_update_check()
 
 
@@ -249,11 +270,6 @@ def request_update() -> dict[str, Any]:
     helper_sha_url = (
         f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe.sha256"
     )
-    target_sha_url = (
-        f"https://github.com/{REPO}/releases/download/v{latest}/"
-        f"DPort-{latest}.exe.sha256"
-    )
-
     try:
         _set_state(
             state="updating",
@@ -263,6 +279,20 @@ def request_update() -> dict[str, Any]:
             restart_required=True,
         )
 
+        new_exe = update_dir / f"DPort-{latest}.exe"
+        sha_file = update_dir / f"DPort-{latest}.exe.sha256"
+
+        # Download and verify 6.9.1 BEFORE EXIT.
+        _download(exe_url, new_exe)
+        sha_url = exe_url.rsplit("/", 1)[0] + f"/DPort-{latest}.exe.sha256"
+        _download(sha_url, sha_file)
+        expected_exe = sha_file.read_text(
+            encoding="utf-8", errors="replace"
+        ).strip().split()[0].lower()
+        if _sha256(new_exe) != expected_exe:
+            raise RuntimeError(f"DPort-{latest}.exe SHA-256 驗證失敗。")
+
+        # Then download and verify the standalone helper.
         _download(helper_url, helper)
         _download(helper_sha_url, helper_sha)
 
@@ -279,9 +309,8 @@ def request_update() -> dict[str, Any]:
             str(helper),
             "--pid", str(os.getpid()),
             "--target", str(current_exe),
+            "--new-exe", str(new_exe),
             "--version", latest,
-            "--exe-url", exe_url,
-            "--sha256-url", target_sha_url,
             "--port", str(port),
             "--no-browser",
         ]
@@ -333,6 +362,9 @@ __all__ = [
     "_get_update_candidate",
 ]
 '''
+
+
+
 
 
 BRAND_STATUS_LAYOUT_FIX = """
