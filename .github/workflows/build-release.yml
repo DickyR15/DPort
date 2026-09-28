@@ -95,11 +95,18 @@ jobs:
         if: contains(github.event.head_commit.message, '[diag-updater-full]')
         shell: pwsh
         run: |
+          $tmp = Join-Path $env:RUNNER_TEMP 'diag-source'
+          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
+          $root = Get-ChildItem -LiteralPath $tmp -Directory | Select-Object -First 1
+          if (-not $root) { throw 'Source root not found.' }
           Write-Host '===== dport_release_updater.py ====='
           Get-Content -LiteralPath (Join-Path $root 'src\dport_release_updater.py') -Raw
-          Write-Host '===== main.py updater references ====='
-          $main = Get-Content -LiteralPath (Join-Path $root 'src\main.py') -Raw
-          $main -split "`r?`n" | Select-String -Pattern 'bootstrap_dport_updater|start_background_update_check|update_available|/pymobiledevice3/status|DPortUpdater|get_status' | ForEach-Object { Write-Host $_.Line }
+          Write-Host '===== main.py updater-related lines ====='
+          Get-Content -LiteralPath (Join-Path $root 'src\main.py') |
+            Select-String -Pattern 'bootstrap_dport_updater|start_background_update_check|update_available|/pymobiledevice3/status|get_status|DPortUpdater|update' |
+            ForEach-Object { Write-Host $_.Line }
           exit 1
       - name: Resolve version
         id: version
