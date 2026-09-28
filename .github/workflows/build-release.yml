@@ -87,11 +87,25 @@ jobs:
           $expected = (Get-Content requirements-build.txt | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1).Trim().Substring('pymobiledevice3=='.Length).Trim()
           if ($pm3 -ne $expected) { throw "Expected pymobiledevice3 $expected, got $pm3" }
 
+      - name: Fix device refresh state
+        shell: pwsh
+        run: |
+          python scripts/fix_device_refresh.py
+
+      - name: Final UI polish
+        shell: pwsh
+        run: |
+          python scripts/final_ui_polish.py
+
+      - name: Fix startup render flicker
+        shell: pwsh
+        run: |
+          python scripts/fix_startup_render.py
+
       - name: Validate source
         shell: pwsh
         run: |
-          python -m compileall -q src scripts
-          python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
+          python -m compileall -q src scripts          python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
           $u = Get-Content 'src/dport_release_updater.py' -Raw
           foreach ($token in @('_current_exe_sha256','_release_exe_sha256','current_sha256','latest_sha256','same_version_build','_get_update_candidate_version_only')) { if ($u.Contains($token)) { throw "Forbidden same-version SHA updater token remains: $token" } }
           if ($u -notmatch 'def _get_update_candidate\(current:\s*str\)') { throw 'Version-only updater signature is missing.' }
@@ -198,6 +212,13 @@ jobs:
           if (-not (Test-Path $sha)) { throw "Missing release checksum: $sha" }
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -eq 0) {
+            if ('${{ github.event.head_commit.message }}' -like '*[repair-6.9.1]*') {
+              Write-Host "One-time 6.9.1 repair: replacing existing assets."
+              gh release upload $tag $exe $sha --repo "${{ github.repository }}" --clobber
+              if ($LASTEXITCODE -ne 0) { throw "Failed to replace assets in $tag" }
+              gh release edit $tag --repo "${{ github.repository }}" --title "DPort v$v" --latest
+              exit 0
+            }
             Write-Host "Release $tag already exists; build/test completed without changing the existing release."
             exit 0
           }
