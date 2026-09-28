@@ -1,5 +1,5 @@
 # FORCE REPAIR RELEASE REBUILD - standalone updater helper
-# ci: standalone updater helper release rebuild
+# ci: standalone updater helper release rebuild - FINAL RETRY
 # ci: validate browser reconnect after updater
 # ci: validate copy-based updater across drive letters
 name: DPort Repair Releases
