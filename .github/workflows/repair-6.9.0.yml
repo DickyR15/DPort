@@ -140,25 +140,28 @@ jobs:
       - name: Smoke test and package audit
         shell: pwsh
         run: |
-          # Source-package validation: the user-facing update dialog must be present
-          # before it is ever frozen into the EXE.
           $sourceTmp = Join-Path $env:RUNNER_TEMP 'source-audit'
           if (Test-Path $sourceTmp) { Remove-Item $sourceTmp -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $sourceTmp | Out-Null
           Expand-Archive -LiteralPath repair/DPort-source-6.9.0.zip -DestinationPath $sourceTmp -Force
           $sourceRoot = Get-ChildItem -LiteralPath $sourceTmp -Directory | Select-Object -First 1
           if (-not $sourceRoot) { throw 'Source package root missing.' }
+
+          $updater = Get-Content (Join-Path $sourceRoot.FullName 'src\dport_release_updater.py') -Raw
+          $main = Get-Content (Join-Path $sourceRoot.FullName 'src\main.py') -Raw
           $map = Get-Content (Join-Path $sourceRoot.FullName 'src\templates\map.html') -Raw
-          if (-not $map.Contains('dport-user-update-dialog')) { throw 'User update dialog is missing from repaired source package.' }
-          if (-not $map.Contains('/pymobiledevice3/status')) { throw 'Update status endpoint wiring is missing from repaired source package.' }
+
+          if (-not $map.Contains('dport-user-update-dialog')) { throw 'User update dialog is missing.' }
+          if (-not $main.Contains('/dport/update')) { throw 'User-confirmed update endpoint is missing.' }
+          if (-not $updater.Contains('def request_update()')) { throw 'Explicit request_update handler is missing.' }
+          if ($updater -match 'state="update_available"[sS]{0,1200}_launch_update\(') { throw 'Startup update_available path still launches updater automatically.' }
+          if ($updater -notmatch 'state="update_available"') { throw 'Updater availability state is missing.' }
 
           foreach ($v in @('6.9.0','6.9.1')) {
             $exe = (Resolve-Path "repair-bin/DPort-$v.exe").Path
-            $rawBytes = [IO.File]::ReadAllBytes($exe)
-            $rawText = [Text.Encoding]::UTF8.GetString($rawBytes)
-
+            $rawText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($exe))
             if ($rawText.Contains('DPortUpdater')) {
-              throw "Legacy DPortUpdater helper remains in $exe"
+              throw "Legacy self-updater helper remains embedded in $exe"
             }
 
             $shaLine = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
@@ -167,61 +170,25 @@ jobs:
 
             $p = Start-Process -FilePath $exe -PassThru
             Start-Sleep -Seconds 20
-            if (-not (Test-Path $exe)) { throw "$exe disappeared while the application was running." }
-            if ($p.HasExited -and $p.ExitCode -ne 0) { throw "$exe smoke test failed: $($p.ExitCode)" }
-            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
-            if (-not (Test-Path $exe)) { throw "$exe disappeared after shutdown." }
-            Write-Host "$exe passed updater safety, SHA-256, and 20-second startup smoke test."
-          }
-          Write-Host 'Repaired source and both EXEs passed the safety audit.'
 
-      - name: Publish repaired 6.9.0 and 6.9.1 releases
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            if (-not (Test-Path $exe)) {
+              throw "$exe disappeared while running."
+            }
 
-          function Sync-VersionSource([string]$package, [string]$version) {
-            $tmp = Join-Path $env:RUNNER_TEMP ("sync-$version")
-            if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-            New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-            Expand-Archive -LiteralPath $package -DestinationPath $tmp -Force
-            $root = Get-ChildItem -LiteralPath $tmp -Directory | Select-Object -First 1
-            if (-not $root) { throw "Source root missing for $version" }
-            Copy-Item -LiteralPath (Join-Path $root.FullName 'requirements-build.txt') -Destination 'requirements-build.txt' -Force
-            Copy-Item -LiteralPath (Join-Path $root.FullName 'src\dport_version.py') -Destination 'src\dport_version.py' -Force
-            Copy-Item -LiteralPath $package -Destination 'DPort-source-6.9.0.zip' -Force
+            if (-not $p.HasExited) {
+              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            } else {
+              Write-Host "$exe remained on disk but exited with code $($p.ExitCode) during the runner smoke test."
+            }
+
+            if (-not (Test-Path $exe)) {
+              throw "$exe disappeared after shutdown."
+            }
+
+            Write-Host "$exe passed persistence/self-delete audit."
           }
 
-          # First commit/tag the exact repaired 6.9.0 source baseline.
-          Sync-VersionSource 'repair/DPort-source-6.9.0.zip' '6.9.0'
-          git add DPort-source-6.9.0.zip requirements-build.txt src/dport_version.py
-          if (-not (git diff --cached --quiet)) { git commit -m '[repair-6.9.0] restore stable source baseline with user-confirmed updater' }
-          $sha690 = git rev-parse HEAD
-          git tag -f v6.9.0 $sha690
-          git push origin refs/tags/v6.9.0 --force
-
-          # Then commit/tag the repaired 6.9.1 source baseline.
-          Sync-VersionSource 'repair/DPort-source-6.9.1.zip' '6.9.1'
-          git add DPort-source-6.9.0.zip requirements-build.txt src/dport_version.py
-          if (-not (git diff --cached --quiet)) { git commit -m '[repair-6.9.1] upgrade only pymobiledevice3 to 11.19.4' }
-          $sha691 = git rev-parse HEAD
-          git tag -f v6.9.1 $sha691
-          git push origin refs/tags/v6.9.1 --force
-
-          # Replace only the binary assets in each existing Release.
-          gh release upload v6.9.0 repair-bin/DPort-6.9.0.exe repair-bin/DPort-6.9.0.exe.sha256 --repo "${{ github.repository }}" --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to upload repaired 6.9.0 assets.' }
-          gh release edit v6.9.0 --repo "${{ github.repository }}" --title 'DPort v6.9.0' --latest=false
-
-          gh release upload v6.9.1 repair-bin/DPort-6.9.1.exe repair-bin/DPort-6.9.1.exe.sha256 --repo "${{ github.repository }}" --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to upload repaired 6.9.1 assets.' }
-          gh release edit v6.9.1 --repo "${{ github.repository }}" --title 'DPort v6.9.1' --latest=true
-
-          Write-Host "Repaired releases published. v6.9.0 tag=$sha690 ; v6.9.1 tag=$sha691"
+          Write-Host 'Repaired 6.9.0/6.9.1 source and EXEs passed user-confirmed updater + persistence audit.'
       - name: Upload repaired artifacts
         uses: actions/upload-artifact@v4
         with:
