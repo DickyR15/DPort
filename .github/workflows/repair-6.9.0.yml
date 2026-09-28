@@ -1,3 +1,4 @@
+# ci: final update shutdown-path fix
 # ci: direct detached updater launch
 # ci: verify parent PID detection
 # ci: updater helper runtime diagnostics
@@ -59,6 +60,8 @@ jobs:
           if ($repair -notmatch 'subprocess\.Popen\(') { throw "DPort release updater must launch standalone helper via subprocess.Popen." }
           if ($repair -notmatch 'CREATE_BREAKAWAY_FROM_JOB') { throw "DPort release updater must detach helper from parent job." }
           if ($repair -match 'os\.startfile\(str\(helper\)') { throw "Shell-based helper launch must not be used." }
+          if ($repair -match 'DPort-update\.ps1') { throw "Legacy DPort-update.ps1 updater must not be generated." }
+          if ($repair -notmatch 'window\.exitApp\(true\)') { throw "Update dialog must reuse the Leave shutdown path." }
           if ($repair -match 'DPort-update\.ps1') { throw "Legacy PowerShell updater path is still referenced." }
 
       - name: Prepare API key and source packages
