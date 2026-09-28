@@ -290,6 +290,19 @@ __all__ = [
 
 
 UPDATE_UI = r'''
+<style id="dport-user-update-dialog-override">
+/* The legacy pymobiledevice3 update overlay is display-only and must never block
+   the explicit user-choice DPort update dialog. */
+.dport-pm3-update-modal,
+#dport-pm3-update-modal{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+#dport-update-dialog{
+  z-index:2147483647!important;
+}
+</style>
 <style id="dport-user-update-dialog">
 #dport-update-dialog{
   position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
