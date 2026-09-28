@@ -416,6 +416,14 @@ def get_good_zip() -> bytes:
 
 
 def patch_main(main_text: str) -> str:
+    # The updater exports bootstrap_dport_updater(). Older source referenced a
+    # non-existent bootstrap symbol and caused immediate startup ImportError.
+    main_text = re.sub(
+        r"from dport_release_updater import bootstrap\s+as\s+bootstrap_dport_updater",
+        "from dport_release_updater import bootstrap_dport_updater",
+        main_text,
+    )
+
     if "/dport/update" in main_text:
         return main_text
 
