@@ -229,7 +229,7 @@ def request_update() -> dict[str, Any]:
 
         script = temp_dir / "DPort-update.ps1"
         script.write_text(
-            """param([int]$Pid,[string]$NewExe,[string]$OldExe,[string]$TargetExe)
+            """param([int]$Pid,[string]$NewExe,[string]$OldExe,[string]$TargetExe,[string]$Port)
 $ErrorActionPreference = 'Stop'
 while (Get-Process -Id $Pid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
 
@@ -251,8 +251,8 @@ if (-not $moveOk -or -not (Test-Path -LiteralPath $TargetExe)) {
     throw "Unable to place the new DPort executable."
 }
 
-$started = Start-Process -FilePath $TargetExe -PassThru
-Start-Sleep -Seconds 2
+$started = Start-Process -FilePath $TargetExe -ArgumentList @("--port",$Port,"--no-browser") -PassThru
+Start-Sleep -Seconds 3
 if ($started.HasExited) {
     throw "The updated DPort executable exited immediately with code $($started.ExitCode)."
 }
@@ -295,6 +295,7 @@ try {{
             encoding="utf-8",
         )
 
+        port = os.environ.get("DPORT_PORT") or "54321"
         subprocess.Popen(
             [
                 "powershell.exe",
@@ -305,6 +306,7 @@ try {{
                 "-NewExe", str(new_exe),
                 "-OldExe", str(current_exe),
                 "-TargetExe", str(target_exe),
+                "-Port", str(port),
             ],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -548,6 +550,30 @@ UPDATE_UI = r'''
     var box=document.getElementById('dport-update-dialog');
     if(box) box.classList.remove('show');
   }
+  function waitForRestart(){
+    var msg=document.getElementById('dport-update-message');
+    var attempts=0;
+    var timer=setInterval(function(){
+      attempts++;
+      fetch('/pymobiledevice3/status?ts='+Date.now(),{cache:'no-store'})
+        .then(function(r){
+          if(!r.ok) throw new Error('HTTP '+r.status);
+          return r.json();
+        })
+        .then(function(){
+          clearInterval(timer);
+          if(msg) msg.textContent='更新完成，正在重新載入 DPort…';
+          setTimeout(function(){ window.location.reload(); },300);
+        })
+        .catch(function(){
+          if(attempts>=60){
+            clearInterval(timer);
+            if(msg) msg.textContent='程式已重新啟動，但網頁尚未連回 DPort，請按瀏覽器重新整理。';
+          }
+        });
+    },1000);
+  }
+
   function start(){
     var btn=document.getElementById('dport-update-now');
     var title=document.querySelector('#dport-update-dialog h3');
@@ -561,6 +587,7 @@ UPDATE_UI = r'''
           if(title) title.textContent='DPort 正在更新';
           var msg=document.getElementById('dport-update-message');
           if(msg) msg.textContent='正在更新到 DPort '+result.version+'，程式即將重新啟動…';
+          waitForRestart();
         }else{
           if(title) title.textContent='DPort 更新失敗';
           btn.disabled=false;
@@ -621,7 +648,7 @@ def patch_main(main_text: str) -> str:
         raise RuntimeError("Could not find Flask app variable in main.py")
     app_name = match.group(1)
 
-    route = f'''\n\n# DPort user-confirmed updater endpoint: never called automatically.\n@{app_name}.get("/dport/update")\ndef _dport_user_confirmed_update():\n    try:\n        return dport_release_updater.request_update()\n    except Exception as exc:\n        return {{"ok": False, "state": "update_failed", "message": str(exc)}}, 500\n\n'''
+    route = f'''\n\n# DPort user-confirmed updater endpoint: never called automatically.\n@{app_name}.get("/dport/update")\ndef _dport_user_confirmed_update():\n    try:\n        # Keep the same localhost port so the existing browser tab can reconnect.\n        try:\n            os.environ["DPORT_PORT"] = str(chosen_port)\n        except Exception:\n            os.environ["DPORT_PORT"] = "54321"\n        return dport_release_updater.request_update()\n    except Exception as exc:\n        return {{"ok": False, "state": "update_failed", "message": str(exc)}}, 500\n\n'''
 
     anchor = re.search(r"^\s*if\s+__name__\s*==\s*[\"']__main__[\"']\s*:", main_text, flags=re.M)
     if anchor:
