@@ -248,7 +248,35 @@ def request_update() -> dict[str, Any]:
             f'--no-browser'
         )
 
-        os.startfile(str(helper), "open", command)
+        # Start the standalone updater directly and fully detach it from
+        # DPort/CMD. Using os.startfile() relies on the Windows shell's EXE
+        # association and can drop/alter arguments; direct Popen preserves the
+        # exact updater command line.
+        updater_flags = (
+            getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+            | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            | 0x01000000  # CREATE_BREAKAWAY_FROM_JOB
+        )
+        updater_args = [
+            str(helper),
+            "--pid", str(os.getpid()),
+            "--target", str(current_exe),
+            "--version", latest,
+            "--exe-url", exe_url,
+            "--sha256-url", target_sha_url,
+            "--port", str(port),
+            "--no-browser",
+        ]
+        subprocess.Popen(
+            updater_args,
+            cwd=str(current_exe.parent),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=updater_flags,
+            close_fds=True,
+        )
 
         _set_state(
             state="restarting",
