@@ -66,7 +66,15 @@ jobs:
           Copy-Item (Join-Path $root.FullName 'src\*') src -Recurse -Force
           Copy-Item (Join-Path $root.FullName 'requirements-build.txt') requirements-build.txt -Force
           Copy-Item (Join-Path $root.FullName 'DPort-6.9.0.ico') DPort-6.9.0.ico -Force
-          $req = Get-Content requirements-build.txt | Where-Object { $_ -and $_ -notmatch '^\s*pyimg4\s*          if ($pm3 -ne '11.19.1') { throw "Expected pymobiledevice3 11.19.1, got $pm3" }
+          $req = Get-Content requirements-build.txt | Where-Object { $_ -and $_.Trim() -ne 'pyimg4' }
+          $req | Set-Content requirements-build-ci.txt -Encoding utf8
+          python -m pip install -r requirements-build-ci.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install build requirements for DPort 6.9.0.' }
+          python -m pip install --index-url https://pypi.org/simple pyimg4==0.8.8
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install pyimg4 0.8.8.' }
+          python -m pip install lzfse==0.4.2
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install lzfse 0.4.2.' }
+          if ($LASTEXITCODE -ne 0) { throw 'pymobiledevice3 metadata lookup failed.' }
           $vi = @(
             '# UTF-8',
             'VSVersionInfo(',
@@ -111,7 +119,16 @@ jobs:
           Copy-Item (Join-Path $root.FullName 'src\*') src -Recurse -Force
           Copy-Item (Join-Path $root.FullName 'requirements-build.txt') requirements-build.txt -Force
           Copy-Item (Join-Path $root.FullName 'DPort-6.9.0.ico') DPort-6.9.0.ico -Force
-          $req = Get-Content requirements-build.txt | Where-Object { $_ -and $_ -notmatch '^\s*pyimg4\s*          if ($pm3 -ne '11.19.4') { throw "Expected pymobiledevice3 11.19.4, got $pm3" }
+          $req = Get-Content requirements-build.txt | Where-Object { $_ -and $_.Trim() -ne 'pyimg4' }
+          $req | Set-Content requirements-build-ci.txt -Encoding utf8
+          python -m pip install -r requirements-build-ci.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install build requirements for DPort 6.9.1.' }
+          python -m pip install --index-url https://pypi.org/simple pyimg4==0.8.8
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install pyimg4 0.8.8.' }
+          python -m pip install lzfse==0.4.2
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install lzfse 0.4.2.' }
+          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
+          if ($LASTEXITCODE -ne 0) { throw 'pymobiledevice3 metadata lookup failed.' }
           $vi = @(
             '# UTF-8',
             'VSVersionInfo(',
@@ -322,7 +339,6 @@ jobs:
           python -m pip install --index-url https://pypi.org/simple pyimg4==0.8.8
           if ($LASTEXITCODE -ne 0) { throw 'Failed to install pyimg4 0.8.8.' }
           python -m pip install lzfse==0.4.2
-          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
           if ($pm3 -ne '11.19.1') { throw "Expected pymobiledevice3 11.19.1, got $pm3" }
           $vi = @(
             '# UTF-8',
