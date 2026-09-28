@@ -268,7 +268,10 @@ def request_update() -> dict[str, Any]:
         except Exception:
             pass
 
-    new_exe = update_dir / f"DPort-{latest}.exe"
+    # The new DPort executable is downloaded directly beside the currently
+    # running DPort executable. This remains true even when the user launches
+    # DPort from Desktop or any other folder.
+    new_exe = current_exe.parent / f"DPort-{latest}.exe"
     sha_file = update_dir / f"DPort-{latest}.exe.sha256"
     helper = update_dir / "DPort-Updater.exe"
     helper_sha = update_dir / "DPort-Updater.exe.sha256"
@@ -284,7 +287,8 @@ def request_update() -> dict[str, Any]:
             restart_required=True,
         )
 
-        # 1. Download new DPort EXE before any EXIT.
+        # 1. Download new DPort EXE directly into the same folder as
+        #    the current DPort EXE, BEFORE any EXIT.
         _download(exe_url, new_exe)
 
         # 2. Verify new DPort EXE before any EXIT.
@@ -361,6 +365,9 @@ __all__ = [
     "_get_update_candidate",
 ]
 '''
+
+
+
 
 
 
