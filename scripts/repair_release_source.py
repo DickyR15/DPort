@@ -227,28 +227,39 @@ def request_update() -> dict[str, Any]:
         if expected != actual:
             raise RuntimeError("SHA-256 verification failed.")
 
-        script = temp_dir / "DPort-update.ps1"
+        script = current_exe.parent / "DPort-update.ps1"
         script.write_text(
             """param([int]$ParentPid,[string]$NewExe,[string]$OldExe,[string]$TargetExe,[string]$Port)
 $ErrorActionPreference = 'Stop'
-while (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
+$LogFile = Join-Path (Split-Path -Parent $TargetExe) 'DPort-update.log'
+function Write-DPortLog([string]$Message) {
+    try { Add-Content -LiteralPath $LogFile -Value ('[' + (Get-Date -Format s) + '] ' + $Message) -ErrorAction SilentlyContinue } catch {}
+}
+Write-DPortLog 'Updater started.'
+try {
+    Write-DPortLog ("Waiting for parent PID " + $ParentPid)
+    while (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
 
-if (Test-Path -LiteralPath $TargetExe) {
+    Write-DPortLog ("Copying " + $NewExe + " to " + $TargetExe)
+ 
+    if (Test-Path -LiteralPath $TargetExe) {
     Remove-Item -LiteralPath $TargetExe -Force
 }
 
-$moveOk = $false
+$copyOk = $false
 for ($i = 0; $i -lt 40; $i++) {
     try {
-        Move-Item -LiteralPath $NewExe -Destination $TargetExe -Force
-        $moveOk = $true
-        break
+        Copy-Item -LiteralPath $NewExe -Destination $TargetExe -Force
+        if (Test-Path -LiteralPath $TargetExe) {
+            $copyOk = $true
+            break
+        }
     } catch {
         Start-Sleep -Milliseconds 300
     }
 }
-if (-not $moveOk -or -not (Test-Path -LiteralPath $TargetExe)) {
-    throw "Unable to place the new DPort executable."
+if (-not $copyOk -or -not (Test-Path -LiteralPath $TargetExe)) {
+    throw "Unable to copy the new DPort executable into the application folder."
 }
 
 $started = Start-Process -FilePath $TargetExe -ArgumentList @("--port",$Port,"--no-browser") -PassThru
@@ -261,6 +272,12 @@ if ((Test-Path -LiteralPath $OldExe) -and ($OldExe -ne $TargetExe)) {
     Remove-Item -LiteralPath $OldExe -Force -ErrorAction SilentlyContinue
 }
 
+Write-DPortLog 'New DPort process started successfully.'
+if ((Test-Path -LiteralPath $OldExe) -and ($OldExe -ne $TargetExe)) {
+    Remove-Item -LiteralPath $OldExe -Force -ErrorAction SilentlyContinue
+}
+Write-DPortLog 'Old DPort executable removed.'
+Write-DPortLog 'Updater completed.'
 Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 """,
             encoding="utf-8",
@@ -273,28 +290,11 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
         create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         detached_process = 0x00000008
         new_process_group = 0x00000200
+        breakaway_from_job = 0x01000000
 
-        log_file = temp_dir / "DPort-update.log"
+        log_file = current_exe.parent / "DPort-update.log"
         script_path = str(script).replace("'", "''")
         log_path = str(log_file).replace("'", "''")
-        script.write_text(
-            script.read_text(encoding="utf-8")
-            + f"""
-$LogFile = '{log_path}'
-function Write-DPortLog([string]$Message) {{
-    try {{ Add-Content -LiteralPath $LogFile -Value ('[' + (Get-Date -Format s) + '] ' + $Message) -ErrorAction SilentlyContinue }} catch {{}}
-}}
-Write-DPortLog 'Updater started.'
-try {{
-    Write-DPortLog 'Updater finished.'
-}} catch {{
-    Write-DPortLog ('Updater error: ' + $_.Exception.Message)
-    exit 1
-}}
-""",
-            encoding="utf-8",
-        )
-
         port = os.environ.get("DPORT_PORT") or "54321"
         subprocess.Popen(
             [
@@ -311,7 +311,7 @@ try {{
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=create_no_window | detached_process | new_process_group,
+            creationflags=create_no_window | detached_process | new_process_group | breakaway_from_job,
             close_fds=True,
         )
 
