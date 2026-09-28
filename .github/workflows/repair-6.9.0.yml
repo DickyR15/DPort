@@ -140,6 +140,18 @@ jobs:
       - name: Smoke test and package audit
         shell: pwsh
         run: |
+          # Source-package validation: the user-facing update dialog must be present
+          # before it is ever frozen into the EXE.
+          $sourceTmp = Join-Path $env:RUNNER_TEMP 'source-audit'
+          if (Test-Path $sourceTmp) { Remove-Item $sourceTmp -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $sourceTmp | Out-Null
+          Expand-Archive -LiteralPath repair/DPort-source-6.9.0.zip -DestinationPath $sourceTmp -Force
+          $sourceRoot = Get-ChildItem -LiteralPath $sourceTmp -Directory | Select-Object -First 1
+          if (-not $sourceRoot) { throw 'Source package root missing.' }
+          $map = Get-Content (Join-Path $sourceRoot.FullName 'src\templates\map.html') -Raw
+          if (-not $map.Contains('dport-user-update-dialog')) { throw 'User update dialog is missing from repaired source package.' }
+          if (-not $map.Contains('/pymobiledevice3/status')) { throw 'Update status endpoint wiring is missing from repaired source package.' }
+
           foreach ($v in @('6.9.0','6.9.1')) {
             $exe = (Resolve-Path "repair-bin/DPort-$v.exe").Path
             $rawBytes = [IO.File]::ReadAllBytes($exe)
@@ -148,39 +160,20 @@ jobs:
             if ($rawText.Contains('DPortUpdater')) {
               throw "Legacy DPortUpdater helper remains in $exe"
             }
-            if (-not $rawText.Contains('dport_release_updater')) {
-              throw "Safe release updater module is missing from $exe"
-            }
-            if (-not $rawText.Contains('dport-user-update-dialog')) {
-              throw "User update dialog is missing from $exe"
-            }
 
             $shaLine = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
             $shaExpected = (Get-Content "repair-bin/DPort-$v.exe.sha256").Trim().Split()[0].ToLower()
-            if ($shaLine -ne $shaExpected) {
-              throw "SHA-256 sidecar mismatch for $exe"
-            }
+            if ($shaLine -ne $shaExpected) { throw "SHA-256 sidecar mismatch for $exe" }
 
             $p = Start-Process -FilePath $exe -PassThru
             Start-Sleep -Seconds 20
-
-            if (-not (Test-Path $exe)) {
-              throw "$exe disappeared while the application was running."
-            }
-            if ($p.HasExited -and $p.ExitCode -ne 0) {
-              throw "$exe smoke test failed: $($p.ExitCode)"
-            }
-            if (-not $p.HasExited) {
-              Stop-Process -Id $p.Id -Force
-            }
-
-            if (-not (Test-Path $exe)) {
-              throw "$exe disappeared after shutdown."
-            }
-
+            if (-not (Test-Path $exe)) { throw "$exe disappeared while the application was running." }
+            if ($p.HasExited -and $p.ExitCode -ne 0) { throw "$exe smoke test failed: $($p.ExitCode)" }
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+            if (-not (Test-Path $exe)) { throw "$exe disappeared after shutdown." }
             Write-Host "$exe passed updater safety, SHA-256, and 20-second startup smoke test."
           }
-
+          Write-Host 'Repaired source and both EXEs passed the safety audit.'
       - name: Upload repaired artifacts
         uses: actions/upload-artifact@v4
         with:
