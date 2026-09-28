@@ -266,7 +266,24 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
             encoding="utf-8",
         )
 
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        # Launch the updater as a truly detached Windows process. The main
+        # DPort process intentionally exits shortly after this call, so the
+        # updater must not depend on the console/CMD lifetime.
+        create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        detached_process = 0x00000008
+        new_process_group = 0x00000200
+        log_file = temp_dir / "DPort-update.log"
+        script.write_text(
+            script.read_text(encoding="utf-8") +
+            "
+Add-Content -LiteralPath '" + str(log_file).replace("'", "''") + "' -Value ('Updater finished at ' + (Get-Date -Format s)) -ErrorAction SilentlyContinue
+",
+            encoding="utf-8",
+        )
+        with log_file.open("a", encoding="utf-8") as log:
+            log.write(f"Starting DPort update to {latest}\\n")
+            log.flush()
+
         subprocess.Popen(
             [
                 "powershell.exe",
@@ -279,9 +296,9 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
                 "-TargetExe", str(target_exe),
             ],
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=flags,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            creationflags=create_no_window | detached_process | new_process_group,
             close_fds=True,
         )
 
