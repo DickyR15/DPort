@@ -38,8 +38,8 @@ jobs:
 
           if ($repair) {
             # 6.9.1 repair baseline: this is the source package used by the
-            # last confirmed-good 6.9.0 build (Run #274).
-            $knownGood = '68a95030bb1f23accb53bf542ac0f59433b754a7'
+            # last confirmed-good 6.9.0 build (Run #275).
+            $knownGood = '49d5c17cbd70225ad6187c7ec45bd0dd2b68d547'
             Write-Host "Repair mode: recovering known-good source package from $knownGood"
             git show "$knownGood`:DPort-source-6.9.0.zip" > $zip
           } else {
