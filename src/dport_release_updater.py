@@ -193,10 +193,9 @@ def request_update() -> dict[str, Any]:
     if not exe_url:
         return {"ok": False, "state": "update_failed", "message": "Update package URL is unavailable."}
 
-    # Never overwrite the current executable in-place while it is running.
     current_exe = Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve()
-    if current_exe.name.lower() != f"DPort-{VERSION}.exe".lower() and getattr(sys, "frozen", False):
-        current_exe = Path(sys.executable).resolve()
+    current_exe = current_exe.parent / f"DPort-{VERSION}.exe" if getattr(sys, "frozen", False) else current_exe
+    target_exe = current_exe.parent / f"DPort-{latest}.exe"
 
     temp_dir = Path(tempfile.mkdtemp(prefix="DPort-update-"))
     new_exe = temp_dir / f"DPort-{latest}.exe"
@@ -215,11 +214,38 @@ def request_update() -> dict[str, Any]:
 
         script = temp_dir / "DPort-update.ps1"
         script.write_text(
-            """param([int]$Pid,[string]$NewExe,[string]$TargetExe)
+            """param([int]$Pid,[string]$NewExe,[string]$OldExe,[string]$TargetExe)
 $ErrorActionPreference = 'Stop'
 while (Get-Process -Id $Pid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
-Move-Item -LiteralPath $NewExe -Destination $TargetExe -Force
-Start-Process -FilePath $TargetExe
+
+if (Test-Path -LiteralPath $TargetExe) {
+    Remove-Item -LiteralPath $TargetExe -Force
+}
+
+$moveOk = $false
+for ($i = 0; $i -lt 40; $i++) {
+    try {
+        Move-Item -LiteralPath $NewExe -Destination $TargetExe -Force
+        $moveOk = $true
+        break
+    } catch {
+        Start-Sleep -Milliseconds 300
+    }
+}
+if (-not $moveOk -or -not (Test-Path -LiteralPath $TargetExe)) {
+    throw "Unable to place the new DPort executable."
+}
+
+$started = Start-Process -FilePath $TargetExe -PassThru
+Start-Sleep -Seconds 2
+if ($started.HasExited) {
+    throw "The updated DPort executable exited immediately with code $($started.ExitCode)."
+}
+
+if ((Test-Path -LiteralPath $OldExe) -and ($OldExe -ne $TargetExe)) {
+    Remove-Item -LiteralPath $OldExe -Force -ErrorAction SilentlyContinue
+}
+
 Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 """,
             encoding="utf-8",
@@ -234,7 +260,8 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
                 "-File", str(script),
                 "-Pid", str(os.getpid()),
                 "-NewExe", str(new_exe),
-                "-TargetExe", str(current_exe),
+                "-OldExe", str(current_exe),
+                "-TargetExe", str(target_exe),
             ],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,

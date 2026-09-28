@@ -3671,7 +3671,7 @@ async function dportRefreshPm3Status(){
 
         if(s.state==='update_available'){
             el.className='dport-pm3-status update';
-            el.textContent='DPort：'+current+' → '+latest+'（準備自動更新）';
+            el.textContent='DPort：'+current+' → '+latest+'（可手動更新）';
             dportPm3ShowUpdateModal('update_available',current,latest,s.message);
         }else if(s.state==='updating'){
             el.className='dport-pm3-status update';
@@ -12845,11 +12845,46 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
     msg.textContent='目前版本 '+current+'，GitHub 已有正式版 '+latest+'。要現在升級嗎？';
     box.classList.add('show');
   }
+  function rememberUpdate(current,latest){
+    var el=document.getElementById('dport-pm3-status');
+    if(!el) return;
+    if(newer(latest,current)){
+      el.dataset.dportUpdateCurrent=String(current);
+      el.dataset.dportUpdateLatest=String(latest);
+      el.classList.add('dport-update-clickable');
+      el.setAttribute('title','點擊重新開啟更新確認');
+      el.setAttribute('role','button');
+      el.setAttribute('tabindex','0');
+    }else{
+      delete el.dataset.dportUpdateCurrent;
+      delete el.dataset.dportUpdateLatest;
+      el.classList.remove('dport-update-clickable');
+      el.removeAttribute('title');
+      el.removeAttribute('role');
+      el.removeAttribute('tabindex');
+    }
+  }
+
+  function showFromStatus(){
+    var el=document.getElementById('dport-pm3-status');
+    if(!el) return;
+    var current=el.dataset.dportUpdateCurrent;
+    var latest=el.dataset.dportUpdateLatest;
+    if(current && latest && newer(latest,current)){
+      var box=document.getElementById('dport-update-dialog');
+      var msg=document.getElementById('dport-update-message');
+      if(!box || !msg) return;
+      msg.textContent='目前版本 '+current+'，GitHub 已有正式版 '+latest+'。要現在升級嗎？';
+      box.classList.add('show');
+    }
+  }
+
   function check(){
     fetch('/pymobiledevice3/status?ts='+Date.now(),{cache:'no-store'})
       .then(function(r){return r.json();})
       .then(function(s){
         if(s && s.current_version && s.latest_version){
+          rememberUpdate(s.current_version,s.latest_version);
           show(s.current_version,s.latest_version);
         }
       }).catch(function(){});
@@ -12884,8 +12919,15 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   document.addEventListener('DOMContentLoaded',function(){
     var later=document.getElementById('dport-update-later');
     var now=document.getElementById('dport-update-now');
+    var status=document.getElementById('dport-pm3-status');
     if(later) later.addEventListener('click',closeDialog);
     if(now) now.addEventListener('click',start);
+    if(status){
+      status.addEventListener('click',showFromStatus);
+      status.addEventListener('keydown',function(e){
+        if(e.key==='Enter' || e.key===' '){ e.preventDefault(); showFromStatus(); }
+      });
+    }
     setTimeout(check,1500);
     setTimeout(check,12000);
   });
@@ -12969,6 +13011,18 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
     max-height:104px!important;
   }
   .dport-brand-text{max-height:104px!important;}
+}
+</style>
+
+
+<style id="dport-manual-update-status-final">
+#dport-pm3-status.dport-update-clickable{
+    cursor:pointer!important;
+    text-decoration:underline!important;
+    text-underline-offset:2px!important;
+}
+#dport-pm3-status.dport-update-clickable:hover{
+    filter:brightness(1.18)!important;
 }
 </style>
 
