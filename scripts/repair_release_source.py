@@ -209,117 +209,44 @@ def request_update() -> dict[str, Any]:
         return {"ok": False, "state": "update_failed", "message": "Update package URL is unavailable."}
 
     current_exe = Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve()
-    current_exe = current_exe.parent / f"DPort-{VERSION}.exe" if getattr(sys, "frozen", False) else current_exe
-    target_exe = current_exe.parent / f"DPort-{latest}.exe"
+    if getattr(sys, "frozen", False):
+        current_exe = current_exe.parent / f"DPort-{VERSION}.exe"
 
-    temp_dir = Path(tempfile.mkdtemp(prefix="DPort-update-"))
-    new_exe = temp_dir / f"DPort-{latest}.exe"
-    sha_file = temp_dir / f"DPort-{latest}.exe.sha256"
+    update_dir = current_exe.parent / ".dport-update"
+    update_dir.mkdir(parents=True, exist_ok=True)
+    helper = update_dir / "DPort-Updater.exe"
+    helper_sha = update_dir / "DPort-Updater.exe.sha256"
+
+    helper_url = f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe"
+    helper_sha_url = f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe.sha256"
 
     try:
-        _set_state(state="updating", message=f"Downloading DPort {latest}")
-        _download(exe_url, new_exe)
+        _set_state(state="updating", message=f"Preparing DPort {latest} updater")
 
-        sha_url = exe_url.rsplit("/", 1)[0] + f"/DPort-{latest}.exe.sha256"
-        _download(sha_url, sha_file)
-        expected = sha_file.read_text(encoding="utf-8", errors="replace").strip().split()[0].lower()
-        actual = _sha256(new_exe)
-        if expected != actual:
-            raise RuntimeError("SHA-256 verification failed.")
+        _download(helper_url, helper)
+        _download(helper_sha_url, helper_sha)
 
-        script = current_exe.parent / "DPort-update.ps1"
-        script.write_text(
-            """param([int]$ParentPid,[string]$NewExe,[string]$OldExe,[string]$TargetExe,[string]$Port)
-$ErrorActionPreference = 'Stop'
-$LogFile = Join-Path (Split-Path -Parent $TargetExe) 'DPort-update.log'
-function Write-DPortLog([string]$Message) {
-    try { Add-Content -LiteralPath $LogFile -Value ('[' + (Get-Date -Format s) + '] ' + $Message) -ErrorAction SilentlyContinue } catch {}
-}
+        expected_helper = helper_sha.read_text(
+            encoding="utf-8", errors="replace"
+        ).strip().split()[0].lower()
+        actual_helper = _sha256(helper)
+        if expected_helper != actual_helper:
+            raise RuntimeError("DPort updater helper SHA-256 verification failed.")
 
-try {
-    Write-DPortLog 'Updater started.'
-    Write-DPortLog ("Waiting for parent PID " + $ParentPid)
-    while (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) {
-        Start-Sleep -Milliseconds 300
-    }
-
-    if (Test-Path -LiteralPath $TargetExe) {
-        Remove-Item -LiteralPath $TargetExe -Force -ErrorAction SilentlyContinue
-    }
-
-    $copyOk = $false
-    for ($i = 0; $i -lt 40; $i++) {
-        try {
-            Copy-Item -LiteralPath $NewExe -Destination $TargetExe -Force
-            if (Test-Path -LiteralPath $TargetExe) {
-                $copyOk = $true
-                break
-            }
-        } catch {
-            Write-DPortLog ("Copy retry: " + $_.Exception.Message)
-            Start-Sleep -Milliseconds 300
-        }
-    }
-
-    if (-not $copyOk) {
-        throw "Unable to copy the new DPort executable into the application folder."
-    }
-
-    $started = Start-Process -FilePath $TargetExe -ArgumentList @("--port",$Port,"--no-browser") -PassThru
-    Start-Sleep -Seconds 3
-
-    if ($started.HasExited) {
-        throw "The updated DPort executable exited immediately with code $($started.ExitCode)."
-    }
-
-    if ((Test-Path -LiteralPath $OldExe) -and ($OldExe -ne $TargetExe)) {
-        Remove-Item -LiteralPath $OldExe -Force -ErrorAction SilentlyContinue
-    }
-
-    Write-DPortLog 'New DPort process started successfully.'
-    Write-DPortLog 'Old DPort executable removed.'
-    Write-DPortLog 'Updater completed.'
-    Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
-}
-catch {
-    Write-DPortLog ("Updater failed: " + $_.Exception.Message)
-    exit 1
-}
-""",
-            encoding="utf-8",
+        # Launch the helper through the Windows shell instead of inheriting the
+        # DPort/CMD process tree. The helper owns the complete wait/replace/
+        # relaunch sequence after DPort exits.
+        args_json = json.dumps(["--no-browser"], ensure_ascii=False)
+        command = (
+            f'--pid {os.getpid()} '
+            f'--target "{current_exe}" '
+            f'--version "{latest}" '
+            f'--exe-url "{exe_url}" '
+            f'--sha256-url "{helper_sha_url.rsplit("/", 1)[0]}/DPort-{latest}.exe.sha256" '
+            f'--args-json "{args_json.replace(chr(34), chr(92)+chr(34))}"'
         )
 
-        # Launch a fully detached updater. Do not pass a Python-owned file handle
-        # to the child process: the DPort parent exits shortly afterward, and a
-        # closed/invalid redirected handle can surface as "I/O operation on
-        # closed file" before the update even starts.
-        create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        detached_process = 0x00000008
-        new_process_group = 0x00000200
-        breakaway_from_job = 0x01000000
-
-        log_file = current_exe.parent / "DPort-update.log"
-        script_path = str(script).replace("'", "''")
-        log_path = str(log_file).replace("'", "''")
-        port = os.environ.get("DPORT_PORT") or "54321"
-        subprocess.Popen(
-            [
-                "powershell.exe",
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", script_path,
-                "-ParentPid", str(os.getpid()),
-                "-NewExe", str(new_exe),
-                "-OldExe", str(current_exe),
-                "-TargetExe", str(target_exe),
-                "-Port", str(port),
-            ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=create_no_window | detached_process | new_process_group | breakaway_from_job,
-            close_fds=True,
-        )
+        os.startfile(str(helper), "open", command)
 
         _set_state(
             state="restarting",
@@ -330,6 +257,7 @@ catch {
             updated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         )
         threading.Timer(0.8, os._exit, args=(0,)).start()
+
         return {
             "ok": True,
             "state": "restarting",
