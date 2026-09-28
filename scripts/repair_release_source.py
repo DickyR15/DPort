@@ -571,7 +571,15 @@ UPDATE_UI = r'''
         if(result && result.ok){
           if(title) title.textContent='DPort 正在更新';
           var msg=document.getElementById('dport-update-message');
-          if(msg) msg.textContent='正在更新到 DPort '+result.version+'，程式即將重新啟動…';
+          if(msg) msg.textContent='正在關閉目前版本並啟動 DPort '+result.version+'…';
+          // Reuse the same /exit route used by the top-right 「離開」 button.
+          setTimeout(function(){
+            if(typeof window.exitApp === 'function'){
+              window.exitApp(true);
+            }else if(navigator.sendBeacon){
+              navigator.sendBeacon('/exit', JSON.stringify({reason:'update'}));
+            }
+          },120);
           waitForRestart();
         }else{
           if(title) title.textContent='DPort 更新失敗';
@@ -690,6 +698,45 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
         main_text = main_file.read_text(encoding="utf-8", errors="replace")
         main_file.write_text(patch_main(main_text), encoding="utf-8")
 
+        # Reuse the existing top-right Leave shutdown path for update.
+        map_text = re.sub(
+            r"""(?s)function exitApp\(\)\s*\{.*?\n\s*\}\n\n\s*function aboutApp""",
+            """function exitApp(forUpdate) {
+        console.log('Exit App function called');
+
+        try {
+            $('#aboutModal').modal('hide');
+            if (!forUpdate) {
+                $('#shutdownModal').modal('show');
+            }
+
+            const data = JSON.stringify({reason: forUpdate ? 'update' : 'user_exit'});
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon('/exit', data);
+            } else {
+                fetch('/exit', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:data,
+                    keepalive:true
+                }).catch(function(){});
+            }
+
+            // Chrome/Edge may refuse window.close() for a normal tab. Keep this
+            // as a best effort; the server shutdown is always requested above.
+            window.open('', '_self', '');
+            window.close();
+        } catch (error) {
+            console.error('錯誤 during server shutdown:', error);
+        }
+        return false;
+    }
+
+    function aboutApp""",
+            map_text,
+            count=1,
+        )
+
         map_text = map_file.read_text(encoding="utf-8", errors="replace")
         if "dport-user-update-dialog" not in map_text:
             if "</body>" in map_text:
@@ -708,6 +755,7 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
             else:
                 map_text += BRAND_HEADER_HEIGHT_FIX
 
+        map_text = map_text.replace("onclick="exitApp()"", "onclick="return exitApp(false)"")
         map_text = map_text.replace("（準備自動更新）", "（可手動更新）")
 
         manual_css = """
