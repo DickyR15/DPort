@@ -671,6 +671,11 @@ def patch_main(main_text: str) -> str:
             '''@app.get("/dport/update")
 def _dport_user_confirmed_update():
     try:
+        try:
+            os.environ["DPORT_PORT"] = str(chosen_port)
+        except Exception:
+            os.environ["DPORT_PORT"] = "54321"
+
         result = dport_release_updater.request_update()
         if isinstance(result, tuple):
             payload = result[0]
