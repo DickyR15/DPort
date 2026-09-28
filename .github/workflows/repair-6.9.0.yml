@@ -1,3 +1,4 @@
+# ci: enforce final temp-folder and versioned-exe contract
 # ci: rebuild after versioned filename install fix
 # ci: use Python 3.9 for pymobiledevice3 11.19.1 compatibility
 # ci: fix map_text initialization before release patch
@@ -55,20 +56,12 @@ jobs:
         run: |
           $helper = Get-Content src/dport_updater_helper.py -Raw
           $repair = Get-Content scripts/repair_release_source.py -Raw
-          if ($helper -notmatch 'add_argument\("--pid"') { throw "Standalone updater is missing --pid." }
-          if ($helper -notmatch 'add_argument\("--target"') { throw "Standalone updater is missing --target." }
-          if ($helper -notmatch 'add_argument\("--version"') { throw "Standalone updater is missing --version." }
-          if ($helper -notmatch 'add_argument\("--exe-url"') { throw "Standalone updater is missing --exe-url." }
-          if ($helper -notmatch 'def _wait_for_pid_exit') { throw "Standalone updater is missing process wait logic." }
-          if ($helper -notmatch 'def _install_new_version') { throw "Standalone updater is missing versioned install logic." }
-          if ($helper -notmatch 'def relaunch') { throw "Standalone updater is missing relaunch logic." }
-          if ($repair -notmatch 'DPort-Updater\.exe') { throw "DPort release updater does not reference standalone helper." }
-          if ($repair -notmatch 'subprocess\.Popen\(') { throw "DPort release updater must launch standalone helper via subprocess.Popen." }
-          if ($repair -notmatch '0x01000000') { throw "DPort release updater must request CREATE_BREAKAWAY_FROM_JOB (0x01000000)." }
-          if ($repair -match 'os\.startfile\(str\(helper\)') { throw "Shell-based helper launch must not be used." }
-          if ($repair -match 'DPort-update\.ps1') { throw "Legacy DPort-update.ps1 updater must not be generated." }
-          if ($repair -notmatch 'window\.exitApp\(true\)') { throw "Update dialog must reuse the Leave shutdown path." }
-          if ($repair -match 'DPort-update\.ps1') { throw "Legacy PowerShell updater path is still referenced." }
+          if ($helper -notmatch 'work_dir = windows_temp / "\.dport-update"') { throw "Updater must use C:\Windows\Temp\.dport-update." }
+          if ($helper -notmatch 'new_target = app_dir / f"DPort-\{args.version\}\.exe"') { throw "Updater must create the versioned EXE filename." }
+          if ($helper -notmatch 'old_target\.unlink\(\)') { throw "Updater must remove the old EXE only after the new process starts." }
+          if ($helper -notmatch '_schedule_cleanup\(work_dir\)') { throw "Updater must clean the temporary folder." }
+          if ($repair -notmatch 'update_dir = windows_temp / "\.dport-update"') { throw "DPort must place updater payloads in Windows Temp." }
+          if ($repair -match 'DPort-update\.ps1') { throw "Legacy PowerShell updater must not be generated." }
 
       - name: Prepare API key and source packages
         shell: pwsh
