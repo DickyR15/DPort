@@ -160,6 +160,8 @@ jobs:
           if ($main -notmatch 'bootstrap_dport_updater\(\)') { throw 'main.py does not invoke bootstrap_dport_updater().' }
           if ($updater -match 'state="update_available"[sS]{0,1200}_launch_update\(') { throw 'Startup update_available path still launches updater automatically.' }
           if ($updater -notmatch 'state="update_available"') { throw 'Updater availability state is missing.' }
+          if (-not $map.Contains('dport-brand-meta-row-stack-final')) { throw 'Brand update status layout fix is missing.' }
+          if ($map -notmatch 'grid-template-rows:auto auto') { throw 'Brand update status must use separate caption/status rows.' }
 
           foreach ($v in @('6.9.0','6.9.1')) {
             $exe = (Resolve-Path "repair-bin/DPort-$v.exe").Path
