@@ -1,3 +1,4 @@
+# ci: predownload 6.9.1 before exit
 # ci: enforce final temp-folder and versioned-exe contract
 # ci: rebuild after versioned filename install fix
 # ci: use Python 3.9 for pymobiledevice3 11.19.1 compatibility
