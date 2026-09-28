@@ -102,6 +102,34 @@ jobs:
         run: |
           python scripts/fix_startup_render.py
 
+      - name: Sync final source package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing.' }
+          $tmp = Join-Path $env:RUNNER_TEMP 'dport-final-source'
+          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
+          $root = Join-Path $tmp 'DPort-6.9.0'
+          $packageSrc = Join-Path $root 'src'
+          if (-not (Test-Path $packageSrc)) { throw 'Source package src directory is missing.' }
+          Remove-Item $packageSrc -Recurse -Force
+          New-Item -ItemType Directory -Force -Path $packageSrc | Out-Null
+          Copy-Item -Path 'src\*' -Destination $packageSrc -Recurse -Force
+          $newZip = Join-Path $env:RUNNER_TEMP 'DPort-source-6.9.0.final.zip'
+          if (Test-Path $newZip) { Remove-Item $newZip -Force }
+          Compress-Archive -Path $root -DestinationPath $newZip -CompressionLevel Optimal -Force
+          Copy-Item -LiteralPath $newZip -Destination 'DPort-source-6.9.0.zip' -Force
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add DPort-source-6.9.0.zip
+          if (-not (git diff --cached --quiet)) {
+            git commit -m 'chore: sync final DPort source package [skip ci]'
+            git push origin HEAD:main
+            Write-Host 'Final source package committed before release.'
+          } else {
+            Write-Host 'Final source package already matches the build source.'
+          }
       - name: Validate source
         shell: pwsh
         run: |
@@ -209,18 +237,31 @@ jobs:
           $tag = "v$v"
           $exe = "dist/DPort-$v.exe"
           $sha = "dist/DPort-$v.exe.sha256"
+          $repair = '${{ github.event.head_commit.message }}'.Contains('[repair-6.9.1]')
+
           if (-not (Test-Path $exe)) { throw "Missing release asset: $exe" }
           if (-not (Test-Path $sha)) { throw "Missing release checksum: $sha" }
 
           gh release view $tag --repo "${{ github.repository }}" *> $null
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "Release $tag already exists; build/test completed without modifying the release."
+          $releaseExists = ($LASTEXITCODE -eq 0)
+          if ($releaseExists -and -not $repair) {
+            Write-Host "Release $tag already exists; normal build will not overwrite it."
             exit 0
           }
 
-          # This is reached only after all build and validation steps have passed.
-          # gh release create creates the tag at the exact commit that produced this EXE.
-          gh release create $tag $exe $sha --repo "${{ github.repository }}" --title "DPort v$v" --latest --generate-notes --target "${{ github.sha }}"
-          Write-Host "Published DPort v$v."
+          $tagCommit = git rev-parse HEAD
+          if ($repair) {
+            Write-Host "One-time repair: aligning $tag to $tagCommit and replacing release assets."
+            git tag -f $tag $tagCommit
+            git push origin "refs/tags/$tag" --force
+            if ($LASTEXITCODE -ne 0) { throw "Failed to update tag $tag" }
+            gh release upload $tag $exe $sha --repo "${{ github.repository }}" --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to replace assets in $tag" }
+            gh release edit $tag --repo "${{ github.repository }}" --title "DPort v$v" --latest
+          } else {
+            gh release create $tag $exe $sha --repo "${{ github.repository }}" --title "DPort v$v" --latest --generate-notes --target $tagCommit
+          }
+
+          Write-Host "Published DPort v$v from commit $tagCommit."
 
 # Release policy: build and verify the committed source package first; create vX.Y.Z only after all checks succeed.
