@@ -755,7 +755,7 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
             else:
                 map_text += BRAND_HEADER_HEIGHT_FIX
 
-        map_text = map_text.replace("onclick="exitApp()"", "onclick="return exitApp(false)"")
+        map_text = map_text.replace('onclick="exitApp()"', 'onclick="return exitApp(false)"')
         map_text = map_text.replace("（準備自動更新）", "（可手動更新）")
 
         manual_css = """
