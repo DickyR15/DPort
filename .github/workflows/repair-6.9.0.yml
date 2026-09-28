@@ -216,6 +216,9 @@ jobs:
             if (-not (git diff --cached --quiet)) {
               git commit -m "[repair-$version] publish repaired source baseline [skip ci]"
             }
+            # The tag API can only point at a commit that already exists on the remote.
+            git push origin HEAD:main
+            if ($LASTEXITCODE -ne 0) { throw "Failed to push repaired source baseline for v$version" }
             $sha = git rev-parse HEAD
             $ref = "repos/${{ github.repository }}/git/refs/tags/v$version"
 
