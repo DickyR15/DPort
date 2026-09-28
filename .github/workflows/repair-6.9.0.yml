@@ -23,7 +23,9 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path repair | Out-Null
           python scripts/repair_release_source.py --version 6.9.0 --pm3 11.19.1 --output repair/DPort-source-6.9.0.zip
-          if (-not (Test-Path repair/DPort-source-6.9.0.zip)) { throw 'Repaired source package was not created.' }
+          python scripts/repair_release_source.py --version 6.9.1 --pm3 11.19.4 --output repair/DPort-source-6.9.1.zip
+          if (-not (Test-Path repair/DPort-source-6.9.0.zip)) { throw 'Repaired 6.9.0 source package was not created.' }
+          if (-not (Test-Path repair/DPort-source-6.9.1.zip)) { throw 'Repaired 6.9.1 source package was not created.' }
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -107,6 +109,101 @@ jobs:
             dist/DPort-6.9.0.exe
             dist/DPort-6.9.0.exe.sha256
 
+      - name: Build repaired 6.9.1
+        shell: pwsh
+        run: |
+          $work = Join-Path $env:RUNNER_TEMP 'dport691'
+          if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          Expand-Archive -LiteralPath repair/DPort-source-6.9.1.zip -DestinationPath $work -Force
+          $root = Get-ChildItem -LiteralPath $work -Directory | Select-Object -First 1
+          if (-not $root) { throw '6.9.1 source root not found.' }
+          if (Test-Path src) { Remove-Item src -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path src | Out-Null
+          Copy-Item (Join-Path $root.FullName 'src\*') src -Recurse -Force
+          Copy-Item (Join-Path $root.FullName 'requirements-build.txt') requirements-build.txt -Force
+          Copy-Item (Join-Path $root.FullName 'DPort-6.9.0.ico') DPort-6.9.0.ico -Force
+          python -m pip install -r requirements-build.txt
+          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
+          if ($pm3 -ne '11.19.4') { throw "Expected pymobiledevice3 11.19.4, got $pm3" }
+          $v = Get-Content src/dport_version.py -Raw
+          if ($v -notmatch 'DPORT_VERSION="6\.9\.1"') { throw 'Source version is not 6.9.1.' }
+          @'
+# UTF-8
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(6,9,1,0),
+    prodvers=(6,9,1,0),
+    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)
+  ),
+  kids=[StringFileInfo([StringTable('040404B0',[
+    StringStruct('CompanyName','Dicky'),
+    StringStruct('FileDescription','DPort'),
+    StringStruct('FileVersion','6.9.1'),
+    StringStruct('InternalName','DPort-6.9.1'),
+    StringStruct('LegalCopyright','Dicky'),
+    StringStruct('OriginalFilename','DPort-6.9.1.exe'),
+    StringStruct('ProductName','DPort'),
+    StringStruct('ProductVersion','6.9.1'),
+    StringStruct('Comments','Dicky')])]),
+    VarFileInfo([VarStruct('Translation',[0x0404,1200])])]
+)
+          '@ | Set-Content version_info.691.txt -Encoding utf8
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          python -m PyInstaller --noconfirm --clean --onefile --name DPort-6.9.1 --icon DPort-6.9.0.ico --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import pymobiledevice3.remote.userspace_tunnel --hidden-import pymobiledevice3.services.dvt.instruments.dvt_provider --hidden-import pymobiledevice3.services.dvt.instruments.location_simulation --hidden-import pymobiledevice3.usbmux --hidden-import dport_release_updater --hidden-import dport_version --add-data 'src/templates;templates' --add-data 'moenv_api_key.txt;.' --version-file version_info.691.txt src/main.py
+          if (-not (Test-Path dist/DPort-6.9.1.exe)) { throw 'DPort-6.9.1.exe missing.' }
+
+      - name: Verify repaired 6.9.1
+        shell: pwsh
+        run: |
+          $exe = 'dist/DPort-6.9.1.exe'
+          pyi-archive_viewer $exe | Out-File 'dist/DPort-6.9.1.archive.txt' -Encoding utf8
+          $archive = Get-Content 'dist/DPort-6.9.1.archive.txt' -Raw
+          if ($archive -match 'DPortUpdater') { throw 'Legacy DPortUpdater helper remains packaged.' }
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 8
+          if ($p.HasExited -and $p.ExitCode -ne 0) { throw "6.9.1 smoke test failed with code $($p.ExitCode)" }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() | Set-Content 'dist/DPort-6.9.1.exe.sha256' -Encoding ascii
+
+      - name: Upload 6.9.1 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-6.9.1-safe-updater
+          path: |
+            dist/DPort-6.9.1.exe
+            dist/DPort-6.9.1.exe.sha256
+
+      - name: Republish v6.9.1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload v6.9.1 dist/DPort-6.9.1.exe dist/DPort-6.9.1.exe.sha256 --repo $env:GITHUB_REPOSITORY --clobber
+          gh release edit v6.9.1 --repo $env:GITHUB_REPOSITORY --title 'DPort v6.9.1' --latest
+          Write-Host 'DPort v6.9.1 repaired and republished.'
+
+      - name: Commit repaired 6.9.1 source to main
+        shell: pwsh
+        run: |
+          git switch main
+          git reset --hard "${{ github.sha }}"
+          $work = Join-Path $env:RUNNER_TEMP 'dport691-main-source'
+          if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          Expand-Archive -LiteralPath repair/DPort-source-6.9.1.zip -DestinationPath $work -Force
+          $root = Get-ChildItem -LiteralPath $work -Directory | Select-Object -First 1
+          if (-not $root) { throw '6.9.1 source root not found.' }
+          if (Test-Path src) { Remove-Item src -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path src | Out-Null
+          Copy-Item (Join-Path $root.FullName 'src\*') src -Recurse -Force
+          Copy-Item (Join-Path $root.FullName 'requirements-build.txt') requirements-build.txt -Force
+          Copy-Item (Join-Path $root.FullName 'DPort-6.9.0.ico') DPort-6.9.0.ico -Force
+          Copy-Item repair/DPort-source-6.9.1.zip DPort-source-6.9.0.zip -Force
+          git add src requirements-build.txt DPort-source-6.9.0.zip DPort-6.9.0.ico
+          git commit -m 'repair: make main source the known-good 6.9.1 baseline [skip ci]'
+          git push origin HEAD:main
       - name: Republish v6.9.0
         shell: pwsh
         env:
