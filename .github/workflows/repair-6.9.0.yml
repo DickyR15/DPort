@@ -135,6 +135,7 @@ jobs:
           if (-not (Test-Path dist/DPort-Updater.exe)) { throw "DPort-Updater.exe missing." }
           & dist/DPort-Updater.exe --help
           if ($LASTEXITCODE -ne 0) { throw "DPort-Updater.exe self-test failed to start." }
+          New-Item -ItemType Directory -Force -Path repair-bin | Out-Null
           Copy-Item dist/DPort-Updater.exe repair-bin/DPort-Updater.exe -Force
           (Get-FileHash dist/DPort-Updater.exe -Algorithm SHA256).Hash.ToLower() | Set-Content repair-bin/DPort-Updater.exe.sha256 -Encoding ascii
 
