@@ -36,18 +36,30 @@ def _read_expected_sha256(url: str) -> str:
 
 
 def _wait_for_pid_exit(pid: int, timeout: int = 180) -> None:
+    """Wait until the exact Windows process ID is gone.
+
+    tasklist's default table output starts with the image name, not the PID,
+    so checking startswith(pid) can falsely report that a live DPort process
+    has already exited. Use CSV output and match the second column exactly.
+    """
     deadline = time.time() + timeout
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     while time.time() < deadline:
         try:
             result = subprocess.run(
-                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                capture_output=True, text=True, timeout=5, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, timeout=5, creationflags=flags,
             )
-            alive = any(line.strip().startswith(str(pid)) for line in result.stdout.splitlines())
+            alive = False
+            for line in result.stdout.splitlines():
+                parts = [p.strip().strip('"') for p in line.split('","')]
+                if len(parts) >= 2 and parts[1] == str(pid):
+                    alive = True
+                    break
             if not alive:
                 return
         except Exception:
-            # If tasklist is temporarily unavailable, give the process time to terminate.
+            # Keep waiting if tasklist is temporarily unavailable.
             pass
         time.sleep(0.5)
 
