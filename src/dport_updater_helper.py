@@ -6,14 +6,20 @@ import json
 import os
 import shutil
 import subprocess
-import tempfile
 import time
 import urllib.request
 from pathlib import Path
 
 
 def _download(url: str, target: Path) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": "DPort-Updater", "Cache-Control": "no-cache"})
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "DPort-Updater",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        },
+    )
     digest = hashlib.sha256()
     with urllib.request.urlopen(req, timeout=120) as resp, target.open("wb") as out:
         while True:
@@ -26,9 +32,13 @@ def _download(url: str, target: Path) -> str:
 
 
 def _read_expected_sha256(url: str) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": "DPort-Updater", "Cache-Control": "no-cache"})
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "DPort-Updater", "Cache-Control": "no-cache"},
+    )
     with urllib.request.urlopen(req, timeout=30) as resp:
         text = resp.read().decode("utf-8", errors="replace")
+
     for token in text.replace("\r", " ").replace("\n", " ").split():
         if len(token) == 64 and all(c in "0123456789abcdefABCDEF" for c in token):
             return token.lower()
@@ -36,19 +46,17 @@ def _read_expected_sha256(url: str) -> str:
 
 
 def _wait_for_pid_exit(pid: int, timeout: int = 180) -> None:
-    """Wait until the exact Windows process ID is gone.
-
-    tasklist's default table output starts with the image name, not the PID,
-    so checking startswith(pid) can falsely report that a live DPort process
-    has already exited. Use CSV output and match the second column exactly.
-    """
     deadline = time.time() + timeout
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
     while time.time() < deadline:
         try:
             result = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-                capture_output=True, text=True, timeout=5, creationflags=flags,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                creationflags=flags,
             )
             alive = False
             for line in result.stdout.splitlines():
@@ -59,52 +67,71 @@ def _wait_for_pid_exit(pid: int, timeout: int = 180) -> None:
             if not alive:
                 return
         except Exception:
-            # Keep waiting if tasklist is temporarily unavailable.
             pass
+
         time.sleep(0.5)
 
+    raise TimeoutError("等待舊版 DPort 關閉逾時")
 
-def _install_new_version(downloaded: Path, old_target: Path, new_target: Path) -> None:
-    """Install the new version under its own versioned filename.
 
-    Do not overwrite the 6.9.0 file in-place. The expected on-disk result is
-    DPort-6.9.0.exe -> DPort-6.9.1.exe, with the old file removed only after
-    the new process has started successfully.
-    """
-    new_target.parent.mkdir(parents=True, exist_ok=True)
+def _start_detached(exe: Path, arguments: list[str]) -> subprocess.Popen:
+    return subprocess.Popen(
+        [str(exe), *arguments],
+        cwd=str(exe.parent),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=(
+            getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+            | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+        ),
+        close_fds=True,
+    )
 
-    for _ in range(40):
-        try:
-            if new_target.exists():
-                os.replace(new_target, new_target.with_name(new_target.name + ".old"))
-                try:
-                    new_target.with_name(new_target.name + ".old").unlink(missing_ok=True)
-                except Exception:
-                    pass
-            os.replace(downloaded, new_target)
-            if new_target.exists():
-                return
-        except Exception:
-            time.sleep(0.5)
 
-    raise RuntimeError("無法將新版 DPort 放入應用程式資料夾，舊版本已保留")
+def _schedule_cleanup(folder: Path) -> None:
+    """Delete the C:\Windows\Temp updater folder after this helper exits."""
+    folder_q = str(folder).replace('"', '""')
+    # The helper EXE is still locked while it is running, so let cmd.exe wait
+    # for this PID to disappear, then remove the whole temporary directory.
+    script = (
+        f'for /f "tokens=2 delims=," %%A in ('
+        f''tasklist /fi "PID eq {os.getpid()}" /fo csv /nh''
+        f') do ('
+        f'timeout /t 2 /nobreak >nul'
+        f') & rmdir /s /q "{folder_q}"'
+    )
+    _start_detached(
+        Path(os.environ.get("COMSPEC", "cmd.exe")),
+        ["/d", "/s", "/c", script],
+    )
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="DPort standalone updater")
     parser.add_argument("--pid", type=int, required=True)
     parser.add_argument("--target", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--exe-url", required=True)
-    parser.add_argument("--sha256-url")
+    parser.add_argument("--sha256-url", required=True)
     parser.add_argument("--args-json", default=None)
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
 
-    target = Path(args.target).resolve()
-    new_target = target.parent / f"DPort-{args.version}.exe"
-    log_file = target.parent / "DPort-update.log"
+    old_target = Path(args.target).resolve()
+    app_dir = old_target.parent
+    new_target = app_dir / f"DPort-{args.version}.exe"
+
+    windows_temp = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Temp"
+    windows_temp.mkdir(parents=True, exist_ok=True)
+    work_dir = windows_temp / f"DPort-update-{os.getpid()}-{int(time.time())}"
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    downloaded = work_dir / f"DPort-{args.version}.exe"
+    checksum = work_dir / f"DPort-{args.version}.exe.sha256"
+    log_file = work_dir / "DPort-update.log"
 
     def log(message: str) -> None:
         try:
@@ -112,11 +139,7 @@ def main() -> int:
                 fp.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
         except Exception:
             pass
-    # Keep the downloaded EXE on the same volume as the installed DPort EXE.
-    # os.replace() cannot atomically replace a file across different drives.
-    work_dir = target.parent / ".dport-update"
-    work_dir.mkdir(parents=True, exist_ok=True)
-    downloaded = work_dir / f"DPort-{args.version}-download-{os.getpid()}.exe"
+
     if args.args_json:
         relaunch_args = json.loads(args.args_json)
         if not isinstance(relaunch_args, list):
@@ -128,67 +151,56 @@ def main() -> int:
         if args.no_browser:
             relaunch_args.append("--no-browser")
 
-    def relaunch() -> None:
-        env = os.environ.copy()
-        env["DPORT_RESTARTED"] = "1"
-        env["DPORT_UPDATE_TARGET"] = str(target)
-        subprocess.Popen(
-            [str(new_target), *[str(x) for x in relaunch_args]],
-            cwd=str(new_target.parent),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=(
-                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-                | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-                | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
-            ),
-            close_fds=True,
-            env=env,
-        )
-
     try:
-        log(f"Updater started: target={target}, version={args.version}, parent_pid={args.pid}")
+        log(f"開始更新：{old_target} -> {new_target}")
+        log(f"暫存目錄：{work_dir}")
+
         actual = _download(args.exe_url, downloaded)
-        log("Downloaded new executable.")
-        if not args.sha256_url:
-            raise RuntimeError("Release 缺少 SHA-256 checksum")
         expected = _read_expected_sha256(args.sha256_url)
+        checksum.write_text(expected + "\n", encoding="ascii")
+
         if actual.lower() != expected:
-            raise RuntimeError("DPort EXE SHA-256 驗證失敗")
-        log("SHA-256 verified.")
-        # Wait for the running DPort process to terminate before replacing its EXE.
-        time.sleep(1)
+            raise RuntimeError("DPort-6.9.1.exe SHA-256 驗證失敗")
+        log("新版 EXE SHA-256 驗證成功")
+
         _wait_for_pid_exit(args.pid, timeout=180)
-        log("Parent DPort process exited.")
-        _install_new_version(downloaded, target, new_target)
-        log(f"New executable installed as {new_target}.")
-        relaunch()
+        log("舊版 DPort 已完全關閉")
+
+        # Never overwrite the old filename with the new binary.
+        shutil.copy2(downloaded, new_target)
+        if not new_target.exists():
+            raise RuntimeError("DPort-6.9.1.exe 沒有成功建立")
+        log(f"新版 EXE 已建立：{new_target}")
+
+        process = _start_detached(new_target, relaunch_args)
         time.sleep(3)
+        if process.poll() is not None:
+            raise RuntimeError(
+                f"DPort-{args.version}.exe 啟動後立即結束，ExitCode={process.returncode}"
+            )
+        log("新版 DPort 已成功啟動")
 
-        # Only delete 6.9.0 after the new version has actually started.
-        if target.exists() and target != new_target:
-            try:
-                target.unlink()
-                log(f"Old executable removed: {target}")
-            except Exception as exc:
-                log(f"Old executable could not be removed yet: {exc!r}")
+        # Only now is it safe to remove 6.9.0.
+        if old_target.exists() and old_target != new_target:
+            old_target.unlink()
+            log(f"舊版 EXE 已刪除：{old_target}")
 
-        log("New DPort process launched successfully.")
+        _schedule_cleanup(work_dir)
         return 0
+
     except Exception as exc:
-        log(f"Updater failed: {exc!r}")
+        log(f"更新失敗：{exc!r}")
+
+        # If possible, restore/relaunch the old DPort so the user is not left
+        # without the application. Do not delete the old EXE on failure.
         try:
-            downloaded.unlink(missing_ok=True)
-        except Exception:
-            pass
-        # Never leave the user without DPort after a failed update.
-        try:
-            _wait_for_pid_exit(args.pid, timeout=10)
-            if target.exists():
-                relaunch()
-        except Exception:
-            pass
+            if old_target.exists():
+                _start_detached(old_target, relaunch_args)
+                log("已重新啟動原本的 DPort")
+        except Exception as restore_exc:
+            log(f"原版重新啟動失敗：{restore_exc!r}")
+
+        _schedule_cleanup(work_dir)
         return 30
 
 
