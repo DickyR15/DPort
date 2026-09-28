@@ -1,3 +1,4 @@
+# ci: verify parent PID detection
 # ci: updater helper runtime diagnostics
 # FORCE REPAIR RELEASE REBUILD - standalone updater helper
 # ci: standalone updater helper release rebuild - FINAL RETRY
@@ -34,6 +35,12 @@ jobs:
         run: |
           python -m py_compile scripts/repair_release_source.py
           if ($LASTEXITCODE -ne 0) { throw "repair_release_source.py syntax validation failed." }
+
+      - name: Test updater process wait logic
+        shell: pwsh
+        run: |
+          python -c "import subprocess,time; from src.dport_updater_helper import _wait_for_pid_exit; p=subprocess.Popen(['python','-c','import time; time.sleep(2)']); t=time.time(); _wait_for_pid_exit(p.pid, timeout=10); elapsed=time.time()-t; print(f'waited={elapsed:.2f}s'); assert elapsed >= 1.5, f'wait logic returned too early: {elapsed:.2f}s'"
+          if ($LASTEXITCODE -ne 0) { throw "Updater parent-process wait logic test failed." }
 
       - name: Validate updater design
         shell: pwsh
