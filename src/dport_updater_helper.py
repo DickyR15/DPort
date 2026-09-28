@@ -105,8 +105,9 @@ def main() -> int:
     parser.add_argument("--pid", type=int, required=True)
     parser.add_argument("--target", required=True)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--exe-url", required=True)
-    parser.add_argument("--sha256-url", required=True)
+    parser.add_argument("--new-exe")
+    parser.add_argument("--exe-url")
+    parser.add_argument("--sha256-url")
     parser.add_argument("--args-json", default=None)
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--no-browser", action="store_true")
@@ -121,7 +122,7 @@ def main() -> int:
     work_dir = windows_temp / ".dport-update"
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    downloaded = work_dir / f"DPort-{args.version}.exe"
+    downloaded = Path(args.new_exe).resolve() if args.new_exe else work_dir / f"DPort-{args.version}.exe"
     checksum = work_dir / f"DPort-{args.version}.exe.sha256"
     log_file = work_dir / "DPort-update.log"
 
@@ -147,13 +148,19 @@ def main() -> int:
         log(f"開始更新：{old_target} -> {new_target}")
         log(f"暫存目錄：{work_dir}")
 
-        actual = _download(args.exe_url, downloaded)
-        expected = _read_expected_sha256(args.sha256_url)
-        checksum.write_text(expected + "\n", encoding="ascii")
-
-        if actual.lower() != expected:
-            raise RuntimeError("DPort-6.9.1.exe SHA-256 驗證失敗")
-        log("新版 EXE SHA-256 驗證成功")
+        if args.new_exe:
+            if not downloaded.exists():
+                raise FileNotFoundError(f"找不到已下載的 DPort-{args.version}.exe")
+            log("使用 DPort 已在 EXIT 前下載並驗證的新版 EXE")
+        else:
+            if not args.exe_url or not args.sha256_url:
+                raise RuntimeError("缺少新版 EXE 或 SHA-256 URL")
+            actual = _download(args.exe_url, downloaded)
+            expected = _read_expected_sha256(args.sha256_url)
+            checksum.write_text(expected + "\n", encoding="ascii")
+            if actual.lower() != expected:
+                raise RuntimeError("DPort EXE SHA-256 驗證失敗")
+            log("新版 EXE SHA-256 驗證成功")
 
         _wait_for_pid_exit(args.pid, timeout=180)
         log("舊版 DPort 已完全關閉")
@@ -161,7 +168,12 @@ def main() -> int:
         # Never overwrite the old filename with the new binary.
         shutil.copy2(downloaded, new_target)
         if not new_target.exists():
-            raise RuntimeError("DPort-6.9.1.exe 沒有成功建立")
+            raise RuntimeError(f"DPort-{args.version}.exe 沒有成功建立")
+        try:
+            if downloaded.parent == work_dir and downloaded != new_target:
+                downloaded.unlink(missing_ok=True)
+        except Exception:
+            pass
         log(f"新版 EXE 已建立：{new_target}")
 
         process = _start_detached(new_target, relaunch_args)
