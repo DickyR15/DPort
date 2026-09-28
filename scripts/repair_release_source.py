@@ -208,10 +208,9 @@ def request_update() -> dict[str, Any]:
     if not exe_url:
         return {"ok": False, "state": "update_failed", "message": "Update package URL is unavailable."}
 
-    # Never overwrite the current executable in-place while it is running.
     current_exe = Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve()
-    if current_exe.name.lower() != f"DPort-{VERSION}.exe".lower() and getattr(sys, "frozen", False):
-        current_exe = Path(sys.executable).resolve()
+    current_exe = current_exe.parent / f"DPort-{VERSION}.exe" if getattr(sys, "frozen", False) else current_exe
+    target_exe = current_exe.parent / f"DPort-{latest}.exe"
 
     temp_dir = Path(tempfile.mkdtemp(prefix="DPort-update-"))
     new_exe = temp_dir / f"DPort-{latest}.exe"
@@ -230,11 +229,38 @@ def request_update() -> dict[str, Any]:
 
         script = temp_dir / "DPort-update.ps1"
         script.write_text(
-            """param([int]$Pid,[string]$NewExe,[string]$TargetExe)
+            """param([int]$Pid,[string]$NewExe,[string]$OldExe,[string]$TargetExe)
 $ErrorActionPreference = 'Stop'
 while (Get-Process -Id $Pid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
-Move-Item -LiteralPath $NewExe -Destination $TargetExe -Force
-Start-Process -FilePath $TargetExe
+
+if (Test-Path -LiteralPath $TargetExe) {
+    Remove-Item -LiteralPath $TargetExe -Force
+}
+
+$moveOk = $false
+for ($i = 0; $i -lt 40; $i++) {
+    try {
+        Move-Item -LiteralPath $NewExe -Destination $TargetExe -Force
+        $moveOk = $true
+        break
+    } catch {
+        Start-Sleep -Milliseconds 300
+    }
+}
+if (-not $moveOk -or -not (Test-Path -LiteralPath $TargetExe)) {
+    throw "Unable to place the new DPort executable."
+}
+
+$started = Start-Process -FilePath $TargetExe -PassThru
+Start-Sleep -Seconds 2
+if ($started.HasExited) {
+    throw "The updated DPort executable exited immediately with code $($started.ExitCode)."
+}
+
+if ((Test-Path -LiteralPath $OldExe) -and ($OldExe -ne $TargetExe)) {
+    Remove-Item -LiteralPath $OldExe -Force -ErrorAction SilentlyContinue
+}
+
 Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 """,
             encoding="utf-8",
@@ -249,7 +275,8 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
                 "-File", str(script),
                 "-Pid", str(os.getpid()),
                 "-NewExe", str(new_exe),
-                "-TargetExe", str(current_exe),
+                "-OldExe", str(current_exe),
+                "-TargetExe", str(target_exe),
             ],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -445,11 +472,46 @@ UPDATE_UI = r'''
     msg.textContent='目前版本 '+current+'，GitHub 已有正式版 '+latest+'。要現在升級嗎？';
     box.classList.add('show');
   }
+  function rememberUpdate(current,latest){
+    var el=document.getElementById('dport-pm3-status');
+    if(!el) return;
+    if(newer(latest,current)){
+      el.dataset.dportUpdateCurrent=String(current);
+      el.dataset.dportUpdateLatest=String(latest);
+      el.classList.add('dport-update-clickable');
+      el.setAttribute('title','點擊重新開啟更新確認');
+      el.setAttribute('role','button');
+      el.setAttribute('tabindex','0');
+    }else{
+      delete el.dataset.dportUpdateCurrent;
+      delete el.dataset.dportUpdateLatest;
+      el.classList.remove('dport-update-clickable');
+      el.removeAttribute('title');
+      el.removeAttribute('role');
+      el.removeAttribute('tabindex');
+    }
+  }
+
+  function showFromStatus(){
+    var el=document.getElementById('dport-pm3-status');
+    if(!el) return;
+    var current=el.dataset.dportUpdateCurrent;
+    var latest=el.dataset.dportUpdateLatest;
+    if(current && latest && newer(latest,current)){
+      var box=document.getElementById('dport-update-dialog');
+      var msg=document.getElementById('dport-update-message');
+      if(!box || !msg) return;
+      msg.textContent='目前版本 '+current+'，GitHub 已有正式版 '+latest+'。要現在升級嗎？';
+      box.classList.add('show');
+    }
+  }
+
   function check(){
     fetch('/pymobiledevice3/status?ts='+Date.now(),{cache:'no-store'})
       .then(function(r){return r.json();})
       .then(function(s){
         if(s && s.current_version && s.latest_version){
+          rememberUpdate(s.current_version,s.latest_version);
           show(s.current_version,s.latest_version);
         }
       }).catch(function(){});
@@ -484,8 +546,15 @@ UPDATE_UI = r'''
   document.addEventListener('DOMContentLoaded',function(){
     var later=document.getElementById('dport-update-later');
     var now=document.getElementById('dport-update-now');
+    var status=document.getElementById('dport-pm3-status');
     if(later) later.addEventListener('click',closeDialog);
     if(now) now.addEventListener('click',start);
+    if(status){
+      status.addEventListener('click',showFromStatus);
+      status.addEventListener('keydown',function(e){
+        if(e.key==='Enter' || e.key===' '){ e.preventDefault(); showFromStatus(); }
+      });
+    }
     setTimeout(check,1500);
     setTimeout(check,12000);
   });
@@ -590,6 +659,26 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
                 map_text = map_text.replace("</body>", BRAND_HEADER_HEIGHT_FIX + "\n</body>", 1)
             else:
                 map_text += BRAND_HEADER_HEIGHT_FIX
+
+        map_text = map_text.replace("（準備自動更新）", "（可手動更新）")
+
+        manual_css = """
+<style id="dport-manual-update-status-final">
+#dport-pm3-status.dport-update-clickable{
+    cursor:pointer!important;
+    text-decoration:underline!important;
+    text-underline-offset:2px!important;
+}
+#dport-pm3-status.dport-update-clickable:hover{
+    filter:brightness(1.18)!important;
+}
+</style>
+"""
+        if "dport-manual-update-status-final" not in map_text:
+            if "</body>" in map_text:
+                map_text = map_text.replace("</body>", manual_css + "\n</body>", 1)
+            else:
+                map_text += manual_css
 
         map_file.write_text(map_text, encoding="utf-8")
 
