@@ -85,6 +85,7 @@ def _start_detached(exe: Path, arguments: list[str]) -> subprocess.Popen:
             getattr(subprocess, "CREATE_NO_WINDOW", 0)
             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
             | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            | 0x01000000
         ),
         close_fds=True,
     )
@@ -93,7 +94,7 @@ def _start_detached(exe: Path, arguments: list[str]) -> subprocess.Popen:
 def _schedule_cleanup(folder: Path) -> None:
     """Delete the temporary updater folder after this helper exits."""
     folder_q = str(folder).replace('"', '""')
-    script = 'timeout /t 3 /nobreak >nul & rmdir /s /q "' + folder_q + '"'
+    script = 'timeout /t 8 /nobreak >nul & rmdir /s /q "' + folder_q + '"'
     _start_detached(
         Path(os.environ.get("COMSPEC", "cmd.exe")),
         ["/d", "/s", "/c", script],
@@ -165,19 +166,16 @@ def main() -> int:
         _wait_for_pid_exit(args.pid, timeout=180)
         log("舊版 DPort 已完全關閉")
 
-        # Never overwrite the old filename with the new binary.
+        # The new EXE was downloaded and verified before EXIT.
+        # Temp and the DPort folder may be on different drives, so copy it.
         shutil.copy2(downloaded, new_target)
         if not new_target.exists():
             raise RuntimeError(f"DPort-{args.version}.exe 沒有成功建立")
-        try:
-            if downloaded.parent == work_dir and downloaded != new_target:
-                downloaded.unlink(missing_ok=True)
-        except Exception:
-            pass
         log(f"新版 EXE 已建立：{new_target}")
 
+        # Start 6.9.1 before removing 6.9.0.
         process = _start_detached(new_target, relaunch_args)
-        time.sleep(3)
+        time.sleep(5)
         if process.poll() is not None:
             raise RuntimeError(
                 f"DPort-{args.version}.exe 啟動後立即結束，ExitCode={process.returncode}"
