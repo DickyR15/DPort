@@ -86,7 +86,9 @@ jobs:
           if (Test-Path build) { Remove-Item build -Recurse -Force }
           python -m PyInstaller --noconfirm --clean --onefile --name DPort-6.9.0 --icon DPort-6.9.0.ico --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import pymobiledevice3.remote.userspace_tunnel --hidden-import pymobiledevice3.services.dvt.instruments.dvt_provider --hidden-import pymobiledevice3.services.dvt.instruments.location_simulation --hidden-import pymobiledevice3.usbmux --hidden-import dport_release_updater --hidden-import dport_version --add-data 'src/templates;templates' --add-data 'moenv_api_key.txt;.' --version-file version_info.690.txt src/main.py
           if (-not (Test-Path dist/DPort-6.9.0.exe)) { throw 'DPort-6.9.0.exe missing.' }
-          (Get-FileHash dist/DPort-6.9.0.exe -Algorithm SHA256).Hash.ToLower() | Set-Content dist/DPort-6.9.0.exe.sha256 -Encoding ascii
+          New-Item -ItemType Directory -Force -Path repair-bin | Out-Null
+          Copy-Item dist/DPort-6.9.0.exe repair-bin/DPort-6.9.0.exe -Force
+          (Get-FileHash dist/DPort-6.9.0.exe -Algorithm SHA256).Hash.ToLower() | Set-Content repair-bin/DPort-6.9.0.exe.sha256 -Encoding ascii
 
       - name: Build repaired 6.9.1
         shell: pwsh
@@ -131,20 +133,41 @@ jobs:
           if (Test-Path build) { Remove-Item build -Recurse -Force }
           python -m PyInstaller --noconfirm --clean --onefile --name DPort-6.9.1 --icon DPort-6.9.0.ico --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import pymobiledevice3.remote.userspace_tunnel --hidden-import pymobiledevice3.services.dvt.instruments.dvt_provider --hidden-import pymobiledevice3.services.dvt.instruments.location_simulation --hidden-import pymobiledevice3.usbmux --add-data 'src/templates;templates' --add-data 'moenv_api_key.txt;.' --version-file version_info.691.txt src/main.py
           if (-not (Test-Path dist/DPort-6.9.1.exe)) { throw 'DPort-6.9.1.exe missing.' }
-          (Get-FileHash dist/DPort-6.9.1.exe -Algorithm SHA256).Hash.ToLower() | Set-Content dist/DPort-6.9.1.exe.sha256 -Encoding ascii
+          New-Item -ItemType Directory -Force -Path repair-bin | Out-Null
+          Copy-Item dist/DPort-6.9.1.exe repair-bin/DPort-6.9.1.exe -Force
+          (Get-FileHash dist/DPort-6.9.1.exe -Algorithm SHA256).Hash.ToLower() | Set-Content repair-bin/DPort-6.9.1.exe.sha256 -Encoding ascii
 
       - name: Smoke test and package audit
         shell: pwsh
         run: |
           foreach ($v in @('6.9.0','6.9.1')) {
-            $exe = "dist/DPort-$v.exe"
-            pyi-archive_viewer $exe | Out-File "dist/DPort-$v.archive.txt" -Encoding utf8
-            $archive = Get-Content "dist/DPort-$v.archive.txt" -Raw
-            if ($archive -match 'DPortUpdater') { throw "Legacy DPortUpdater helper remains in $exe" }
-            $p = Start-Process -FilePath $exe -PassThru
+            $exe = "repair-bin/DPort-$v.exe"
+            if (-not (Test-Path $exe)) { throw "Missing archived build: $exe" }
+
+            $listing = "repair-bin/DPort-$v.archive.txt"
+            pyi-archive_viewer $exe | Out-File $listing -Encoding utf8
+            $archive = Get-Content $listing -Raw
+
+            if ($archive -match 'DPortUpdater') {
+              throw "Legacy DPortUpdater helper remains in $exe"
+            }
+            if ($archive -notmatch 'dport_release_updater') {
+              throw "Safe release updater is missing from $exe"
+            }
+            if ($archive -notmatch 'templates') {
+              throw "UI templates are missing from $exe"
+            }
+
+            $p = Start-Process -FilePath (Resolve-Path $exe) -PassThru
             Start-Sleep -Seconds 8
-            if ($p.HasExited -and $p.ExitCode -ne 0) { throw "$exe smoke test failed: $($p.ExitCode)" }
-            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+            if ($p.HasExited -and $p.ExitCode -ne 0) {
+              throw "$exe smoke test failed: $($p.ExitCode)"
+            }
+            if (-not $p.HasExited) {
+              Stop-Process -Id $p.Id -Force
+            }
+
+            Write-Host "$exe passed package audit and smoke test."
           }
 
       - name: Upload repaired artifacts
@@ -152,34 +175,8 @@ jobs:
         with:
           name: DPort-repaired-6.9.0-6.9.1
           path: |
-            dist/DPort-6.9.0.exe
-            dist/DPort-6.9.0.exe.sha256
-            dist/DPort-6.9.1.exe
-            dist/DPort-6.9.1.exe.sha256
+            repair-bin/DPort-6.9.0.exe
+            repair-bin/DPort-6.9.0.exe.sha256
+            repair-bin/DPort-6.9.1.exe
+            repair-bin/DPort-6.9.1.exe.sha256
 
-      - name: Republish v6.9.0 and v6.9.1
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload v6.9.0 dist/DPort-6.9.0.exe dist/DPort-6.9.0.exe.sha256 --repo $env:GITHUB_REPOSITORY --clobber
-          gh release edit v6.9.0 --repo $env:GITHUB_REPOSITORY --title 'DPort v6.9.0' --latest
-          gh release upload v6.9.1 dist/DPort-6.9.1.exe dist/DPort-6.9.1.exe.sha256 --repo $env:GITHUB_REPOSITORY --clobber
-          gh release edit v6.9.1 --repo $env:GITHUB_REPOSITORY --title 'DPort v6.9.1' --latest
-
-      - name: Persist repaired 6.9.1 source baseline
-        shell: pwsh
-        run: |
-          git switch main
-          git reset --hard "${{ github.sha }}"
-          $tmp = Join-Path $env:RUNNER_TEMP 'dport691-main'
-          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-          Expand-Archive -LiteralPath repair/DPort-source-6.9.1.zip -DestinationPath $tmp -Force
-          $root = Get-ChildItem -LiteralPath $tmp -Directory | Select-Object -First 1
-          Copy-Item (Join-Path $root.FullName 'src\dport_version.py') src/dport_version.py -Force
-          Copy-Item (Join-Path $root.FullName 'requirements-build.txt') requirements-build.txt -Force
-          Copy-Item repair/DPort-source-6.9.1.zip DPort-source-6.9.0.zip -Force
-          git add src/dport_version.py requirements-build.txt DPort-source-6.9.0.zip
-          git commit -m 'repair: persist safe updater in 6.9.1 source baseline [skip ci]'
-          git push origin HEAD:main
