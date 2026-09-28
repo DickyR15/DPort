@@ -21,7 +21,6 @@ import logging
 import os
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import urllib.request
@@ -33,12 +32,12 @@ try:
 except ImportError:
     from dport_version import DPORT_VERSION
 
-
 LOGGER = logging.getLogger("DPort-Updater")
 REPO = "DickyR15/DPort"
 RELEASE_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 VERSION = str(DPORT_VERSION)
 CHECK_INTERVAL = 1800.0
+
 _STATE = {
     "state": "idle",
     "message": "",
@@ -52,14 +51,21 @@ _STATE = {
 }
 _LOCK = threading.Lock()
 _STARTED = False
-_VERSION_RE = __import__("re").compile(r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+.]([0-9A-Za-z.-]+))?$")
+_VERSION_RE = __import__("re").compile(
+    r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+.]([0-9A-Za-z.-]+))?$"
+)
 
 
 def _version_key(value: str) -> tuple[int, int, int, str]:
     m = _VERSION_RE.match(str(value).strip())
     if not m:
         return (0, 0, 0, "")
-    return (int(m.group(1)), int(m.group(2) or 0), int(m.group(3) or 0), m.group(4) or "")
+    return (
+        int(m.group(1)),
+        int(m.group(2) or 0),
+        int(m.group(3) or 0),
+        m.group(4) or "",
+    )
 
 
 def _is_newer(current: str, latest: str) -> bool:
@@ -87,7 +93,7 @@ def _github_json(url: str) -> dict[str, Any]:
             "Pragma": "no-cache",
         },
     )
-    with urllib.request.urlopen(req, timeout=8) as resp:
+    with urllib.request.urlopen(req, timeout=10) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -101,11 +107,11 @@ def _get_update_candidate(current: str) -> tuple[str, str, str, str] | None:
         return None
 
     assets = {str(a.get("name")): a for a in release.get("assets", [])}
-    exe_name = f"DPort-{tag}.exe"
-    sha_name = f"DPort-{tag}.exe.sha256"
-    exe = assets.get(exe_name)
-    sha = assets.get(sha_name)
-    if not exe or not sha:
+    exe = assets.get(f"DPort-{tag}.exe")
+    sha = assets.get(f"DPort-{tag}.exe.sha256")
+    helper = assets.get("DPort-Updater.exe")
+    helper_sha = assets.get("DPort-Updater.exe.sha256")
+    if not exe or not sha or not helper or not helper_sha:
         return None
 
     return (
@@ -167,18 +173,22 @@ def start_background_update_check() -> None:
             check_now()
             time.sleep(CHECK_INTERVAL)
 
-    threading.Thread(target=runner, name="DPort-release-updater", daemon=True).start()
+    threading.Thread(
+        target=runner,
+        name="DPort-release-updater",
+        daemon=True,
+    ).start()
 
 
 def bootstrap_dport_updater() -> None:
-    # Startup is check-only. Never launch an updater or replace/delete the running EXE.
+    # Startup performs detection only. Nothing is downloaded or replaced here.
     start_background_update_check()
 
 
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+    with path.open("rb") as fp:
+        for chunk in iter(lambda: fp.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest().lower()
 
@@ -186,9 +196,13 @@ def _sha256(path: Path) -> str:
 def _download(url: str, destination: Path) -> None:
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "DPort-Updater", "Accept": "*/*"},
+        headers={
+            "User-Agent": "DPort-Updater",
+            "Accept": "*/*",
+            "Cache-Control": "no-cache",
+        },
     )
-    with urllib.request.urlopen(req, timeout=60) as resp, destination.open("wb") as out:
+    with urllib.request.urlopen(req, timeout=120) as resp, destination.open("wb") as out:
         while True:
             chunk = resp.read(1024 * 1024)
             if not chunk:
@@ -197,18 +211,28 @@ def _download(url: str, destination: Path) -> None:
 
 
 def request_update() -> dict[str, Any]:
-    # Explicit user action only. No caller should invoke this during startup.
+    # This function is called only after explicit user confirmation.
     status = check_now()
     latest = str(status.get("latest_version") or VERSION)
     if status.get("state") != "update_available" or not _is_newer(VERSION, latest):
-        return {"ok": False, "state": status.get("state"), "message": "No update is available."}
+        return {
+            "ok": False,
+            "state": status.get("state"),
+            "message": "目前沒有可用更新。",
+        }
 
     exe_url = str(status.get("latest_url") or "")
     release_url = str(status.get("release_url") or "")
     if not exe_url:
-        return {"ok": False, "state": "update_failed", "message": "Update package URL is unavailable."}
+        return {
+            "ok": False,
+            "state": "update_failed",
+            "message": "找不到新版 DPort 安裝檔。",
+        }
 
-    current_exe = Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve()
+    current_exe = Path(
+        sys.executable if getattr(sys, "frozen", False) else __file__
+    ).resolve()
     if getattr(sys, "frozen", False):
         current_exe = current_exe.parent / f"DPort-{VERSION}.exe"
 
@@ -217,47 +241,38 @@ def request_update() -> dict[str, Any]:
     helper = update_dir / "DPort-Updater.exe"
     helper_sha = update_dir / "DPort-Updater.exe.sha256"
 
-    helper_url = f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe"
-    helper_sha_url = f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe.sha256"
+    helper_url = (
+        f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe"
+    )
+    helper_sha_url = (
+        f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe.sha256"
+    )
+    target_sha_url = (
+        f"https://github.com/{REPO}/releases/download/v{latest}/"
+        f"DPort-{latest}.exe.sha256"
+    )
 
     try:
-        _set_state(state="updating", message=f"Preparing DPort {latest} updater")
+        _set_state(
+            state="updating",
+            message=f"正在準備 DPort {latest} 更新器…",
+            latest_version=latest,
+            release_url=release_url,
+            restart_required=True,
+        )
 
         _download(helper_url, helper)
         _download(helper_sha_url, helper_sha)
 
-        expected_helper = helper_sha.read_text(
+        expected = helper_sha.read_text(
             encoding="utf-8", errors="replace"
         ).strip().split()[0].lower()
-        actual_helper = _sha256(helper)
-        if expected_helper != actual_helper:
-            raise RuntimeError("DPort updater helper SHA-256 verification failed.")
+        actual = _sha256(helper)
+        if actual != expected:
+            raise RuntimeError("DPort-Updater.exe SHA-256 驗證失敗。")
 
-        # Launch the helper through the Windows shell instead of inheriting the
-        # DPort/CMD process tree. The helper owns the complete wait/replace/
-        # relaunch sequence after DPort exits.
+        # Pass the exact application path and port to the standalone updater.
         port = os.environ.get("DPORT_PORT") or "54321"
-        target_sha_url = f"https://github.com/{REPO}/releases/download/v{latest}/DPort-{latest}.exe.sha256"
-        command = (
-            f'--pid {os.getpid()} '
-            f'--target "{current_exe}" '
-            f'--version "{latest}" '
-            f'--exe-url "{exe_url}" '
-            f'--sha256-url "{target_sha_url}" '
-            f'--port {port} '
-            f'--no-browser'
-        )
-
-        # Start the standalone updater directly and fully detach it from
-        # DPort/CMD. Using os.startfile() relies on the Windows shell's EXE
-        # association and can drop/alter arguments; direct Popen preserves the
-        # exact updater command line.
-        updater_flags = (
-            getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
-            | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
-            | 0x01000000  # CREATE_BREAKAWAY_FROM_JOB
-        )
         updater_args = [
             str(helper),
             "--pid", str(os.getpid()),
@@ -268,35 +283,43 @@ def request_update() -> dict[str, Any]:
             "--port", str(port),
             "--no-browser",
         ]
+        flags = (
+            getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+            | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            | 0x01000000
+        )
         subprocess.Popen(
             updater_args,
             cwd=str(current_exe.parent),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=updater_flags,
+            creationflags=flags,
             close_fds=True,
         )
 
         _set_state(
             state="restarting",
-            message=f"Updating to DPort {latest}",
+            message=f"正在更新到 DPort {latest}，程式即將重新啟動…",
             latest_version=latest,
             release_url=release_url,
             restart_required=True,
             updated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         )
-        threading.Timer(0.8, os._exit, args=(0,)).start()
-
         return {
             "ok": True,
             "state": "restarting",
             "version": latest,
-            "message": f"Updating to DPort {latest}",
+            "message": f"正在更新到 DPort {latest}，程式即將重新啟動…",
         }
     except Exception as exc:
         LOGGER.exception("DPort update failed")
-        return {"ok": False, "state": "update_failed", "message": str(exc)}
+        return {
+            "ok": False,
+            "state": "update_failed",
+            "message": str(exc),
+        }
 
 
 __all__ = [
@@ -308,8 +331,6 @@ __all__ = [
     "_get_update_candidate",
 ]
 '''
-
-
 
 
 BRAND_STATUS_LAYOUT_FIX = """
