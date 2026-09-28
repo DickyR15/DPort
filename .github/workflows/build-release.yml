@@ -91,6 +91,16 @@ jobs:
               $txt -split "`r?`n" | Select-String -Pattern 'pymobiledevice3|update_available|DPortUpdater|dport_release_updater|@app\.(get|post)|route\(' | ForEach-Object { Write-Host $_.Line }
             }
           }
+      - name: Full updater source diagnostic
+        if: contains(github.event.head_commit.message, '[diag-updater-full]')
+        shell: pwsh
+        run: |
+          Write-Host '===== dport_release_updater.py ====='
+          Get-Content -LiteralPath (Join-Path $root 'src\dport_release_updater.py') -Raw
+          Write-Host '===== main.py updater references ====='
+          $main = Get-Content -LiteralPath (Join-Path $root 'src\main.py') -Raw
+          $main -split "`r?`n" | Select-String -Pattern 'bootstrap_dport_updater|start_background_update_check|update_available|/pymobiledevice3/status|DPortUpdater|get_status' | ForEach-Object { Write-Host $_.Line }
+          exit 1
       - name: Resolve version
         id: version
         shell: pwsh
