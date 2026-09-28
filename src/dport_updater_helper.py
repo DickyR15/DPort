@@ -91,6 +91,14 @@ def main() -> int:
     args = parser.parse_args()
 
     target = Path(args.target).resolve()
+    log_file = target.parent / "DPort-update.log"
+
+    def log(message: str) -> None:
+        try:
+            with log_file.open("a", encoding="utf-8") as fp:
+                fp.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
+        except Exception:
+            pass
     # Keep the downloaded EXE on the same volume as the installed DPort EXE.
     # os.replace() cannot atomically replace a file across different drives.
     work_dir = target.parent / ".dport-update"
@@ -127,19 +135,26 @@ def main() -> int:
         )
 
     try:
+        log(f"Updater started: target={target}, version={args.version}, parent_pid={args.pid}")
         actual = _download(args.exe_url, downloaded)
+        log("Downloaded new executable.")
         if not args.sha256_url:
             raise RuntimeError("Release 缺少 SHA-256 checksum")
         expected = _read_expected_sha256(args.sha256_url)
         if actual.lower() != expected:
             raise RuntimeError("DPort EXE SHA-256 驗證失敗")
+        log("SHA-256 verified.")
         # Wait for the running DPort process to terminate before replacing its EXE.
         time.sleep(1)
         _wait_for_pid_exit(args.pid, timeout=180)
+        log("Parent DPort process exited.")
         _replace_file(downloaded, target)
+        log("New executable copied into application folder.")
         relaunch()
+        log("New DPort process launched.")
         return 0
-    except Exception:
+    except Exception as exc:
+        log(f"Updater failed: {exc!r}")
         try:
             downloaded.unlink(missing_ok=True)
         except Exception:
