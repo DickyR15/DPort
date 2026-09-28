@@ -1,4 +1,5 @@
 # ci: validate browser reconnect after updater
+# ci: validate copy-based updater across drive letters
 name: DPort Repair Releases
 
 on:
@@ -38,6 +39,8 @@ jobs:
           if ($src -notmatch '\[int\]\$ParentPid') { throw "Updater must use ParentPid for the PowerShell parent process ID." }
           if ($src -match '\[int\]\$Pid\b') { throw "PowerShell reserved PID parameter remains in updater." }
           if ($src -notmatch '"-ParentPid", str\(os\.getpid\(\)\)') { throw "Python launcher is not passing ParentPid." }
+          if ($src -notmatch 'breakaway_from_job') { throw "Updater must use job-breakaway process creation." }
+          if ($src -notmatch 'Copy-Item -LiteralPath \$NewExe -Destination \$TargetExe -Force') { throw "Updater must copy the new EXE into the application folder." }
 
       - name: Prepare API key and source packages
         shell: pwsh
