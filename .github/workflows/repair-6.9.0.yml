@@ -260,6 +260,10 @@ jobs:
             if (-not (git diff --cached --quiet)) {
               git commit -m "[repair-$version] publish exact source baseline [skip ci]"
             }
+            git fetch origin main
+            git rebase origin/main
+            if ($LASTEXITCODE -ne 0) { throw "Failed to rebase repaired v$version source baseline onto latest main." }
+
             git push origin HEAD:main
             if ($LASTEXITCODE -ne 0) { throw "Failed to push v$version source baseline." }
 
