@@ -1,3 +1,4 @@
+# DPort repair pipeline: release repair + startup smoke test + UI layout validation.
 name: DPort Repair Releases
 
 on:
