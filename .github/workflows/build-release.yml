@@ -105,7 +105,8 @@ jobs:
       - name: Validate source
         shell: pwsh
         run: |
-          python -m compileall -q src scripts          python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
+          python -m compileall -q src scripts
+          python -m py_compile src/main.py src/dport_version.py src/dport_release_updater.py src/dport_updater_helper.py
           $u = Get-Content 'src/dport_release_updater.py' -Raw
           foreach ($token in @('_current_exe_sha256','_release_exe_sha256','current_sha256','latest_sha256','same_version_build','_get_update_candidate_version_only')) { if ($u.Contains($token)) { throw "Forbidden same-version SHA updater token remains: $token" } }
           if ($u -notmatch 'def _get_update_candidate\(current:\s*str\)') { throw 'Version-only updater signature is missing.' }
