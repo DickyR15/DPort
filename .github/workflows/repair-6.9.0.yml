@@ -121,6 +121,12 @@ jobs:
           if (Test-Path dist) { Remove-Item dist -Recurse -Force }
           if (Test-Path build) { Remove-Item build -Recurse -Force }
 
+          python -m PyInstaller --noconfirm --clean --onefile --name DPort-Updater src/dport_updater_helper.py
+          if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed for DPort-Updater." }
+          if (-not (Test-Path dist/DPort-Updater.exe)) { throw "DPort-Updater.exe missing." }
+          Copy-Item dist/DPort-Updater.exe repair-bin/DPort-Updater.exe -Force
+          (Get-FileHash dist/DPort-Updater.exe -Algorithm SHA256).Hash.ToLower() | Set-Content repair-bin/DPort-Updater.exe.sha256 -Encoding ascii
+
           python -m PyInstaller --noconfirm --clean --onefile --name DPort-6.9.0 --icon DPort-6.9.0.ico --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import pymobiledevice3.remote.userspace_tunnel --hidden-import pymobiledevice3.services.dvt.instruments.dvt_provider --hidden-import pymobiledevice3.services.dvt.instruments.location_simulation --hidden-import pymobiledevice3.usbmux --hidden-import dport_release_updater --hidden-import dport_version --add-data "src/templates;templates" --add-data "moenv_api_key.txt;." --version-file version_info.690.txt src/main.py
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed for DPort 6.9.0." }
           if (-not (Test-Path dist/DPort-6.9.0.exe)) { throw "DPort-6.9.0.exe missing." }
@@ -194,6 +200,9 @@ jobs:
       - name: Smoke test both releases
         shell: pwsh
         run: |
+          if (-not (Test-Path repair-bin/DPort-Updater.exe)) { throw "DPort-Updater.exe missing." }
+          if (-not (Test-Path repair-bin/DPort-Updater.exe.sha256)) { throw "DPort-Updater.exe.sha256 missing." }
+
           foreach ($v in @("6.9.0","6.9.1")) {
             $exe = (Resolve-Path "repair-bin/DPort-$v.exe").Path
             $p = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
@@ -215,10 +224,10 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          gh release upload v6.9.0 repair-bin/DPort-6.9.0.exe repair-bin/DPort-6.9.0.exe.sha256 repair/DPort-source-6.9.0.zip --repo DickyR15/DPort --clobber
+          gh release upload v6.9.0 repair-bin/DPort-6.9.0.exe repair-bin/DPort-6.9.0.exe.sha256 repair-bin/DPort-Updater.exe repair-bin/DPort-Updater.exe.sha256 repair/DPort-source-6.9.0.zip --repo DickyR15/DPort --clobber
           if ($LASTEXITCODE -ne 0) { throw "Failed to publish v6.9.0 assets." }
 
-          gh release upload v6.9.1 repair-bin/DPort-6.9.1.exe repair-bin/DPort-6.9.1.exe.sha256 repair/DPort-source-6.9.1.zip --repo DickyR15/DPort --clobber
+          gh release upload v6.9.1 repair-bin/DPort-6.9.1.exe repair-bin/DPort-6.9.1.exe.sha256 repair-bin/DPort-Updater.exe repair-bin/DPort-Updater.exe.sha256 repair/DPort-source-6.9.1.zip --repo DickyR15/DPort --clobber
           if ($LASTEXITCODE -ne 0) { throw "Failed to publish v6.9.1 assets." }
 
           gh release edit v6.9.0 --repo DickyR15/DPort --latest=false
@@ -239,4 +248,6 @@ jobs:
             repair-bin/DPort-6.9.0.exe.sha256
             repair-bin/DPort-6.9.1.exe
             repair-bin/DPort-6.9.1.exe.sha256
+            repair-bin/DPort-Updater.exe
+            repair-bin/DPort-Updater.exe.sha256
           if-no-files-found: ignore
