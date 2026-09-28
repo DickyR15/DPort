@@ -91,17 +91,9 @@ def _start_detached(exe: Path, arguments: list[str]) -> subprocess.Popen:
 
 
 def _schedule_cleanup(folder: Path) -> None:
-    """Delete the C:\Windows\Temp updater folder after this helper exits."""
+    """Delete the temporary updater folder after this helper exits."""
     folder_q = str(folder).replace('"', '""')
-    # The helper EXE is still locked while it is running, so let cmd.exe wait
-    # for this PID to disappear, then remove the whole temporary directory.
-    script = (
-        f'for /f "tokens=2 delims=," %%A in ('
-        f''tasklist /fi "PID eq {os.getpid()}" /fo csv /nh''
-        f') do ('
-        f'timeout /t 2 /nobreak >nul'
-        f') & rmdir /s /q "{folder_q}"'
-    )
+    script = 'timeout /t 3 /nobreak >nul & rmdir /s /q "' + folder_q + '"'
     _start_detached(
         Path(os.environ.get("COMSPEC", "cmd.exe")),
         ["/d", "/s", "/c", script],
@@ -126,7 +118,7 @@ def main() -> int:
 
     windows_temp = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Temp"
     windows_temp.mkdir(parents=True, exist_ok=True)
-    work_dir = windows_temp / f"DPort-update-{os.getpid()}-{int(time.time())}"
+    work_dir = windows_temp / ".dport-update"
     work_dir.mkdir(parents=True, exist_ok=True)
 
     downloaded = work_dir / f"DPort-{args.version}.exe"
