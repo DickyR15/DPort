@@ -25,7 +25,7 @@ requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 from contextlib import asynccontextmanager
 
 # DPort pymobiledevice3 updater MUST bootstrap before the first pymobiledevice3 import.
-from dport_release_updater import bootstrap as bootstrap_dport_updater
+from dport_release_updater import bootstrap_dport_updater
 bootstrap_dport_updater()
 
 from pymobiledevice3.usbmux import list_devices
