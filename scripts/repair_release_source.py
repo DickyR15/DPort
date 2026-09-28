@@ -698,6 +698,8 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
         main_text = main_file.read_text(encoding="utf-8", errors="replace")
         main_file.write_text(patch_main(main_text), encoding="utf-8")
 
+        map_text = map_file.read_text(encoding="utf-8", errors="replace")
+
         # Reuse the existing top-right Leave shutdown path for update.
         map_text = re.sub(
             r"""(?s)function exitApp\(\)\s*\{.*?\n\s*\}\n\n\s*function aboutApp""",
@@ -722,8 +724,6 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
                 }).catch(function(){});
             }
 
-            // Chrome/Edge may refuse window.close() for a normal tab. Keep this
-            // as a best effort; the server shutdown is always requested above.
             window.open('', '_self', '');
             window.close();
         } catch (error) {
@@ -737,7 +737,6 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
             count=1,
         )
 
-        map_text = map_file.read_text(encoding="utf-8", errors="replace")
         if "dport-user-update-dialog" not in map_text:
             if "</body>" in map_text:
                 map_text = map_text.replace("</body>", UPDATE_UI + "\n</body>", 1)
