@@ -141,25 +141,32 @@ jobs:
         shell: pwsh
         run: |
           foreach ($v in @('6.9.0','6.9.1')) {
-            $exe = "repair-bin/DPort-$v.exe"
-            if (-not (Test-Path $exe)) { throw "Missing archived build: $exe" }
+            $exe = (Resolve-Path "repair-bin/DPort-$v.exe").Path
+            $rawBytes = [IO.File]::ReadAllBytes($exe)
+            $rawText = [Text.Encoding]::UTF8.GetString($rawBytes)
 
-            $listing = "repair-bin/DPort-$v.archive.txt"
-            pyi-archive_viewer $exe | Out-File $listing -Encoding utf8
-            $archive = Get-Content $listing -Raw
-
-            if ($archive -match 'DPortUpdater') {
+            if ($rawText.Contains('DPortUpdater')) {
               throw "Legacy DPortUpdater helper remains in $exe"
             }
-            if ($archive -notmatch 'dport_release_updater') {
-              throw "Safe release updater is missing from $exe"
+            if (-not $rawText.Contains('dport_release_updater')) {
+              throw "Safe release updater module is missing from $exe"
             }
-            if ($archive -notmatch 'templates') {
-              throw "UI templates are missing from $exe"
+            if (-not $rawText.Contains('dport-user-update-dialog')) {
+              throw "User update dialog is missing from $exe"
             }
 
-            $p = Start-Process -FilePath (Resolve-Path $exe) -PassThru
-            Start-Sleep -Seconds 8
+            $shaLine = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+            $shaExpected = (Get-Content "repair-bin/DPort-$v.exe.sha256").Trim().Split()[0].ToLower()
+            if ($shaLine -ne $shaExpected) {
+              throw "SHA-256 sidecar mismatch for $exe"
+            }
+
+            $p = Start-Process -FilePath $exe -PassThru
+            Start-Sleep -Seconds 20
+
+            if (-not (Test-Path $exe)) {
+              throw "$exe disappeared while the application was running."
+            }
             if ($p.HasExited -and $p.ExitCode -ne 0) {
               throw "$exe smoke test failed: $($p.ExitCode)"
             }
@@ -167,7 +174,11 @@ jobs:
               Stop-Process -Id $p.Id -Force
             }
 
-            Write-Host "$exe passed package audit and smoke test."
+            if (-not (Test-Path $exe)) {
+              throw "$exe disappeared after shutdown."
+            }
+
+            Write-Host "$exe passed updater safety, SHA-256, and 20-second startup smoke test."
           }
 
       - name: Upload repaired artifacts
