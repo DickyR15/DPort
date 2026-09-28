@@ -1,3 +1,4 @@
+# ci: enforce download target beside launched DPort executable
 # ci: final deterministic update order - download, verify, exit, install, delete, cleanup, relaunch
 # ci: rebuild pre-exit update handoff
 # ci: predownload 6.9.1 before exit
@@ -64,6 +65,7 @@ jobs:
           if ($helper -notmatch 'old_target\.unlink\(\)') { throw "Updater must remove the old EXE only after the new process starts." }
           if ($helper -notmatch '_schedule_cleanup\(work_dir\)') { throw "Updater must clean the temporary folder." }
           if ($repair -notmatch 'update_dir = windows_temp / "\.dport-update"') { throw "DPort must place updater payloads in Windows Temp." }
+          if ($repair -notmatch 'new_exe = current_exe\.parent / f"DPort-\{latest\}\.exe"') { throw "New DPort EXE must be downloaded beside the running DPort EXE." }
           if ($repair -match 'DPort-update\.ps1') { throw "Legacy PowerShell updater must not be generated." }
 
       - name: Prepare API key and source packages
