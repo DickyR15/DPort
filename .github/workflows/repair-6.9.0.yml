@@ -36,11 +36,13 @@ jobs:
         with:
           python-version: "3.9.13"
 
-      - name: Validate repair script
+      - name: Validate repair sources
         shell: pwsh
         run: |
           python -m py_compile scripts/repair_release_source.py
           if ($LASTEXITCODE -ne 0) { throw "repair_release_source.py syntax validation failed." }
+          python -m py_compile src/dport_updater_helper.py
+          if ($LASTEXITCODE -ne 0) { throw "dport_updater_helper.py syntax validation failed." }
 
       - name: Test updater process wait logic
         shell: pwsh
