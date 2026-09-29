@@ -145,19 +145,67 @@ def _start_detached(exe: Path, arguments: list[str], restarted: bool = False) ->
     )
 
 def _schedule_cleanup(folder: Path) -> None:
-    """Delete C:\\Windows\\Temp\\.dport-update after all child handles settle."""
-    folder_q = str(folder).replace('"', '""')
-    parent_q = str(folder.parent).replace('"', '""')
-    cmd = Path(os.environ.get("COMSPEC", "cmd.exe"))
-    script = (
-        'cd /d "' + parent_q + '" & '
-        'for /l %i in (1,1,15) do ('
-        'timeout /t 1 /nobreak >nul & '
-        'rmdir /s /q "' + folder_q + '" >nul 2>&1 & '
-        'if not exist "' + folder_q + '" exit /b 0'
-        ')'
-    )
-    _start_detached(cmd, ["/d", "/s", "/c", script], restarted=False)
+    """Delete C:\\Windows\\Temp\\.dport-update without ever spawning cmd.exe."""
+    folder = folder.resolve()
+    parent = folder.parent.resolve()
+
+    # Use Windows Script Host (wscript.exe), which has no console subsystem,
+    # instead of cmd.exe + timeout/rmdir. The updater itself lives inside the
+    # folder being removed, so an external short-lived helper is required.
+    script_path = parent / f"DPort-cleanup-{os.getpid()}.vbs"
+
+    def vb_escape(value: str) -> str:
+        return str(value).replace('"', '""')
+
+    folder_vb = vb_escape(folder)
+    script_vb = vb_escape(script_path)
+
+    script = f'''Option Explicit
+Dim fso, folderPath, selfPath, i
+Set fso = CreateObject("Scripting.FileSystemObject")
+folderPath = "{folder_vb}"
+selfPath = "{script_vb}"
+
+For i = 1 To 20
+    WScript.Sleep 1000
+    On Error Resume Next
+    If fso.FolderExists(folderPath) Then
+        fso.DeleteFolder folderPath, True
+    End If
+    On Error GoTo 0
+
+    If Not fso.FolderExists(folderPath) Then Exit For
+Next
+
+On Error Resume Next
+If fso.FileExists(selfPath) Then fso.DeleteFile selfPath, True
+'''
+
+    try:
+        script_path.write_text(script, encoding="utf-8-sig")
+        wscript = Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "wscript.exe"
+
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = 0  # SW_HIDE
+
+        subprocess.Popen(
+            [str(wscript), str(script_path)],
+            cwd=str(parent),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            startupinfo=startupinfo,
+            creationflags=(
+                getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            ),
+            close_fds=True,
+        )
+    except Exception as exc:
+        # Never fall back to cmd.exe. Leaving the folder is preferable to
+        # showing a console window to the user.
+        LOGGER.debug("Unable to start silent cleanup helper: %s", exc)
 
 
 def main() -> int:
