@@ -1,5 +1,5 @@
-name: DPort Windows — Build & Release
-run-name: DPort Windows — ${{ github.ref_name }}
+name: DPort Windows - Build & Release
+
 
 on:
   push:
@@ -21,7 +21,6 @@ concurrency:
 
 jobs:
   build-windows:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     steps:
       - name: Checkout tagged source
