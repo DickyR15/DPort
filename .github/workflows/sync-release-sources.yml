@@ -46,6 +46,8 @@ jobs:
             if (-not $root) { throw "Source root not found for $v." }
             git worktree add --detach $work $tag
             try {
+              git -C $work config core.autocrlf false
+              git -C $work config core.eol lf
               Copy-Item (Join-Path $root.FullName '*') $work -Recurse -Force
               $legacyZip = Join-Path $work 'DPort-source-6.9.0.zip'
               if (Test-Path $legacyZip) { Remove-Item $legacyZip -Force }
@@ -54,6 +56,20 @@ jobs:
               git config user.name 'Dicky'
               git config user.email '125186855+DickyR15@users.noreply.github.com'
               git add -A
+              # Verify the index contains the exact bytes from the source package.
+              foreach ($path in @(
+                "src\main.py",
+                "src\dport_release_updater.py",
+                "src\dport_updater_helper.py",
+                "src\templates\map.html",
+                "requirements-build.txt",
+                "src\dport_version.py"
+              )) {
+                $sourcePath = Join-Path $root.FullName $path
+                $expected = (git hash-object $sourcePath).Trim()
+                $actual = (git rev-parse "HEAD:$($path.Replace('\','/'))").Trim()
+                if ($expected -ne $actual) { throw "$tag source mismatch for $path. expected=$expected actual=$actual" }
+              }
               git commit -m "chore: sync $tag with released build source"
               git push origin "HEAD:refs/tags/$tag" --force
               if ($LASTEXITCODE -ne 0) { throw "Failed to push $tag." }
