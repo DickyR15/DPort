@@ -253,6 +253,17 @@ https://github.com/DickyR15/DPort
 
 | 項目 | 授權方式 |
 |---|---|
+| DPort Windows 原始碼與修改內容 | GPL-3.0 |
+| GeoPort 上游程式碼 | GPL-3.0 |
+| pymobiledevice3 | GPL-3.0-or-later |
+| pyimg4 | GPL-3.0 |
+| pytun-pmd3 | GPL-3.0-or-later |
+| 其他第三方套件 | 依各自原始授權 |
+| 外部地圖資料／服務 | 依各服務提供者條款 |
+
+完整權利以 Repository 的 `LICENSE` 與各第三方專案原始授權文件為準。
+
+---|---|
 | DPort Windows | GNU GPL v3.0 |
 | GeoPort 上游內容 | GNU GPL v3.0 |
 | pymobiledevice3 | GPL-3.0-or-later |
