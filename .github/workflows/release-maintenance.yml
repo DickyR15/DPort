@@ -1,0 +1,30 @@
+name: Release Maintenance
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-legacy-release-assets:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release-cleanup]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove legacy custom source assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for tag in v6.9.0 v6.9.1; do
+            for asset in "DPort-source-6.9.0.zip" "DPort-source-6.9.1.zip"; do
+              if gh release view "$tag" --repo "${{ github.repository }}" --json assets --jq '.assets[].name' | grep -Fxq "$asset"; then
+                gh release delete-asset "$tag" "$asset" --repo "${{ github.repository }}" --yes
+                echo "Removed $asset from $tag"
+              fi
+            done
+          done
