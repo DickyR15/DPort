@@ -64,6 +64,9 @@ if ($rawVersion -notmatch 'DPORT_VERSION\s*=\s*["'']6\.9\.1["'']') {
 
 $mainPath = Join-Path $buildRoot 'src\main.py'
 $main = Get-Content -LiteralPath $mainPath -Raw
+$mapPath = Join-Path $buildRoot 'src\templates\map.html'
+if (-not (Test-Path $mapPath)) { throw 'map.html is missing from v6.9.1 source.' }
+$map = Get-Content -LiteralPath $mapPath -Raw
 
 # ---------------------------------------------------------------------------
 # Enable WiFi device discovery in the v6.9.1 test build.
@@ -126,6 +129,133 @@ if ($main.Contains($disabledWifiDiscovery)) {
 } else {
     throw 'WiFi discovery insertion point was not found in v6.9.1 main.py.'
 }
+
+# ---------------------------------------------------------------------------
+# Keep WiFi entries visible while the USB-only presence watcher runs.
+# The /usb_presence endpoint intentionally reports USB devices only.
+# ---------------------------------------------------------------------------
+$oldDisplayedIds = @'
+        const displayedIds = Array.from(deviceDropdown.options)
+            .map(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    return String(info.Identifier || '');
+                } catch (e) {
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .sort();
+'@
+
+$newDisplayedIds = @'
+        const displayedIds = Array.from(deviceDropdown.options)
+            .map(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    const type = String(
+                        info.ConnectionType ||
+                        info.connectionType ||
+                        info.wifiTransport ||
+                        ''
+                    ).toUpperCase();
+
+                    if (type !== 'USB') return '';
+                    return String(info.Identifier || '');
+                } catch (e) {
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .sort();
+'@
+
+if ($map.Contains($oldDisplayedIds)) {
+    $map = $map.Replace($oldDisplayedIds, $newDisplayedIds)
+} else {
+    throw 'USB displayedIds block was not found in v6.9.1 map.html.'
+}
+
+$oldEmptySnapshot = @'
+        if (rawIds.length === 0) {
+            // Only a successful, error-free empty snapshot may clear stale
+            // device entries.
+            deviceReinsertRetryCount = 0;
+            deviceReinsertRetryUntil = 0;
+            deviceAutoRefreshSignature = '';
+            deviceAutoRefreshScheduled = false;
+
+            if (deviceDropdown.options.length > 0) {
+                deviceDropdown.innerHTML = '';
+                deviceDropdown.value = '';
+            }
+
+            var connectionDropdown = document.getElementById('connection');
+            if (connectionDropdown) {
+                connectionDropdown.innerHTML = '';
+                connectionDropdown.value = '';
+            }
+            return;
+        }
+'@
+
+$newEmptySnapshot = @'
+        if (rawIds.length === 0) {
+            // /usb_presence only sees USB. Never clear a currently visible
+            // WiFi/Network option just because no USB cable is attached.
+            deviceReinsertRetryCount = 0;
+            deviceReinsertRetryUntil = 0;
+            deviceAutoRefreshSignature = '';
+            deviceAutoRefreshScheduled = false;
+
+            const hasNetworkEntry = Array.from(deviceDropdown.options).some(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    const type = String(
+                        info.ConnectionType ||
+                        info.connectionType ||
+                        info.wifiTransport ||
+                        ''
+                    ).toUpperCase();
+
+                    return (
+                        type === 'NETWORK' ||
+                        type === 'WIFI' ||
+                        !!info.wifiAddress ||
+                        !!info.wifiPort ||
+                        !!info.wifiTransport
+                    );
+                } catch (e) {
+                    return false;
+                }
+            });
+
+            if (hasNetworkEntry) {
+                return;
+            }
+
+            if (deviceDropdown.options.length > 0) {
+                deviceDropdown.innerHTML = '';
+                deviceDropdown.value = '';
+            }
+
+            var connectionDropdown = document.getElementById('connection');
+            if (connectionDropdown) {
+                connectionDropdown.innerHTML = '';
+                connectionDropdown.value = '';
+            }
+            return;
+        }
+'@
+
+if ($map.Contains($oldEmptySnapshot)) {
+    $map = $map.Replace($oldEmptySnapshot, $newEmptySnapshot)
+} else {
+    throw 'USB empty-snapshot block was not found in v6.9.1 map.html.'
+}
+
+Set-Content -LiteralPath $mapPath -Value $map -Encoding utf8
+Set-Content -LiteralPath $mainPath -Value $main -Encoding utf8
 
 
 # Keep the updater module itself available for compatibility, but disable
