@@ -1,3 +1,4 @@
+# ci: build DPort and updater all-windowless
 # ci: preserve DPort-Updater during shutdown
 # ci: trigger repair releases on updater source changes
 # ci: rebuild after self-copy updater fix
@@ -72,6 +73,11 @@ jobs:
           if ($helper -notmatch 'new_target = app_dir / f"DPort-\{args.version\}\.exe"') { throw "Updater must create the versioned EXE filename." }
           if ($helper -notmatch 'old_target\.unlink\(\)') { throw "Updater must remove the old EXE only after the new process starts." }
           if ($helper -notmatch '_schedule_cleanup\(work_dir\)') { throw "Updater must clean the temporary folder." }
+          $workflowText = Get-Content .github/workflows/repair-6.9.0.yml -Raw
+          if ($workflowText -notmatch '--noconsole --name DPort-Updater') { throw "DPort-Updater must be windowless." }
+          if ($workflowText -notmatch '--noconsole --name DPort-6.9.0') { throw "DPort 6.9.0 must be windowless." }
+          if ($workflowText -notmatch '--noconsole --name DPort-6.9.1') { throw "DPort 6.9.1 must be windowless." }
+          if ($repair -match 'minimize_console_after_start') { throw "Legacy console minimize code must not be generated." }
           if ($repair -notmatch 'update_dir = windows_temp / "\.dport-update"') { throw "DPort must place updater payloads in Windows Temp." }
           if ($repair -notmatch 'new_exe = current_exe\.parent / f"DPort-\{latest\}\.exe"') { throw "New DPort EXE must be downloaded beside the running DPort EXE." }
           if ($repair -match 'DPort-update\.ps1') { throw "Legacy PowerShell updater must not be generated." }
@@ -158,7 +164,7 @@ jobs:
           if (Test-Path dist) { Remove-Item dist -Recurse -Force }
           if (Test-Path build) { Remove-Item build -Recurse -Force }
 
-          python -m PyInstaller --noconfirm --clean --onefile --name DPort-Updater --hidden-import dport_updater_helper src/dport_updater_helper.py
+          python -m PyInstaller --noconfirm --clean --onefile --noconsole --name DPort-Updater --hidden-import dport_updater_helper src/dport_updater_helper.py
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed for DPort-Updater." }
           if (-not (Test-Path dist/DPort-Updater.exe)) { throw "DPort-Updater.exe missing." }
           & dist/DPort-Updater.exe --help
@@ -167,7 +173,7 @@ jobs:
           Copy-Item dist/DPort-Updater.exe repair-bin/DPort-Updater.exe -Force
           (Get-FileHash dist/DPort-Updater.exe -Algorithm SHA256).Hash.ToLower() | Set-Content repair-bin/DPort-Updater.exe.sha256 -Encoding ascii
 
-          python -m PyInstaller --noconfirm --clean --onefile --name DPort-6.9.0 --icon DPort-6.9.0.ico --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import pymobiledevice3.remote.userspace_tunnel --hidden-import pymobiledevice3.services.dvt.instruments.dvt_provider --hidden-import pymobiledevice3.services.dvt.instruments.location_simulation --hidden-import pymobiledevice3.usbmux --hidden-import dport_release_updater --hidden-import dport_version --add-data "src/templates;templates" --add-data "moenv_api_key.txt;." --version-file version_info.690.txt src/main.py
+          python -m PyInstaller --noconfirm --clean --onefile --noconsole --name DPort-6.9.0 --icon DPort-6.9.0.ico --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import pymobiledevice3.remote.userspace_tunnel --hidden-import pymobiledevice3.services.dvt.instruments.dvt_provider --hidden-import pymobiledevice3.services.dvt.instruments.location_simulation --hidden-import pymobiledevice3.usbmux --hidden-import dport_release_updater --hidden-import dport_version --add-data "src/templates;templates" --add-data "moenv_api_key.txt;." --version-file version_info.690.txt src/main.py
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed for DPort 6.9.0." }
           if (-not (Test-Path dist/DPort-6.9.0.exe)) { throw "DPort-6.9.0.exe missing." }
 
@@ -229,7 +235,7 @@ jobs:
           if (Test-Path dist) { Remove-Item dist -Recurse -Force }
           if (Test-Path build) { Remove-Item build -Recurse -Force }
 
-          python -m PyInstaller --noconfirm --clean --onefile --name DPort-6.9.1 --icon DPort-6.9.0.ico --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import pymobiledevice3.remote.userspace_tunnel --hidden-import pymobiledevice3.services.dvt.instruments.dvt_provider --hidden-import pymobiledevice3.services.dvt.instruments.location_simulation --hidden-import pymobiledevice3.usbmux --hidden-import dport_release_updater --hidden-import dport_version --add-data "src/templates;templates" --add-data "moenv_api_key.txt;." --version-file version_info.691.txt src/main.py
+          python -m PyInstaller --noconfirm --clean --onefile --noconsole --name DPort-6.9.1 --icon DPort-6.9.0.ico --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import pymobiledevice3.remote.userspace_tunnel --hidden-import pymobiledevice3.services.dvt.instruments.dvt_provider --hidden-import pymobiledevice3.services.dvt.instruments.location_simulation --hidden-import pymobiledevice3.usbmux --hidden-import dport_release_updater --hidden-import dport_version --add-data "src/templates;templates" --add-data "moenv_api_key.txt;." --version-file version_info.691.txt src/main.py
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed for DPort 6.9.1." }
           if (-not (Test-Path dist/DPort-6.9.1.exe)) { throw "DPort-6.9.1.exe missing." }
 
