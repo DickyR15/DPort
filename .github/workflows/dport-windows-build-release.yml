@@ -235,19 +235,19 @@ jobs:
           使用者應自行確認使用方式符合所在地適用法律、相關服務條款及第三方授權。
 
           © 2026 DickyR15 / DPort。
-"@
+          "@
 
-$finalBody = if ([string]::IsNullOrWhiteSpace($body)) { $footer.Trim() } else { "$($body.TrimEnd())`r`n`r`n$($footer.Trim())" }
-$notesPath = Join-Path $PWD 'dport-release-notes.md'
-Set-Content -LiteralPath $notesPath -Value $finalBody -Encoding utf8
+          $finalBody = if ([string]::IsNullOrWhiteSpace($body)) { $footer.Trim() } else { "$($body.TrimEnd())`r`n`r`n$($footer.Trim())" }
+          $notesPath = Join-Path $PWD 'dport-release-notes.md'
+          Set-Content -LiteralPath $notesPath -Value $finalBody -Encoding utf8
 
-gh release edit $tag --repo '${{ github.repository }}' --title "DPort v$v" --notes-file $notesPath --latest
-if ($LASTEXITCODE -ne 0) { throw "Failed to apply standardized release notes to $tag." }
+          gh release edit $tag --repo '${{ github.repository }}' --title "DPort v$v" --notes-file $notesPath --latest
+          if ($LASTEXITCODE -ne 0) { throw "Failed to apply standardized release notes to $tag." }
 
-Write-Host "Published DPort release $tag with automatic changelog plus standardized legal/source notes."
+          Write-Host "Published DPort release $tag with automatic changelog plus standardized legal/source notes."
 
-# Release policy:
-# - Release builds run only from version tags or an explicit existing tag.
-# - The checkout is the exact tag; no generated source package is used.
-# - GitHub's automatic Source code (zip/tar.gz) is the canonical source distribution.
-# - Release assets contain only the DPort executable, updater, and SHA-256 files.
+          # Release policy:
+          # - Release builds run only from version tags or an explicit existing tag.
+          # - The checkout is the exact tag; no generated source package is used.
+          # - GitHub's automatic Source code (zip/tar.gz) is the canonical source distribution.
+          # - Release assets contain only the DPort executable, updater, and SHA-256 files.
