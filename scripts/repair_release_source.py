@@ -685,6 +685,24 @@ def get_good_zip() -> bytes:
 
 
 def patch_main(main_text: str) -> str:
+    # Detach any inherited Windows console in the frozen GUI release.
+    if "def _detach_console_if_needed():" not in main_text:
+        main_text = main_text.replace(
+            "import logging\n",
+            '''import logging
+def _detach_console_if_needed():
+    """Detach any inherited Windows console; GUI releases should never expose one."""
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return
+    try:
+        import ctypes
+        ctypes.windll.kernel32.FreeConsole()
+    except Exception:
+        pass
+
+''',
+            1,
+        )
     # Force Windows UAC re-elevation through hidden ShellExecuteW.
     # This replaces the legacy pyuac elevation path in generated releases so the GUI binary
     # never flashes a console window while elevating.
