@@ -1,7 +1,7 @@
 name: DPort Windows WiFi Test
 run-name: DPort Windows WiFi Test
-
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
 
 permissions:
   contents: read
