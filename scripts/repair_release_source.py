@@ -1,3 +1,4 @@
+# repair: final update shutdown handoff
 # repair: updater must be built from the same helper source
 from __future__ import annotations
 
@@ -737,6 +738,19 @@ def _is_dport_updater_process(name: str) -> bool:
             1,
         )
 
+    # Make shutdown update-safe regardless of the baseline source shape.
+    if "def shutdown_server():" in main_text:
+        main_text = main_text.replace(
+            "def shutdown_server():",
+            "def shutdown_server(preserve_updater=False):",
+            1,
+        )
+        main_text = main_text.replace(
+            "    # Terminate the current process\n    clear_geoport()",
+            "    # During an update, the standalone updater must survive this shutdown.\n    if not preserve_updater:\n        clear_geoport()",
+            1,
+        )
+
     if "/dport/update" in main_text:
         main_text = re.sub(
             r'(?ms)^@app\.get\("/dport/update"\)\s*def _dport_user_confirmed_update\(\):.*?(?=^@app\.|^def |^if __name__ ==)',
@@ -781,7 +795,7 @@ def _dport_user_confirmed_update():
         raise RuntimeError("Could not find Flask app variable in main.py")
     app_name = match.group(1)
 
-    route = f'''\n\n# DPort user-confirmed updater endpoint: never called automatically.\n@{app_name}.get("/dport/update")\ndef _dport_user_confirmed_update():\n    try:\n        # Keep the same localhost port so the existing browser tab can reconnect.\n        try:\n            os.environ["DPORT_PORT"] = str(chosen_port)\n        except Exception:\n            os.environ["DPORT_PORT"] = "54321"\n        return dport_release_updater.request_update()\n    except Exception as exc:\n        return {{"ok": False, "state": "update_failed", "message": str(exc)}}, 500\n\n'''
+    route = f'''\n\n# DPort user-confirmed updater endpoint: never called automatically.\n@{app_name}.get("/dport/update")\ndef _dport_user_confirmed_update():\n    try:\n        try:\n            os.environ["DPORT_PORT"] = str(chosen_port)\n        except Exception:\n            os.environ["DPORT_PORT"] = "54321"\n\n        result = dport_release_updater.request_update()\n        if isinstance(result, tuple):\n            payload = result[0]\n            status = result[1] if len(result) > 1 else 200\n        else:\n            payload = result\n            status = 200\n\n        if isinstance(payload, dict) and payload.get("ok"):\n            def delayed_update_shutdown():\n                time.sleep(0.8)\n                shutdown_server(preserve_updater=True)\n            threading.Thread(\n                target=delayed_update_shutdown,\n                name="DPort-update-shutdown",\n                daemon=True,\n            ).start()\n\n        return (jsonify(payload) if isinstance(payload, dict) else payload), status\n    except Exception as exc:\n        return {{"ok": False, "state": "update_failed", "message": str(exc)}}, 500\n\n'''
 
     anchor = re.search(r"^\s*if\s+__name__\s*==\s*[\"']__main__[\"']\s*:", main_text, flags=re.M)
     if anchor:
