@@ -1,3 +1,4 @@
+# ci: verify cleanup never flashes cmd
 # ci: remove self-referential pyuac validation gate
 # ci: force all released EXEs to Windows GUI subsystem
 # ci: trigger final windowless rebuild after user test
@@ -76,6 +77,8 @@ jobs:
           if ($helper -notmatch 'new_target = app_dir / f"DPort-\{args.version\}\.exe"') { throw "Updater must create the versioned EXE filename." }
           if ($helper -notmatch 'old_target\.unlink\(\)') { throw "Updater must remove the old EXE only after the new process starts." }
           if ($helper -notmatch '_schedule_cleanup\(work_dir\)') { throw "Updater must clean the temporary folder." }
+          if ($helper -match 'COMSPEC|timeout /t|rmdir /s /q') { throw "Updater cleanup must not invoke cmd.exe." }
+          if ($helper -notmatch 'wscript\.exe') { throw "Updater cleanup must use silent Windows Script Host." }
           $workflowText = Get-Content .github/workflows/repair-6.9.0.yml -Raw
           if ($workflowText -notmatch '--noconsole --name DPort-Updater') { throw "DPort-Updater must be windowless." }
           if ($workflowText -notmatch '--noconsole --name DPort-6.9.0') { throw "DPort 6.9.0 must be windowless." }
