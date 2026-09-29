@@ -1,4 +1,5 @@
 name: DPort Windows — Build & Release
+run-name: DPort Windows — ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 on:
   push:
