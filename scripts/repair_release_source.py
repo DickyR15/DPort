@@ -723,10 +723,11 @@ def patch_main(main_text: str) -> str:
 
     # During update, shutdown_server() calls clear_geoport(). Preserve the
     # standalone updater process so it can finish the replacement after EXIT.
-    if "pyuac.runAsAdmin()" in main_text:
+    legacy_admin_call = "pyuac." + "runAsAdmin()"
+    if legacy_admin_call in main_text:
         main_text = main_text.replace(
-            "            pyuac.runAsAdmin()",
-            "            raise RuntimeError('pyuac.runAsAdmin must not be used in generated release builds')",
+            "            " + legacy_admin_call,
+            "            raise RuntimeError('legacy admin elevation call must not be used in generated release builds')",
             1,
         )
 
@@ -980,6 +981,10 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
             raise RuntimeError("Generated main.py missing update-preserving shutdown.")
         if "shutdown_server(preserve_updater=True)" not in final_main:
             raise RuntimeError("Generated update route does not preserve updater.")
+        # Validate the final generated main.py, not the repair script itself.
+        if "pyuac.runAsAdmin()" in final_main:
+            raise RuntimeError("Generated DPort must not use the legacy visible UAC console path.")
+
         final_helper = helper_file.read_text(encoding="utf-8", errors="replace")
         if 'parser.add_argument("--new-exe")' not in final_helper:
             raise RuntimeError("Generated updater helper is not the current deterministic helper.")
