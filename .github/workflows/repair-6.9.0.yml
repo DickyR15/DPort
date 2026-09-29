@@ -1,3 +1,4 @@
+# ci: trigger final windowless rebuild after user test
 # ci: build DPort and updater all-windowless
 # ci: preserve DPort-Updater during shutdown
 # ci: trigger repair releases on updater source changes
