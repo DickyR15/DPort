@@ -581,7 +581,20 @@ UPDATE_UI = r'''
     var box=document.getElementById('dport-update-dialog');
     if(box) box.classList.remove('show');
   }
-  function waitForRestart(){
+  function parts(v){
+    return String(v||'0').replace(/^v/i,'').split('.').map(function(x){
+      var m=x.match(/^\d+/); return m ? parseInt(m[0],10) : 0;
+    });
+  }
+  function atLeast(a,b){
+    var A=parts(a), B=parts(b);
+    for(var i=0;i<3;i++){
+      if((A[i]||0)>(B[i]||0)) return true;
+      if((A[i]||0)<(B[i]||0)) return false;
+    }
+    return true;
+  }
+  function waitForRestart(expectedVersion){
     var msg=document.getElementById('dport-update-message');
     var attempts=0;
     var timer=setInterval(function(){
@@ -591,15 +604,21 @@ UPDATE_UI = r'''
           if(!r.ok) throw new Error('HTTP '+r.status);
           return r.json();
         })
-        .then(function(){
+        .then(function(status){
+          var current=String(status && status.current_version || '');
+          // Do not reload merely because the old 6.9.0 server answered.
+          if(!current || !atLeast(current, expectedVersion)){
+            if(msg) msg.textContent='正在等待 DPort '+expectedVersion+' 啟動…';
+            throw new Error('old-version-server');
+          }
           clearInterval(timer);
-          if(msg) msg.textContent='更新完成，正在重新載入 DPort…';
-          setTimeout(function(){ window.location.reload(); },300);
+          if(msg) msg.textContent='DPort '+expectedVersion+' 已啟動，正在重新載入…';
+          setTimeout(function(){ window.location.reload(); },500);
         })
         .catch(function(){
-          if(attempts>=60){
+          if(attempts>=180){
             clearInterval(timer);
-            if(msg) msg.textContent='程式已重新啟動，但網頁尚未連回 DPort，請按瀏覽器重新整理。';
+            if(msg) msg.textContent='新版程式尚未連回，請確認 DPort-'+expectedVersion+'.exe 是否已啟動。';
           }
         });
     },1000);
@@ -619,7 +638,7 @@ UPDATE_UI = r'''
           var msg=document.getElementById('dport-update-message');
           if(msg) msg.textContent='6.9.1 已下載並驗證，正在關閉 6.9.0…';
           // The backend now shuts down DPort after the verified download.
-          waitForRestart();
+          waitForRestart(String(result.version || ''));
         }else{
           if(title) title.textContent='DPort 更新失敗';
           btn.disabled=false;
