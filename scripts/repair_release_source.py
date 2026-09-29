@@ -1,3 +1,4 @@
+# repair: updater must be built from the same helper source
 from __future__ import annotations
 
 import argparse
@@ -723,6 +724,19 @@ def _is_dport_updater_process(name: str) -> bool:
         count=1,
     )
 
+    # Update shutdown must preserve the standalone updater process.
+    if "def shutdown_server():" in main_text:
+        main_text = main_text.replace(
+            "def shutdown_server():",
+            "def shutdown_server(preserve_updater=False):",
+            1,
+        )
+        main_text = main_text.replace(
+            "    # Terminate the current process\n    clear_geoport()",
+            "    # During an update, the standalone updater must survive this shutdown.\n    if not preserve_updater:\n        clear_geoport()",
+            1,
+        )
+
     if "/dport/update" in main_text:
         main_text = re.sub(
             r'(?ms)^@app\.get\("/dport/update"\)\s*def _dport_user_confirmed_update\(\):.*?(?=^@app\.|^def |^if __name__ ==)',
@@ -745,7 +759,7 @@ def _dport_user_confirmed_update():
         if isinstance(payload, dict) and payload.get("ok"):
             def delayed_update_shutdown():
                 time.sleep(0.8)
-                shutdown_server()
+                shutdown_server(preserve_updater=True)
             threading.Thread(
                 target=delayed_update_shutdown,
                 name="DPort-update-shutdown",
@@ -798,10 +812,11 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
         version_file = root / "src" / "dport_version.py"
         req_file = root / "requirements-build.txt"
         updater_file = root / "src" / "dport_release_updater.py"
+        helper_file = root / "src" / "dport_updater_helper.py"
         main_file = root / "src" / "main.py"
         map_file = root / "src" / "templates" / "map.html"
 
-        for required in (version_file, req_file, updater_file, main_file, map_file):
+        for required in (version_file, req_file, updater_file, helper_file, main_file, map_file):
             if not required.exists():
                 raise RuntimeError(f"Required source file missing: {required}")
 
@@ -820,6 +835,13 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
         # Validate the generated updater source before embedding it into the package.
         compile(SAFE_UPDATER, "dport_release_updater.py", "exec")
         updater_file.write_text(SAFE_UPDATER, encoding="utf-8")
+
+        repo_helper = Path(__file__).resolve().parent.parent / "src" / "dport_updater_helper.py"
+        if not repo_helper.exists():
+            raise RuntimeError(f"Standalone updater helper source missing: {repo_helper}")
+        helper_text = repo_helper.read_text(encoding="utf-8", errors="replace")
+        compile(helper_text, "dport_updater_helper.py", "exec")
+        helper_file.write_text(helper_text, encoding="utf-8")
 
         main_text = main_file.read_text(encoding="utf-8", errors="replace")
         main_file.write_text(patch_main(main_text), encoding="utf-8")
@@ -902,6 +924,17 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
                 map_text += manual_css
 
         map_file.write_text(map_text, encoding="utf-8")
+
+        final_main = main_file.read_text(encoding="utf-8", errors="replace")
+        if "def shutdown_server(preserve_updater=False):" not in final_main:
+            raise RuntimeError("Generated main.py missing update-preserving shutdown.")
+        if "shutdown_server(preserve_updater=True)" not in final_main:
+            raise RuntimeError("Generated update route does not preserve updater.")
+        final_helper = helper_file.read_text(encoding="utf-8", errors="replace")
+        if 'parser.add_argument("--new-exe")' not in final_helper:
+            raise RuntimeError("Generated updater helper is not the current deterministic helper.")
+        if "def _wait_for_new_version" not in final_helper:
+            raise RuntimeError("Generated updater helper is missing new-version verification.")
 
         if output.exists():
             output.unlink()
