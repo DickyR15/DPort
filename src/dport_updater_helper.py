@@ -74,7 +74,10 @@ def _wait_for_pid_exit(pid: int, timeout: int = 180) -> None:
     raise TimeoutError("等待舊版 DPort 關閉逾時")
 
 
-def _start_detached(exe: Path, arguments: list[str]) -> subprocess.Popen:
+def _start_detached(exe: Path, arguments: list[str], restarted: bool = False) -> subprocess.Popen:
+    env = os.environ.copy()
+    if restarted:
+        env["DPORT_RESTARTED"] = "1"
     return subprocess.Popen(
         [str(exe), *arguments],
         cwd=str(exe.parent),
@@ -178,7 +181,7 @@ def main() -> int:
         log(f"新版 EXE 已位於應用程式資料夾：{new_target}")
 
         # Start 6.9.1 before removing 6.9.0.
-        process = _start_detached(new_target, relaunch_args)
+        process = _start_detached(new_target, relaunch_args, restarted=True)
         time.sleep(5)
         if process.poll() is not None:
             raise RuntimeError(
