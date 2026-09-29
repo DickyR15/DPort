@@ -811,11 +811,6 @@ def _dport_user_confirmed_update():
         insert_at += len("import dport_release_updater\n")
 
     result = main_text[:insert_at] + route + main_text[insert_at:]
-    result = result.replace(
-        "    #threading.Thread(target=open_browser).start()\\n\\n    app.run(",
-        "    #threading.Thread(target=open_browser).start()\\n\\n    minimize_console_after_start()\\n\\n    app.run(",
-        1,
-    )
     return result
 
 
