@@ -134,17 +134,24 @@ def _start_detached(exe: Path, arguments: list[str], restarted: bool = False) ->
             | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
         ),
         close_fds=True,
+        env=env,
     )
 
 
 def _schedule_cleanup(folder: Path) -> None:
-    """Delete the temporary updater folder after this helper exits."""
+    """Delete C:\\Windows\\Temp\\.dport-update after all child handles settle."""
     folder_q = str(folder).replace('"', '""')
-    script = 'timeout /t 8 /nobreak >nul & rmdir /s /q "' + folder_q + '"'
-    _start_detached(
-        Path(os.environ.get("COMSPEC", "cmd.exe")),
-        ["/d", "/s", "/c", script],
+    parent_q = str(folder.parent).replace('"', '""')
+    cmd = Path(os.environ.get("COMSPEC", "cmd.exe"))
+    script = (
+        'cd /d "' + parent_q + '" & '
+        'for /l %i in (1,1,15) do ('
+        'timeout /t 1 /nobreak >nul & '
+        'rmdir /s /q "' + folder_q + '" >nul 2>&1 & '
+        'if not exist "' + folder_q + '" exit /b 0'
+        ')'
     )
+    _start_detached(cmd, ["/d", "/s", "/c", script], restarted=False)
 
 
 def main() -> int:
