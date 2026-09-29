@@ -751,21 +751,48 @@ def _is_dport_updater_process(name: str) -> bool:
             1,
         )
 
-    # Minimize the console window after startup on Windows.
-    if "def minimize_console_window():" not in main_text:
+    # Minimize the console only after the server/browser startup has begun.
+    if "def minimize_console_after_start(" not in main_text:
         main_text = main_text.replace(
             "def open_browser():",
             '''def minimize_console_window():
-    """Minimize the DPort console window after startup on Windows."""
+    """Minimize the DPort console after the application has started."""
     if not is_windows:
-        return
+        return False
     try:
         import ctypes
         hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if hwnd:
-            ctypes.windll.user32.ShowWindow(hwnd, 6)
+        if not hwnd:
+            return False
+        user32 = ctypes.windll.user32
+        user32.ShowWindow(hwnd, 6)
+        try:
+            user32.ShowWindowAsync(hwnd, 6)
+        except Exception:
+            pass
+        return True
     except Exception as exc:
         logger.debug(f"Unable to minimize DPort console: {exc}")
+        return False
+
+
+def minimize_console_after_start(delay=3.0, attempts=12):
+    if not is_windows:
+        return
+
+    def worker():
+        time.sleep(delay)
+        for _ in range(attempts):
+            if minimize_console_window():
+                time.sleep(0.5)
+                minimize_console_window()
+            time.sleep(0.5)
+
+    threading.Thread(
+        target=worker,
+        name="DPort-console-minimize",
+        daemon=True,
+    ).start()
 
 
 def open_browser():''',
@@ -834,7 +861,7 @@ def _dport_user_confirmed_update():
     result = main_text[:insert_at] + route + main_text[insert_at:]
     result = result.replace(
         "    #threading.Thread(target=open_browser).start()\\n\\n    app.run(",
-        "    #threading.Thread(target=open_browser).start()\\n\\n    minimize_console_window()\\n\\n    app.run(",
+        "    #threading.Thread(target=open_browser).start()\\n\\n    minimize_console_after_start()\\n\\n    app.run(",
         1,
     )
     return result
