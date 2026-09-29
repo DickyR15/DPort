@@ -77,9 +77,11 @@ jobs:
           if ($helper -notmatch 'new_target = app_dir / f"DPort-\{args.version\}\.exe"') { throw "Updater must create the versioned EXE filename." }
           if ($helper -notmatch 'old_target\.unlink\(\)') { throw "Updater must remove the old EXE only after the new process starts." }
           if ($helper -notmatch '_schedule_cleanup\(work_dir\)') { throw "Updater must clean the temporary folder." }
-          if ($helper -match 'COMSPEC|timeout /t|rmdir /s /q') { throw "Updater cleanup must not invoke cmd.exe." }
-          if ($helper -notmatch 'encoding="utf-16"') { throw "Updater cleanup VBS must be UTF-16 encoded for WScript." }
-          if ($helper -notmatch 'wscript\.exe') { throw "Updater cleanup must use silent Windows Script Host." }
+          if ($helper -match 'COMSPEC|timeout /t|rmdir /s /q|wscript\.exe') { throw "Updater cleanup must not invoke cmd.exe or WScript." }
+          if ($helper -notmatch 'powershell\.exe') { throw "Updater cleanup must use silent Windows PowerShell." }
+          if ($helper -notmatch '-EncodedCommand') { throw "Updater cleanup must use an inline encoded PowerShell command." }
+          if ($helper -notmatch 'STARTF_USESHOWWINDOW') { throw "Updater cleanup PowerShell must be hidden." }
+          if ($helper -notmatch "DPort-cleanup-\*\.vbs") { throw "Updater cleanup must remove leftovers from previous VBS cleanup." }
           $workflowText = Get-Content .github/workflows/repair-6.9.0.yml -Raw
           if ($workflowText -notmatch '--noconsole --name DPort-Updater') { throw "DPort-Updater must be windowless." }
           if ($workflowText -notmatch '--noconsole --name DPort-6.9.0') { throw "DPort 6.9.0 must be windowless." }
