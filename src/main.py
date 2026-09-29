@@ -1846,6 +1846,19 @@ def index():
                            sudo_message=sudo_message)
 
 
+def minimize_console_window():
+    """Minimize the DPort console window after startup on Windows."""
+    if not is_windows:
+        return
+    try:
+        import ctypes
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 6)
+    except Exception as exc:
+        logger.debug(f"Unable to minimize DPort console: {exc}")
+
+
 def open_browser():
     time.sleep(2)  # Wait for the Flask app to start
     #webbrowser.open_new(f'http://localhost:{chosen_port}')
@@ -1947,6 +1960,8 @@ if __name__ == '__main__':
 
 
     #threading.Thread(target=open_browser).start()
+
+    minimize_console_window()
 
     app.run(debug=True, use_reloader=False, port=chosen_port, host='0.0.0.0')
 
