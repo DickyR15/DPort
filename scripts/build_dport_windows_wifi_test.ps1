@@ -65,6 +65,69 @@ if ($rawVersion -notmatch 'DPORT_VERSION\s*=\s*["'']6\.9\.1["'']') {
 $mainPath = Join-Path $buildRoot 'src\main.py'
 $main = Get-Content -LiteralPath $mainPath -Raw
 
+# ---------------------------------------------------------------------------
+# Enable WiFi device discovery in the v6.9.1 test build.
+# The production v6.9.1 source intentionally leaves /list_devices in USB-only
+# mode. The WiFi test build enables Apple's paired mobdev2 Bonjour discovery.
+# ---------------------------------------------------------------------------
+$disabledWifiDiscovery = @'
+            # USB-ONLY: Wi-Fi / Network discovery intentionally disabled.
+            logger.info("USB-ONLY mode: Wi-Fi/Bonjour/mDNS/RemotePairing discovery skipped")
+'@
+
+$enabledWifiDiscovery = @'
+            # Wi-Fi discovery through Apple's mobdev2 Bonjour service.
+            try:
+                wifi_count = 0
+
+                async for ip, network_device in get_mobdev2_lockdowns(
+                    only_paired=True,
+                    timeout=timeout,
+                ):
+                    try:
+                        info = dict(network_device.short_info)
+
+                        network_udid = (
+                            getattr(network_device, "udid", None)
+                            or info.get("UniqueDeviceID")
+                            or info.get("Identifier")
+                        )
+
+                        if not network_udid:
+                            continue
+
+                        info["ConnectionType"] = "Network"
+                        info["Identifier"] = network_udid
+                        info["wifiAddress"] = str(ip)
+                        info["wifiPort"] = 62078
+                        info["wifiState"] = True
+                        info["wifiTransport"] = "mobdev2"
+
+                        add_device(network_udid, "Network", info)
+                        wifi_count += 1
+
+                    except Exception as exc:
+                        logger.warning(f"Wi-Fi metadata failed for {ip}: {exc}")
+
+                    finally:
+                        try:
+                            await network_device.close()
+                        except Exception:
+                            pass
+
+                logger.info(f"Wi-Fi device-list count: {wifi_count}")
+
+            except Exception as exc:
+                logger.warning(f"Wi-Fi discovery failed: {exc}")
+'@
+
+if ($main.Contains($disabledWifiDiscovery)) {
+    $main = $main.Replace($disabledWifiDiscovery, $enabledWifiDiscovery)
+} else {
+    throw 'WiFi discovery insertion point was not found in v6.9.1 main.py.'
+}
+
+
 # Keep the updater module itself available for compatibility, but disable
 # automatic update bootstrap/background checks in this test build.
 $main = [regex]::Replace(
