@@ -1584,32 +1584,56 @@ def py_list_devices():
         return jsonify({"error": str(e)}), 500
 
 
+def _is_dport_updater_process(name: str) -> bool:
+    normalized = str(name or "").lower()
+    return normalized in {
+        "dport-updater.exe",
+        "dport_updater_helper.exe",
+    } or "dport-updater" in normalized
+
+
 def clear_geoport():
-    logger.info("clear any DPort instances")
-    substring = "DPort"
+    logger.info("clear DPort instances")
+    substring = "dport"
+    current_pid = os.getpid()
 
     for process in psutil.process_iter(['pid', 'name']):
-        if substring in process.info['name']:
-            logger.info(f"Found process: {process.info['pid']} - {process.info['name']}")
-
-            # Terminate the process
-            process.terminate()
-    else:
-        logger.warning("No GeoPort found")
+        try:
+            pid = int(process.info.get('pid') or 0)
+            name = str(process.info.get('name') or "")
+            if pid == current_pid:
+                continue
+            # The updater MUST survive shutdown; otherwise it can never install
+            # the already-downloaded next version.
+            if _is_dport_updater_process(name):
+                logger.info(f"Preserve updater process: {pid} - {name}")
+                continue
+            if substring in name.lower():
+                logger.info(f"Terminate DPort process: {pid} - {name}")
+                process.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
 
 
 def clear_old_geoport():
     logger.info("clear old DPort instances")
-    substring = "DPort"
-
+    substring = "dport"
     current_pid = os.getpid()
 
     for process in psutil.process_iter(['pid', 'name']):
-        if substring in process.info['name'] and process.info['pid'] != current_pid:
-            logger.info(f"Found process: {process.info['pid']} - {process.info['name']}")
-
-            # Terminate the process
-            process.terminate()
+        try:
+            pid = int(process.info.get('pid') or 0)
+            name = str(process.info.get('name') or "")
+            if pid == current_pid:
+                continue
+            if _is_dport_updater_process(name):
+                logger.info(f"Preserve updater process: {pid} - {name}")
+                continue
+            if substring in name.lower():
+                logger.info(f"Terminate old DPort process: {pid} - {name}")
+                process.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
 
 
 def shutdown_server():
