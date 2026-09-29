@@ -1,5 +1,4 @@
-name: DPort Wi-Fi Test
-
+name: DPort WiFi Test
 on:
   workflow_dispatch:
 
