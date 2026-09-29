@@ -67,7 +67,7 @@ jobs:
               )) {
                 $sourcePath = Join-Path $root.FullName $path
                 $expected = (git hash-object $sourcePath).Trim()
-                $actual = (git rev-parse "HEAD:$($path.Replace('\','/'))").Trim()
+                $actual = (git rev-parse ":$($path.Replace('\','/'))").Trim()
                 if ($expected -ne $actual) { throw "$tag source mismatch for $path. expected=$expected actual=$actual" }
               }
               git commit -m "chore: sync $tag with released build source"
