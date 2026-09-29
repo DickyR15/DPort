@@ -1846,51 +1846,6 @@ def index():
                            sudo_message=sudo_message)
 
 
-def minimize_console_window():
-    """Minimize the DPort console after the application has started."""
-    if not is_windows:
-        return False
-    try:
-        import ctypes
-        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if not hwnd:
-            return False
-
-        user32 = ctypes.windll.user32
-        # SW_MINIMIZE = 6. Use ShowWindowAsync as a second request so Windows
-        # receives the minimize operation even when focus changed to Chrome.
-        user32.ShowWindow(hwnd, 6)
-        try:
-            user32.ShowWindowAsync(hwnd, 6)
-        except Exception:
-            pass
-        return True
-    except Exception as exc:
-        logger.debug(f"Unable to minimize DPort console: {exc}")
-        return False
-
-
-def minimize_console_after_start(delay=3.0, attempts=12):
-    """Retry minimizing the console after startup so it cannot cover the UI."""
-    if not is_windows:
-        return
-
-    def worker():
-        time.sleep(delay)
-        for _ in range(attempts):
-            if minimize_console_window():
-                time.sleep(0.5)
-                # Retry once more because UAC/browser startup can restore focus.
-                minimize_console_window()
-            time.sleep(0.5)
-
-    threading.Thread(
-        target=worker,
-        name="DPort-console-minimize",
-        daemon=True,
-    ).start()
-
-
 def open_browser():
     time.sleep(2)  # Wait for the Flask app to start
     #webbrowser.open_new(f'http://localhost:{chosen_port}')
@@ -1974,6 +1929,25 @@ if __name__ == '__main__':
             pass
         if not pyuac.isUserAdmin():
             print("Relaunching as Admin")
+            if os.environ.get("DPORT_RESTARTED") == "1":
+                # Update-restarted DPort should not create a visible console.
+                import ctypes
+                import shlex
+                executable = str(Path(sys.executable).resolve())
+                params = " ".join(
+                    shlex.quote(str(x)) for x in sys.argv[1:]
+                )
+                result = ctypes.windll.shell32.ShellExecuteW(
+                    None,
+                    "runas",
+                    executable,
+                    params,
+                    str(Path(executable).parent),
+                    0,  # SW_HIDE
+                )
+                if result <= 32:
+                    raise RuntimeError(f"Hidden elevation failed: {result}")
+                raise SystemExit(0)
             pyuac.runAsAdmin()
     #else:
 
@@ -1992,10 +1966,6 @@ if __name__ == '__main__':
 
 
     #threading.Thread(target=open_browser).start()
-
-    # Start the server first; minimize asynchronously after the browser/UI
-    # has had time to take focus. This also handles UAC relaunch timing.
-    minimize_console_after_start()
 
     app.run(debug=True, use_reloader=False, port=chosen_port, host='0.0.0.0')
 
