@@ -68,6 +68,16 @@ OSUTILS = get_os_utils()
 
 
 import logging
+def _detach_console_if_needed():
+    """Detach any inherited Windows console; GUI releases should never expose one."""
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return
+    try:
+        import ctypes
+        ctypes.windll.kernel32.FreeConsole()
+    except Exception:
+        pass
+
 
 
 # Get or create a logger instance named "GeoPort"
@@ -1584,6 +1594,15 @@ def py_list_devices():
         return jsonify({"error": str(e)}), 500
 
 
+
+def _is_dport_updater_process(name: str) -> bool:
+    normalized = str(name or "").lower()
+    return normalized in {
+        "dport-updater.exe",
+        "dport_updater_helper.exe",
+    } or "dport-updater" in normalized
+
+
 def clear_geoport():
     logger.info("clear any DPort instances")
     substring = "DPort"
@@ -1612,7 +1631,7 @@ def clear_old_geoport():
             process.terminate()
 
 
-def shutdown_server():
+def shutdown_server(preserve_updater=False):
     logger.warning("shutdown server")
     try:
         asyncio.run(stop_location())
@@ -1630,8 +1649,9 @@ def shutdown_server():
     terminate_threads()
 
 
-    # Terminate the current process
-    clear_geoport()
+    # During an update, the standalone updater must survive this shutdown.
+    if not preserve_updater:
+        clear_geoport()
 
     logger.error("OS Kill")
     os.kill(os.getpid(), signal.SIGINT)
@@ -1860,7 +1880,30 @@ def try_bind_listener_on_free_port():
 @app.get("/dport/update")
 def _dport_user_confirmed_update():
     try:
-        return dport_release_updater.request_update()
+        try:
+            os.environ["DPORT_PORT"] = str(chosen_port)
+        except Exception:
+            os.environ["DPORT_PORT"] = "54321"
+
+        result = dport_release_updater.request_update()
+        if isinstance(result, tuple):
+            payload = result[0]
+            status = result[1] if len(result) > 1 else 200
+        else:
+            payload = result
+            status = 200
+
+        if isinstance(payload, dict) and payload.get("ok"):
+            def delayed_update_shutdown():
+                time.sleep(0.8)
+                shutdown_server(preserve_updater=True)
+            threading.Thread(
+                target=delayed_update_shutdown,
+                name="DPort-update-shutdown",
+                daemon=True,
+            ).start()
+
+        return (jsonify(payload) if isinstance(payload, dict) else payload), status
     except Exception as exc:
         return {"ok": False, "state": "update_failed", "message": str(exc)}, 500
 
@@ -1878,12 +1921,20 @@ if __name__ == '__main__':
         except:
             pass
         if not pyuac.isUserAdmin():
-            print("Relaunching as Admin")
-            pyuac.runAsAdmin()
-    #else:
-
-
-
+            import ctypes
+            executable = str(Path(sys.executable).resolve())
+            params = subprocess.list2cmdline(sys.argv[1:])
+            result = ctypes.windll.shell32.ShellExecuteW(
+                None,
+                "runas",
+                executable,
+                params,
+                str(Path(executable).parent),
+                0,
+            )
+            if result <= 32:
+                raise RuntimeError(f"Hidden elevation failed: {result}")
+            raise SystemExit(0)
 
     chosen_port = try_bind_listener_on_free_port()
 
