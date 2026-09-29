@@ -1,43 +1,37 @@
 # DPort GitHub 全自動建置
 
-Repository：DickyR15/DPort
+這個版本將 DPort 的 Windows 建置與 Release 發布交給 GitHub Actions。
 
-主版基底：
-- DPort 6.9.0
-- USB 功能保留
-- pymobiledevice3 固定 11.19.1
-- Wi-Fi 不在主版開啟
-- 一般使用者只需要完整 DPort EXE，不需要 Python
+## 發布方式
 
-## 一次性設定
+在 `main` 分支修改程式後，建立並推送版本標籤：
 
-在 GitHub：
-Settings → Secrets and variables → Actions → New repository secret
-
-建立：
-MOENV_API_KEY
-
-真正的 API Key 不要提交到公開 Repository。
-
-## 自動建置
-
-目前正式版本固定為：
+```text
 v6.9.0
+v6.9.1
+v6.9.2
+```
 
-建置流程會把其他 Tag / 手動輸入也正規化為 DPort 6.9.0，並更新同一個 v6.9.0 Release 的 EXE
+GitHub Actions 會自動：
 
-GitHub Actions 會在 Windows Runner：
-1. 安裝 Python 3.14
-2. 安裝固定版本依賴
+1. Windows runner 建立 Python 3.14 建置環境
+2. 安裝 requirements-build.txt
 3. 建置內嵌 DPortUpdater.exe
 4. 建置完整 DPort EXE
 5. 產生 SHA-256
 6. 建立 GitHub Release
-7. 上傳 EXE
+7. 上傳 EXE 與 checksum
 
-## 使用者自動更新
+使用者端只需要 DPort EXE，不需要 Python、pip 或 PyInstaller。
 
-DPort 會檢查同一個 Repository 的最新正式 Release；只有當正式 Release 版本高於目前版本時才會進行更新。下載新的完整 DPort EXE 後仍會驗證 SHA-256，驗證成功才會替換舊版並自動重新啟動。同版本重新建置不會觸發自動更新。
+## 手動觸發
 
-因此使用者不需要 Python、pip、PyInstaller 或另外安裝 pymobiledevice3。
+GitHub → Actions → DPort Build & Release → Run workflow，輸入版本，例如 `6.9.0`。
 
+## 自動更新
+
+DPort 會讀取 `DickyR15/DPort` 的最新正式 Release，尋找對應的 `DPort-x.y.z.exe` 與 `.sha256`，驗證 SHA-256 後交給內嵌 updater 等待舊程序退出、替換目前 EXE，再自動重新啟動。
+
+## 注意
+
+版本號由 Git tag / workflow input 決定；不需要手動修改 `version_info.txt`。Wi-Fi 功能沒有在這個主版流程中新增。

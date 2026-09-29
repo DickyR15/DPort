@@ -3493,7 +3493,7 @@ html, body{
     </div>
   </div>
 </div>
-    <div class="dport-hero-actions"><a id="exit-btn" class="btn btn-outline-primary dport-header-btn" href="#" title="DPort" onclick="exitApp()">離開</a>
+    <div class="dport-hero-actions"><a id="exit-btn" class="btn btn-outline-primary dport-header-btn" href="#" title="DPort" onclick="return exitApp(false)">離開</a>
     </div>
   </header>
 
@@ -8035,24 +8035,33 @@ function setLocationArrows() {
         stopLocationButton.disabled = false;
     }
 
-    function exitApp() {
+    function exitApp(forUpdate) {
         console.log('Exit App function called');
 
         try {
             $('#aboutModal').modal('hide');
-            $('#shutdownModal').modal('show');
+            if (!forUpdate) {
+                $('#shutdownModal').modal('show');
+            }
 
-            const data = JSON.stringify({});
-            navigator.sendBeacon('/exit', data);
+            const data = JSON.stringify({reason: forUpdate ? 'update' : 'user_exit'});
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon('/exit', data);
+            } else {
+                fetch('/exit', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:data,
+                    keepalive:true
+                }).catch(function(){});
+            }
 
-            // Close immediately, matching the previous working behavior.
             window.open('', '_self', '');
             window.close();
-
-            console.log('POST request sent using sendBeacon');
         } catch (error) {
             console.error('錯誤 during server shutdown:', error);
         }
+        return false;
     }
 
     function aboutApp() {
@@ -12893,8 +12902,52 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
     var box=document.getElementById('dport-update-dialog');
     if(box) box.classList.remove('show');
   }
+  function parts(v){
+    return String(v||'0').replace(/^v/i,'').split('.').map(function(x){
+      var m=x.match(/^\d+/); return m ? parseInt(m[0],10) : 0;
+    });
+  }
+  function atLeast(a,b){
+    var A=parts(a), B=parts(b);
+    for(var i=0;i<3;i++){
+      if((A[i]||0)>(B[i]||0)) return true;
+      if((A[i]||0)<(B[i]||0)) return false;
+    }
+    return true;
+  }
+  function waitForRestart(expectedVersion){
+    var msg=document.getElementById('dport-update-message');
+    var attempts=0;
+    var timer=setInterval(function(){
+      attempts++;
+      fetch('/pymobiledevice3/status?ts='+Date.now(),{cache:'no-store'})
+        .then(function(r){
+          if(!r.ok) throw new Error('HTTP '+r.status);
+          return r.json();
+        })
+        .then(function(status){
+          var current=String(status && status.current_version || '');
+          // Do not reload merely because the old 6.9.0 server answered.
+          if(!current || !atLeast(current, expectedVersion)){
+            if(msg) msg.textContent='正在等待 DPort '+expectedVersion+' 啟動…';
+            throw new Error('old-version-server');
+          }
+          clearInterval(timer);
+          if(msg) msg.textContent='DPort '+expectedVersion+' 已啟動，正在重新載入…';
+          setTimeout(function(){ window.location.reload(); },500);
+        })
+        .catch(function(){
+          if(attempts>=180){
+            clearInterval(timer);
+            if(msg) msg.textContent='新版程式尚未連回，請確認 DPort-'+expectedVersion+'.exe 是否已啟動。';
+          }
+        });
+    },1000);
+  }
+
   function start(){
     var btn=document.getElementById('dport-update-now');
+    var title=document.querySelector('#dport-update-dialog h3');
     if(!btn) return;
     btn.disabled=true;
     btn.textContent='更新中…';
@@ -12902,17 +12955,24 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
       .then(function(r){return r.json();})
       .then(function(result){
         if(result && result.ok){
+          if(title) title.textContent='DPort 正在關閉';
           var msg=document.getElementById('dport-update-message');
-          if(msg) msg.textContent='正在更新到 DPort '+result.version+'，程式即將重新啟動…';
+          if(msg) msg.textContent='6.9.1 已下載並驗證，正在關閉 6.9.0…';
+          // The backend now shuts down DPort after the verified download.
+          waitForRestart(String(result.version || ''));
         }else{
+          if(title) title.textContent='DPort 更新失敗';
           btn.disabled=false;
-          btn.textContent='立即更新';
+          btn.textContent='立即重試';
           var msg=document.getElementById('dport-update-message');
           if(msg) msg.textContent=(result && result.message) ? result.message : '更新失敗，請稍後再試。';
         }
       }).catch(function(){
+        if(title) title.textContent='DPort 更新失敗';
         btn.disabled=false;
-        btn.textContent='立即更新';
+        btn.textContent='立即重試';
+        var msg=document.getElementById('dport-update-message');
+        if(msg) msg.textContent='無法完成更新，請再次嘗試。';
       });
   }
 
