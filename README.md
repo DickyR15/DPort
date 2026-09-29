@@ -168,7 +168,7 @@ DPort 涉及 iPhone 裝置連線及位置相關功能，實際可用功能會依
 
 ## 🧩 第三方元件、上游來源與授權
 
-DPort Windows 是基於開源專案 **GeoPort** 進行修改與再開發的專案。GeoPort 目前採用 **GNU GPL v3.0**；DPort Windows 以 GPL-3.0 作為專案軟體授權。citeturn251003search0turn884552view0
+DPort Windows 是基於開源專案 **GeoPort** 進行修改與再開發的專案。GeoPort 目前採用 **GNU GPL v3.0**；DPort Windows 以 GPL-3.0 作為專案軟體授權。
 
 DPort 另使用多項第三方開源元件。各元件的原始著作權與授權仍歸原權利人所有，完整資訊請參考 THIRD_PARTY_NOTICES.md。
 
@@ -183,13 +183,13 @@ DPort-specific modifications include DPort branding, Traditional Chinese (Taiwan
 
 DPort 不以自己的專案說明去限制或取代 GPL、LGPL、MIT、BSD、Apache 等第三方授權。
 
-其中 GPL 元件（例如 GeoPort、pymobiledevice3、pyimg4、pytun-pmd3）會帶來相應的授權與再發布條件。pymobiledevice3 官方目前標示 GPL-3.0-or-later。citeturn617287search2turn617287search3
+其中 GPL 元件（例如 GeoPort、pymobiledevice3、pyimg4、pytun-pmd3）會帶來相應的授權與再發布條件。pymobiledevice3 官方目前標示 GPL-3.0-or-later。
 
 ### 前端與地圖
 
 src/templates/map.html 使用 Leaflet、Bootstrap、jQuery、Popper、Leaflet 相關外掛、Font Awesome、Lineicons 等第三方資源，並使用 OpenStreetMap、Stadia Maps、OpenMapTiles 等地圖／圖資服務。
 
-這些程式庫、圖示、字型、地圖資料與服務各自受其原始授權及服務條款約束。Leaflet 官方目前標示其程式碼採 BSD-2-Clause，並建議保留適當 attribution；地圖圖磚服務亦有各自的使用條款。citeturn262705search0turn262705search3
+這些程式庫、圖示、字型、地圖資料與服務各自受其原始授權及服務條款約束。Leaflet 官方目前標示其程式碼採 BSD-2-Clause，並建議保留適當 attribution；地圖圖磚服務亦有各自的使用條款。
 
 ### Binary Release
 
