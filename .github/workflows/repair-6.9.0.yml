@@ -1,3 +1,4 @@
+# ci: rebuild after self-copy updater fix
 # ci: enforce download target beside launched DPort executable
 # ci: final deterministic update order - download, verify, exit, install, delete, cleanup, relaunch
 # ci: rebuild pre-exit update handoff
