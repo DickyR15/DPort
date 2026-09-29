@@ -161,8 +161,20 @@ if ($LASTEXITCODE -ne 0) {
     throw 'PyInstaller WiFi test build failed.'
 }
 
+# PyInstaller may use a different output directory when the build script
+# changes the working directory. Locate the generated EXE explicitly.
+$foundExe = Get-ChildItem -Path $buildRoot -Filter "DPort-WiFi-Test-$version.exe" -File -Recurse |
+    Select-Object -First 1
+
+if (-not $foundExe) {
+    throw "PyInstaller completed but DPort-WiFi-Test-$version.exe could not be located under $buildRoot"
+}
+
+New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+Copy-Item $foundExe.FullName $exe -Force
+
 if (-not (Test-Path $exe)) {
-    throw "Expected EXE was not produced: $exe"
+    throw "Failed to copy built EXE to workspace output: $exe"
 }
 
 python -c "import pefile,sys; p=pefile.PE(sys.argv[1]); sys.exit(0 if p.OPTIONAL_HEADER.Subsystem==2 else 1)" $exe
