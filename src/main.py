@@ -1860,7 +1860,31 @@ def try_bind_listener_on_free_port():
 @app.get("/dport/update")
 def _dport_user_confirmed_update():
     try:
-        return dport_release_updater.request_update()
+        try:
+            os.environ["DPORT_PORT"] = str(chosen_port)
+        except Exception:
+            os.environ["DPORT_PORT"] = "54321"
+
+        result = dport_release_updater.request_update()
+        if isinstance(result, tuple):
+            payload = result[0]
+            status = result[1] if len(result) > 1 else 200
+        else:
+            payload = result
+            status = 200
+
+        if isinstance(payload, dict) and payload.get("ok"):
+            def delayed_update_shutdown():
+                time.sleep(0.8)
+                shutdown_server()
+            threading.Thread(
+                target=delayed_update_shutdown,
+                name="DPort-update-shutdown",
+                daemon=True,
+            ).start()
+
+        body = jsonify(payload) if isinstance(payload, dict) else payload
+        return body, status
     except Exception as exc:
         return {"ok": False, "state": "update_failed", "message": str(exc)}, 500
 
