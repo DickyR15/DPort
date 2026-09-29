@@ -1,4 +1,4 @@
-name: DPort WiFi Test
+name: DPort Windows WiFi Test
 on:
   workflow_dispatch:
 
