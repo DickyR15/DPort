@@ -1,3 +1,4 @@
+# repair: final shutdown flag in source
 import dport_release_updater
 import locale
 import os
