@@ -1,6 +1,12 @@
 name: DPort Windows WiFi Test
+run-name: DPort Windows WiFi Test
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/dport-wifi-test-6-9-1.yml'
 
 permissions:
   contents: read
