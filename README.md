@@ -166,68 +166,58 @@ DPort 涉及 iPhone 裝置連線及位置相關功能，實際可用功能會依
 
 ---
 
-## 🧩 第三方元件與授權
+## 🧩 第三方元件、上游來源與授權
 
-DPort 使用多項第三方開源軟體與 Python 套件。
+DPort Windows 是基於開源專案 **GeoPort** 進行修改與再開發的專案。GeoPort 目前採用 **GNU GPL v3.0**；DPort Windows 以 GPL-3.0 作為專案軟體授權。citeturn251003search0turn884552view0
 
-其中包含：
+DPort 另使用多項第三方開源元件。各元件的原始著作權與授權仍歸原權利人所有，完整資訊請參考 THIRD_PARTY_NOTICES.md。
 
-- [pymobiledevice3](https://github.com/doronz88/pymobiledevice3)
-- Flask
-- Requests
-- pyuac
-- psutil
-- pycountry
-- PyInstaller
-- inquirer3
-- readchar
-- pyimg4
-- pytun-pmd3
+### 上游專案
 
-這些第三方元件均依其各自的原始專案授權條款使用。
+- **GeoPort** — https://github.com/davesc63/GeoPort — GPL-3.0
+- **pymobiledevice3** — https://github.com/doronz88/pymobiledevice3 — GPL-3.0-or-later
 
-**DPort 不主張擁有上述第三方專案的著作權或其他智慧財產權。**
+DPort-specific modifications include DPort branding, Traditional Chinese (Taiwan) localization, UI adjustments, update/build tooling, and other project-specific changes.
 
-使用、重新散布或修改第三方元件時，請同時遵守各第三方專案所附的授權條款及 NOTICE / LICENSE 文件。
+### GPL 與第三方授權
 
-第三方專案：
+DPort 不以自己的專案說明去限制或取代 GPL、LGPL、MIT、BSD、Apache 等第三方授權。
 
-- pymobiledevice3：<https://github.com/doronz88/pymobiledevice3>
-- Flask：<https://github.com/pallets/flask>
-- Requests：<https://github.com/psf/requests>
-- pyuac：<https://github.com/NickBruning/pyuac>
-- psutil：<https://github.com/giampaolo/psutil>
-- pycountry：<https://github.com/flyingcircusio/pycountry>
-- PyInstaller：<https://github.com/pyinstaller/pyinstaller>
-- inquirer3：<https://github.com/kazeburo/inquirer3>
-- readchar：<https://github.com/magmax/python-readchar>
-- pyimg4：<https://github.com/doronz88/pyimg4>
-- pytun-pmd3：<https://github.com/doronz88/pytun-pmd3>
+其中 GPL 元件（例如 GeoPort、pymobiledevice3、pyimg4、pytun-pmd3）會帶來相應的授權與再發布條件。pymobiledevice3 官方目前標示 GPL-3.0-or-later。citeturn617287search2turn617287search3
 
-> 第三方套件的精確授權版本與條款，應以各專案當下發布內容及隨套件提供的 LICENSE 為準。
+### 前端與地圖
+
+src/templates/map.html 使用 Leaflet、Bootstrap、jQuery、Popper、Leaflet 相關外掛、Font Awesome、Lineicons 等第三方資源，並使用 OpenStreetMap、Stadia Maps、OpenMapTiles 等地圖／圖資服務。
+
+這些程式庫、圖示、字型、地圖資料與服務各自受其原始授權及服務條款約束。Leaflet 官方目前標示其程式碼採 BSD-2-Clause，並建議保留適當 attribution；地圖圖磚服務亦有各自的使用條款。citeturn262705search0turn262705search3
+
+### Binary Release
+
+發布 DPort EXE 時，應讓使用者可以取得與該二進位版本相對應的原始碼與必要授權／NOTICE 資料。
+
+建議每個正式 Release 都能對應到明確的 Git Tag、Source Snapshot 或其他可重現的原始碼版本。
+
+### 商標與品牌
+
+**DPort、Dicky** 是 DPort 專案使用的名稱／品牌識別。
+
+**Apple、iPhone、iPad、iOS、iPadOS** 等名稱及相關商標屬 Apple Inc. 或其相關權利人所有。
+
+DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或官方合作。
+
+軟體 GPL-3.0 授權本身不等同於授予 DPort、Dicky、Apple 或其他第三方商標的使用權。
 
 ---
 
-## 📜 DPort 授權
+## 📜 DPort Windows License
 
-### DPort License
+DPort Windows 使用 **GNU General Public License v3.0 (GPL-3.0)**。
 
-Copyright (c) 2026 DickyR15
+完整條款位於 Repository 根目錄的 LICENSE。
 
-本專案中由 **DickyR15 / DPort** 所創作、撰寫或維護的原始碼、文件、圖示、介面設計及其他原創內容，除另有明確標示外，均為著作權人所有。
+為了與 GeoPort 上游及 GPL 第三方元件保持一致，本專案不再以自訂條款禁止 GPL 涵蓋內容的重新發布、修改或商業使用。
 
-除非另有明確書面授權，您不得：
-
-- 將 DPort 的原創內容重新發布為另一個獨立專案。
-- 移除或修改原始作者、著作權及授權聲明。
-- 將 DPort 原創內容宣稱為自己所創作。
-- 將 DPort 商業化、重新包裝或散布為其他產品，而未取得著作權人授權。
-
-允許個人使用、研究、測試及在符合本授權與第三方授權條款的前提下查看原始碼。
-
-**DPort 的授權只適用於 DPort 自有原創內容，不延伸或取代第三方元件原本的授權。**
-
-如需取得額外授權、商業使用權、重新發布權或其他未列於本授權中的權利，請先取得著作權人 **DickyR15** 的明確書面許可。
+DPort 品牌／名稱與軟體著作權授權分開處理。
 
 ---
 
@@ -263,16 +253,15 @@ https://github.com/DickyR15/DPort
 
 | 項目 | 授權方式 |
 |---|---|
-| DPort 原創程式碼 | DPort License |
-| DPort 文件 | DPort License |
-| DPort 原創介面／圖示 | DPort License |
-| pymobiledevice3 | 依其原始授權 |
+| DPort Windows | GNU GPL v3.0 |
+| GeoPort 上游內容 | GNU GPL v3.0 |
+| pymobiledevice3 | GPL-3.0-or-later |
 | 其他第三方套件 | 依各自原始授權 |
-| GitHub Actions / 建置工具 | 依各工具自身授權 |
-| API / 外部服務 | 依各服務提供者條款 |
+| 地圖資料／圖磚服務 | 依各服務提供者條款 |
+| DPort / Dicky 品牌 | 與軟體授權分開處理 |
 
-**完整合法權利請以本 README、Repository 內的 LICENSE，以及各第三方專案所提供的授權文件為準。**
+完整權利與義務請以 LICENSE、THIRD_PARTY_NOTICES.md、各第三方 LICENSE / NOTICE，以及相關服務條款為準。
 
 ---
 
-© 2026 DickyR15. All rights reserved.
+© 2026 DickyR15 / DPort.
