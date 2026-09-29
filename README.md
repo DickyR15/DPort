@@ -169,8 +169,8 @@ DPort 涉及 iPhone 裝置連線及位置相關功能，實際可用功能會依
 ## 🧩 第三方元件、上游來源與授權
 
 DPort Windows 是基於開源專案 **GeoPort** 進行修改與再開發。GeoPort 採用 **GNU GPL
-v3.0**，因此 DPort Windows 的發布版本採 GPL-3.0，以保持與上游及 GPL 第三方元件的授權
-相容。
+v3.0**；DPort Windows 依 Repository 根目錄 LICENSE 採 GPL-3.0 發布，並保留上游及第三方
+授權所要求的著作權與授權資訊。
 
 ### 上游專案
 
@@ -208,13 +208,13 @@ API 及服務條款。DPort 不主張擁有這些第三方內容。
 DPort 發布包含 GPL 涵蓋內容的 EXE 時，應讓使用者能取得該版本所需的 Corresponding Source
 以及適用的 GPL 授權資訊。
 
-正式 Release 應使用明確的 Git Tag、Source Snapshot 或其他方式對應所發布的二進位版本。
+正式 Release 應使用明確的 Git Tag 與對應的 Source Snapshot 對應所發布的二進位版本。
 
-例如 **DPort v6.9.0** 的 Release 對應 commit：
+例如：
 
-`2983b1f17d6f9986cdace4d4a1497dd83919f780`
+`v6.9.2` → 該 Tag 所指向的 Commit → 該 Commit 建置出的 `DPort-6.9.2.exe`
 
-該 Release 同時提供 Source archive。
+GitHub Release 的 Source archive 應以該 Release Tag 為準。建置流程應確認 Tag 版本與 DPort 內部版本一致，避免二進位檔與 Source Snapshot 對應錯誤。
 
 ### 商標與品牌
 
