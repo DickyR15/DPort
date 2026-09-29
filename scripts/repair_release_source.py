@@ -751,6 +751,27 @@ def _is_dport_updater_process(name: str) -> bool:
             1,
         )
 
+    # Minimize the console window after startup on Windows.
+    if "def minimize_console_window():" not in main_text:
+        main_text = main_text.replace(
+            "def open_browser():",
+            '''def minimize_console_window():
+    """Minimize the DPort console window after startup on Windows."""
+    if not is_windows:
+        return
+    try:
+        import ctypes
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 6)
+    except Exception as exc:
+        logger.debug(f"Unable to minimize DPort console: {exc}")
+
+
+def open_browser():''',
+            1,
+        )
+
     if "/dport/update" in main_text:
         main_text = re.sub(
             r'(?ms)^@app\.get\("/dport/update"\)\s*def _dport_user_confirmed_update\(\):.*?(?=^@app\.|^def |^if __name__ ==)',
@@ -810,7 +831,13 @@ def _dport_user_confirmed_update():
         main_text = "import dport_release_updater\n" + main_text
         insert_at += len("import dport_release_updater\n")
 
-    return main_text[:insert_at] + route + main_text[insert_at:]
+    result = main_text[:insert_at] + route + main_text[insert_at:]
+    result = result.replace(
+        "    #threading.Thread(target=open_browser).start()\\n\\n    app.run(",
+        "    #threading.Thread(target=open_browser).start()\\n\\n    minimize_console_window()\\n\\n    app.run(",
+        1,
+    )
+    return result
 
 
 def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
