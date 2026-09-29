@@ -686,7 +686,7 @@ def get_good_zip() -> bytes:
 
 def patch_main(main_text: str) -> str:
     # Force Windows UAC re-elevation through hidden ShellExecuteW.
-    # This replaces pyuac.runAsAdmin() in generated releases so the GUI binary
+    # This replaces the legacy pyuac elevation path in generated releases so the GUI binary
     # never flashes a console window while elevating.
     admin_re = re.compile(
         r'(?ms)^        if not pyuac\.isUserAdmin\(\):\n.*?(?=^    chosen_port\s*=)',
