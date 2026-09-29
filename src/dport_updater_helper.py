@@ -46,9 +46,30 @@ def _read_expected_sha256(url: str) -> str:
 
 
 def _wait_for_pid_exit(pid: int, timeout: int = 180) -> None:
+    """Wait for the exact parent PID to exit without relying on tasklist parsing."""
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            SYNCHRONIZE = 0x00100000
+            kernel32 = ctypes.windll.kernel32
+            kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+            kernel32.OpenProcess.restype = ctypes.c_void_p
+            kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+            kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+            kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+
+            handle = kernel32.OpenProcess(SYNCHRONIZE, 0, int(pid))
+            if handle:
+                result = kernel32.WaitForSingleObject(handle, int(timeout * 1000))
+                kernel32.CloseHandle(handle)
+                if result == 0:
+                    return
+        except Exception:
+            pass
+
     deadline = time.time() + timeout
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-
     while time.time() < deadline:
         try:
             result = subprocess.run(
@@ -60,18 +81,41 @@ def _wait_for_pid_exit(pid: int, timeout: int = 180) -> None:
             )
             alive = False
             for line in result.stdout.splitlines():
-                parts = [p.strip().strip('"') for p in line.split('","')]
-                if len(parts) >= 2 and parts[1] == str(pid):
+                fields = [x.strip().strip('"') for x in line.split('","')]
+                if len(fields) >= 2 and fields[1] == str(pid):
                     alive = True
                     break
             if not alive:
                 return
         except Exception:
             pass
+        time.sleep(0.5)
+    raise TimeoutError("等待舊版 DPort 關閉逾時")
 
+
+def _wait_for_new_version(version: str, port: int, timeout: int = 120) -> None:
+    """Wait until the new DPort server reports the requested version."""
+    url = f"http://127.0.0.1:{int(port)}/pymobiledevice3/status"
+    deadline = time.time() + timeout
+
+    while time.time() < deadline:
+        try:
+            req = urllib.request.Request(
+                url + f"?ts={int(time.time() * 1000)}",
+                headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+            current = str(payload.get("current_version") or "")
+            if current == str(version):
+                return
+        except Exception:
+            pass
         time.sleep(0.5)
 
-    raise TimeoutError("等待舊版 DPort 關閉逾時")
+    raise TimeoutError(f"DPort-{version} 啟動逾時：localhost:{port} 沒有回報新版本")
+
+
 
 
 def _start_detached(exe: Path, arguments: list[str], restarted: bool = False) -> subprocess.Popen:
@@ -88,7 +132,6 @@ def _start_detached(exe: Path, arguments: list[str], restarted: bool = False) ->
             getattr(subprocess, "CREATE_NO_WINDOW", 0)
             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
             | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
-            | 0x01000000
         ),
         close_fds=True,
     )
@@ -181,13 +224,11 @@ def main() -> int:
         log(f"新版 EXE 已位於應用程式資料夾：{new_target}")
 
         # Start 6.9.1 before removing 6.9.0.
-        process = _start_detached(new_target, relaunch_args, restarted=True)
-        time.sleep(5)
-        if process.poll() is not None:
-            raise RuntimeError(
-                f"DPort-{args.version}.exe 啟動後立即結束，ExitCode={process.returncode}"
-            )
-        log("新版 DPort 已成功啟動")
+        _start_detached(new_target, relaunch_args, restarted=True)
+        # Do not use process.poll() as the success criterion. DPort may
+        # self-elevate through UAC and replace the bootstrap process.
+        _wait_for_new_version(args.version, args.port or 54321, timeout=120)
+        log(f"DPort-{args.version}.exe 已回報新版本並成功啟動")
 
         # Only now is it safe to remove 6.9.0.
         if old_target.exists() and old_target != new_target:
