@@ -1636,7 +1636,7 @@ def clear_old_geoport():
             continue
 
 
-def shutdown_server():
+def shutdown_server(preserve_updater=False):
     logger.warning("shutdown server")
     try:
         asyncio.run(stop_location())
@@ -1654,8 +1654,9 @@ def shutdown_server():
     terminate_threads()
 
 
-    # Terminate the current process
-    clear_geoport()
+    # During an update, the standalone updater must survive this shutdown.
+    if not preserve_updater:
+        clear_geoport()
 
     logger.error("OS Kill")
     os.kill(os.getpid(), signal.SIGINT)
@@ -1900,7 +1901,7 @@ def _dport_user_confirmed_update():
         if isinstance(payload, dict) and payload.get("ok"):
             def delayed_update_shutdown():
                 time.sleep(0.8)
-                shutdown_server()
+                shutdown_server(preserve_updater=True)
             threading.Thread(
                 target=delayed_update_shutdown,
                 name="DPort-update-shutdown",
