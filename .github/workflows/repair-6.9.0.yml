@@ -1,3 +1,4 @@
+# ci: preserve DPort-Updater during shutdown
 # ci: trigger repair releases on updater source changes
 # ci: rebuild after self-copy updater fix
 # ci: enforce download target beside launched DPort executable
@@ -74,6 +75,9 @@ jobs:
           if ($repair -notmatch 'update_dir = windows_temp / "\.dport-update"') { throw "DPort must place updater payloads in Windows Temp." }
           if ($repair -notmatch 'new_exe = current_exe\.parent / f"DPort-\{latest\}\.exe"') { throw "New DPort EXE must be downloaded beside the running DPort EXE." }
           if ($repair -match 'DPort-update\.ps1') { throw "Legacy PowerShell updater must not be generated." }
+          $main = Get-Content src/main.py -Raw
+          if ($main -notmatch '_is_dport_updater_process') { throw "main.py must preserve DPort-Updater.exe during shutdown." }
+          if ($main -notmatch 'Preserve updater process') { throw "main.py updater preservation guard is missing." }
 
       - name: Prepare API key and source packages
         shell: pwsh
