@@ -168,44 +168,78 @@ DPort 涉及 iPhone 裝置連線及位置相關功能，實際可用功能會依
 
 ## 🧩 第三方元件、上游來源與授權
 
-DPort Windows 是基於開源專案 **GeoPort** 進行修改與再開發的專案。GeoPort 目前採用 **GNU GPL v3.0**；DPort Windows 以 GPL-3.0 作為專案軟體授權。
-
-DPort 另使用多項第三方開源元件。各元件的原始著作權與授權仍歸原權利人所有，完整資訊請參考 THIRD_PARTY_NOTICES.md。
+DPort Windows 是基於開源專案 **GeoPort** 進行修改與再開發。GeoPort 採用 **GNU GPL
+v3.0**，因此 DPort Windows 的發布版本採 GPL-3.0，以保持與上游及 GPL 第三方元件的授權
+相容。
 
 ### 上游專案
 
 - **GeoPort** — https://github.com/davesc63/GeoPort — GPL-3.0
 - **pymobiledevice3** — https://github.com/doronz88/pymobiledevice3 — GPL-3.0-or-later
 
-DPort-specific modifications include DPort branding, Traditional Chinese (Taiwan) localization, UI adjustments, update/build tooling, and other project-specific changes.
+DPort-specific modifications include DPort branding, Traditional Chinese (Taiwan) localization,
+UI adjustments, GPX-related behavior, device-state handling, update/build tooling and other
+project-specific changes.
 
-### GPL 與第三方授權
+### 第三方授權
 
-DPort 不以自己的專案說明去限制或取代 GPL、LGPL、MIT、BSD、Apache 等第三方授權。
+DPort 使用的第三方元件，其著作權及授權仍歸各自權利人所有。DPort 不以自己的授權取代、
+縮減或限制第三方授權所授予的權利。
 
-其中 GPL 元件（例如 GeoPort、pymobiledevice3、pyimg4、pytun-pmd3）會帶來相應的授權與再發布條件。pymobiledevice3 官方目前標示 GPL-3.0-or-later。
+完整清單及目前建置依賴版本請參考：
+
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+- [requirements-build.txt](requirements-build.txt)
+
+目前直接依賴包含 GPL、LGPL、MIT、BSD、Apache 等不同授權；實際再發布時應遵守各元件
+隨附的 LICENSE / NOTICE 以及適用條款。
 
 ### 前端與地圖
 
-src/templates/map.html 使用 Leaflet、Bootstrap、jQuery、Popper、Leaflet 相關外掛、Font Awesome、Lineicons 等第三方資源，並使用 OpenStreetMap、Stadia Maps、OpenMapTiles 等地圖／圖資服務。
+DPort 的地圖介面引用 Leaflet、Bootstrap、jQuery、Popper、Leaflet 相關外掛、Font Awesome、
+Lineicons 等第三方資源，並引用 OpenStreetMap、Stadia Maps、OpenMapTiles 等外部地圖
+資料／圖磚服務。
 
-這些程式庫、圖示、字型、地圖資料與服務各自受其原始授權及服務條款約束。Leaflet 官方目前標示其程式碼採 BSD-2-Clause，並建議保留適當 attribution；地圖圖磚服務亦有各自的使用條款。
+這些程式庫、圖示、字型、地圖資料與服務均由各自權利人控制，適用各自的授權、attribution、
+API 及服務條款。DPort 不主張擁有這些第三方內容。
 
-### Binary Release
+### GPL 二進位發布與原始碼
 
-發布 DPort EXE 時，應讓使用者可以取得與該二進位版本相對應的原始碼與必要授權／NOTICE 資料。
+DPort 發布包含 GPL 涵蓋內容的 EXE 時，應讓使用者能取得該版本所需的 Corresponding Source
+以及適用的 GPL 授權資訊。
 
-建議每個正式 Release 都能對應到明確的 Git Tag、Source Snapshot 或其他可重現的原始碼版本。
+正式 Release 應使用明確的 Git Tag、Source Snapshot 或其他方式對應所發布的二進位版本。
+
+例如 **DPort v6.9.0** 的 Release 對應 commit：
+
+`2983b1f17d6f9986cdace4d4a1497dd83919f780`
+
+該 Release 同時提供 Source archive。
 
 ### 商標與品牌
 
 **DPort、Dicky** 是 DPort 專案使用的名稱／品牌識別。
 
-**Apple、iPhone、iPad、iOS、iPadOS** 等名稱及相關商標屬 Apple Inc. 或其相關權利人所有。
+**Apple、iPhone、iPad、iOS、iPadOS** 等名稱及相關商標屬 Apple Inc. 或相關權利人所有。
 
 DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或官方合作。
 
 軟體 GPL-3.0 授權本身不等同於授予 DPort、Dicky、Apple 或其他第三方商標的使用權。
+
+### 安全與機密資訊
+
+公開 Repository 不應包含：
+
+- API Key
+- 密碼
+- Access Token
+- 私鑰
+- Apple Developer 憑證
+- 程式碼簽署憑證
+- 其他機密資訊
+
+本專案僅提供 `moenv_api_key.txt.example` 這類設定範例。真正的金鑰應保存在本機
+設定或 GitHub Secrets。
 
 ---
 
@@ -213,11 +247,10 @@ DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或
 
 DPort Windows 使用 **GNU General Public License v3.0 (GPL-3.0)**。
 
-完整條款位於 Repository 根目錄的 LICENSE。
+完整 GPL 條款位於 Repository 根目錄的 [LICENSE](LICENSE)。
 
-為了與 GeoPort 上游及 GPL 第三方元件保持一致，本專案不再以自訂條款禁止 GPL 涵蓋內容的重新發布、修改或商業使用。
-
-DPort 品牌／名稱與軟體著作權授權分開處理。
+本授權適用於本專案中依 GPL-3.0 發布的內容；第三方元件仍受其原始授權控制。
+不得使用本專案的說明文件或其他附加條款，限制 GPL 所授予的修改、複製、再發布等權利。
 
 ---
 
@@ -225,7 +258,8 @@ DPort 品牌／名稱與軟體著作權授權分開處理。
 
 DPort 依「現況」提供，不提供任何明示或默示的保證。
 
-在法律允許的最大範圍內，DickyR15 不對因使用、無法使用、誤用、更新失敗、裝置相容性問題、第三方服務變更或其他相關因素所造成的任何直接、間接、附帶、特殊或衍生損害負責。
+在法律允許的最大範圍內，DickyR15 不對因使用、無法使用、誤用、更新失敗、裝置相容性問題、
+第三方服務變更或其他相關因素所造成的任何直接、間接、附帶、特殊或衍生損害負責。
 
 使用者應自行確認：
 
@@ -253,26 +287,19 @@ https://github.com/DickyR15/DPort
 
 | 項目 | 授權方式 |
 |---|---|
-| DPort Windows 原始碼與修改內容 | GPL-3.0 |
-| GeoPort 上游程式碼 | GPL-3.0 |
+| DPort Windows | GNU GPL-3.0 |
+| GeoPort 上游內容 | GNU GPL-3.0 |
 | pymobiledevice3 | GPL-3.0-or-later |
 | pyimg4 | GPL-3.0 |
 | pytun-pmd3 | GPL-3.0-or-later |
 | 其他第三方套件 | 依各自原始授權 |
-| 外部地圖資料／服務 | 依各服務提供者條款 |
-
-完整權利以 Repository 的 `LICENSE` 與各第三方專案原始授權文件為準。
-
----|---|
-| DPort Windows | GNU GPL v3.0 |
-| GeoPort 上游內容 | GNU GPL v3.0 |
-| pymobiledevice3 | GPL-3.0-or-later |
-| 其他第三方套件 | 依各自原始授權 |
 | 地圖資料／圖磚服務 | 依各服務提供者條款 |
 | DPort / Dicky 品牌 | 與軟體授權分開處理 |
 
-完整權利與義務請以 LICENSE、THIRD_PARTY_NOTICES.md、各第三方 LICENSE / NOTICE，以及相關服務條款為準。
+完整權利與義務請以 LICENSE、THIRD_PARTY_NOTICES.md、各第三方 LICENSE / NOTICE 及相關
+服務條款為準。
 
 ---
 
 © 2026 DickyR15 / DPort.
+
