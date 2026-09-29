@@ -2,12 +2,6 @@ name: DPort Windows WiFi Test
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'scripts/build_dport_windows_wifi_test.ps1'
-      - '.github/workflows/dport-windows-wifi-test.yml'
 
 permissions:
   contents: read
@@ -79,7 +73,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: DPort-WiFi-Test-6.9.1
-          path: DPort-WiFi-Test-6.9.1.zip
+          path: DPort-WiFi-Test-6.9.1
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
