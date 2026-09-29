@@ -1,4 +1,4 @@
-name: DPort Windows - Build & Release
+name: "DPort Windows Build & Release"
 
 
 on:
