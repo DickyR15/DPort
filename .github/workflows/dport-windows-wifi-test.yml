@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - '.github/workflows/dport-wifi-test-6-9-1.yml'
+      - '.github/workflows/dport-windows-wifi-test.yml'
 
 permissions:
   contents: read
