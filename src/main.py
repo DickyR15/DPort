@@ -69,6 +69,19 @@ OSUTILS = get_os_utils()
 
 
 import logging
+def _detach_console_if_needed():
+    """Detach any inherited Windows console; GUI releases should never expose one."""
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        # Detach from a console inherited from a launcher (e.g. cmd.exe).
+        kernel32.FreeConsole()
+    except Exception:
+        pass
+
+
 
 
 # Get or create a logger instance named "GeoPort"
@@ -194,7 +207,22 @@ def create_geoport_folder():
     # Set permissions for the GeoPort folder
     if current_platform == 'win32':
         # Windows permissions (read/write for everyone)
-        os.system(f"icacls {geoport_folder} /grant Everyone:(OI)(CI)F")
+        if current_platform == 'win32':
+            try:
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = 0
+                subprocess.run(
+                    ["icacls", geoport_folder, "/grant", "Everyone:(OI)(CI)F"],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    startupinfo=startupinfo,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    check=False,
+                )
+            except Exception:
+                pass
         logger.info("Permissions set for GeoPort folder on Windows")
     else:  # Linux and MacOS
         # POSIX permissions (read/write for everyone)
@@ -1917,6 +1945,7 @@ def _dport_user_confirmed_update():
 
 
 if __name__ == '__main__':
+    _detach_console_if_needed()
     #create_geoport_folder()
     if is_windows:
         try:
