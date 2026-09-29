@@ -1,102 +1,101 @@
 # DPort Third-Party Notices
 
-Copyright © 2026 DickyR15 / DPort
+Copyright © 2026 DickyR15 / DPort for DPort-specific contributions.
 
-This file records the principal third-party Python packages directly declared by DPort in
-`requirements-build.txt`. These components are **not owned by DickyR15 / DPort** and remain
-subject to their respective original licenses.
+This project contains, derives from, or distributes third-party software and services.
+DPort's own copyright does not replace or override any third-party license.
 
-This notice is informational and does not replace the license files distributed by the
-respective upstream projects.
+## 1. Upstream project: GeoPort
 
-## Direct dependencies
+- Project: GeoPort
+- Repository: https://github.com/davesc63/GeoPort
+- License: GNU GPL v3.0
+- DPort relationship: DPort Windows is derived from and substantially modified from the GeoPort codebase.
+- Upstream credit: davesc63 and the GeoPort contributors.
 
-| Component | DPort requirement | License | Upstream |
-|---|---|---|---|
-| pymobiledevice3 | 11.19.1 | GPL-3.0-or-later | https://github.com/doronz88/pymobiledevice3 |
-| Flask | unpinned | BSD-3-Clause | https://github.com/pallets/flask |
-| Requests | unpinned | Apache-2.0 | https://github.com/psf/requests |
-| pyuac | unpinned | MIT | https://github.com/Preston-Landers/pyuac |
-| psutil | unpinned | BSD-3-Clause | https://github.com/giampaolo/psutil |
-| pycountry | unpinned | LGPL-2.1-or-later / LGPL-2.1 for some releases | https://github.com/pycountry/pycountry |
-| PyInstaller | unpinned | GPL-2.0-or-later with PyInstaller's special exception; some files Apache-2.0 | https://github.com/pyinstaller/pyinstaller |
-| inquirer3 | unpinned | MIT | https://github.com/kazeburo/inquirer3 |
-| readchar | unpinned | MIT | https://github.com/magmax/python-readchar |
-| pyimg4 | unpinned | GPL-3.0 | https://github.com/iOSForensics/pyimg4 |
-| pytun-pmd3 | unpinned | GPL-3.0-or-later | https://github.com/doronz88/pytun-pmd3 |
+DPort-specific changes include UI changes, Traditional Chinese (Taiwan) localization, DPort
+branding, update/build tooling, and other project-specific changes. The source history and
+repository contents should be used to identify exact modified portions.
 
-## Important GPL components
+## 2. Python dependencies
 
-DPort currently declares GPL-licensed components, including:
+| Component | Declared version | License | Upstream |
+|---|---:|---|---|
+| pymobiledevice3 | 11.19.4 | GPL-3.0-or-later | https://github.com/doronz88/pymobiledevice3 |
+| Flask | build-time version | BSD-3-Clause | https://github.com/pallets/flask |
+| requests | build-time version | Apache-2.0 | https://github.com/psf/requests |
+| pyuac | build-time version | MIT | https://github.com/Preston-Landers/pyuac |
+| psutil | build-time version | BSD-3-Clause | https://github.com/giampaolo/psutil |
+| pycountry | build-time version | LGPL-2.1-or-later (verify exact release) | https://github.com/flyingcircusio/pycountry |
+| PyInstaller | build-time version | GPL-2.0-or-later with PyInstaller exception | https://github.com/pyinstaller/pyinstaller |
+| inquirer3 | build-time version | MIT | https://github.com/kazeburo/inquirer3 |
+| readchar | build-time version | MIT | https://github.com/magmax/python-readchar |
+| pyimg4 | build-time version | GPL-3.0 | https://github.com/iOSForensics/pyimg4 |
+| pytun-pmd3 | build-time version | GPL-3.0-or-later | https://github.com/doronz88/pytun-pmd3 |
 
-- `pymobiledevice3` — GPL-3.0-or-later.
-- `pyimg4` — GPL-3.0.
-- `pytun-pmd3` — GPL-3.0-or-later.
+The exact versions shipped in a release may be determined by the build environment. Release
+documentation should be kept consistent with the produced build and, where possible, an
+automated dependency/license manifest should be retained with each release.
 
-The presence of these components is important when distributing a DPort executable that
-contains or links to them. DPort's own license does **not** override, restrict, or replace
-the licenses of these components.
+## 3. Front-end libraries referenced by map.html
 
-The DPort project must comply with the applicable GPL terms when distributing versions that
-include GPL-covered components.
+DPort's map UI references third-party libraries loaded from public CDNs, including:
 
-## LGPL component
+| Component | Version shown in source | License / notes |
+|---|---:|---|
+| Leaflet | 1.9.4 | BSD-2-Clause |
+| Bootstrap | 5.1.3 | MIT |
+| jQuery | 3.3.1 | MIT |
+| @popperjs/core | 2.10.2 | MIT |
+| Leaflet Providers | 2.0.0 | Follow upstream license |
+| Leaflet GeoSearch | 3.0.0 | Follow upstream license |
+| leaflet-gpx | 1.7.0 | Follow upstream license |
+| leaflet-omnivore | 0.3.1 | Follow upstream license |
+| leaflet-filelayer | 1.2.0 | Follow upstream license |
+| Leaflet Routing Machine | 3.2.12 | Follow upstream license |
+| Leaflet EasyButton | 2.4.0 | Follow upstream license |
+| Font Awesome | 6.5.2 | Code/font assets have separate license terms |
+| Lineicons | 4.0 | Follow upstream license |
 
-`pycountry` is LGPL-licensed. The exact LGPL expression can vary by release, so the
-license supplied with the installed/distributed version should be retained and checked.
+The repository should retain appropriate attribution and must not imply ownership of these
+libraries, icons, fonts, or other third-party assets.
 
-## PyInstaller exception
+## 4. Map data and tile providers
 
-PyInstaller uses GPL licensing with a special exception that permits PyInstaller to be used
-to bundle non-free and commercial applications, subject to the licenses of the application's
-dependencies.
+The map template contains attribution for services/data including OpenStreetMap, Stadia Maps,
+OpenMapTiles, Humanitarian OpenStreetMap Team, and other providers.
 
-This exception does **not** remove or change the license obligations of other dependencies
-included in the resulting executable.
+Map and tile services can have separate terms of use, rate limits, attribution requirements,
+API keys, or commercial restrictions. A tile URL in source code does not itself grant a right
+to copy, cache, redistribute, or commercially use provider content.
 
-## License and copyright preservation
+## 5. Apple trademarks and services
 
-When distributing DPort builds containing third-party components:
+Apple, iPhone, iPad, iOS, iPadOS and related names are trademarks or other protected marks of
+Apple Inc. DPort is an independent project and does not claim Apple endorsement, sponsorship,
+certification, or affiliation.
 
-1. Do not claim third-party source code as DPort original work.
-2. Preserve applicable copyright notices and license texts.
-3. Follow the redistribution requirements of each applicable license.
-4. For GPL-covered components, provide the source-code rights and corresponding materials
-   required by the applicable GPL terms when required for the distributed form.
-5. Do not use the DPort License to impose restrictions on rights that the applicable
-   third-party license grants to recipients.
-6. Keep this notice synchronized with the actual dependencies included in release builds.
+## 6. GPL source and binary distribution
 
-## Version accuracy
+When distributing a release containing GPL-covered material, comply with the GPL terms that
+apply to the distributed work. For binary distributions, make the corresponding source and
+other required materials available in a manner permitted by the GPL.
 
-The direct requirements in `requirements-build.txt` currently leave most packages unpinned.
-Therefore, the exact dependency versions included in a particular release may differ.
+DPort does not use its branding or project notices to remove, restrict, or replace rights
+granted by GPL-covered material.
 
-For a legally precise release notice, the build should record the exact installed package
-versions and their license metadata (for example, from the build environment or a generated
-SBOM) and retain the corresponding upstream license texts.
+## 7. License hierarchy
 
-Transitive dependencies of the packages listed above are not exhaustively enumerated here.
-They may have additional licenses and copyright notices and should be included in a complete
-release-level software bill of materials.
+For any component that is not DPort-original material, the component's own copyright and
+license continue to control that component. Where a third-party license grants rights or
+imposes obligations different from this project's summary text, the actual third-party
+license controls.
 
-## Sources
+## 8. Sources
 
+- GeoPort: https://github.com/davesc63/GeoPort
 - pymobiledevice3: https://github.com/doronz88/pymobiledevice3
-- Flask: https://github.com/pallets/flask
-- Requests: https://github.com/psf/requests
-- pyuac: https://github.com/Preston-Landers/pyuac
-- psutil: https://github.com/giampaolo/psutil
-- pycountry: https://github.com/pycountry/pycountry
-- PyInstaller: https://github.com/pyinstaller/pyinstaller
-- inquirer3: https://github.com/kazeburo/inquirer3
-- readchar: https://github.com/magmax/python-readchar
 - pyimg4: https://github.com/iOSForensics/pyimg4
 - pytun-pmd3: https://github.com/doronz88/pytun-pmd3
-
-## DPort License
-
-DPort's own original code and assets are governed by the DPort License in `LICENSE`,
-except where a file or component is explicitly identified as third-party code.
-
-Third-party licenses always control the third-party components to which they apply.
+- Leaflet: https://github.com/Leaflet/Leaflet
+- GNU GPL v3: https://www.gnu.org/licenses/gpl-3.0.html
