@@ -35,7 +35,7 @@ jobs:
           foreach ($v in @('6.9.0','6.9.1')) {
             $tag = "v$v"
             $srcZip = Join-Path $PWD "repair-artifact\repair\DPort-source-$v.zip"
-            if (-not (Test-Path $srcZip)) { throw "Missing source package for $v: $srcZip" }
+            if (-not (Test-Path $srcZip)) { throw "Missing source package for ${v}: $srcZip" }
             $extract = Join-Path $env:RUNNER_TEMP "source-$v"
             $work = Join-Path $env:RUNNER_TEMP "tag-$v-work"
             if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
