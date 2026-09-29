@@ -192,49 +192,49 @@ jobs:
           }
 
           $footer = @"
-$marker
+          $marker
 
-## 📚 原始碼與版本對應
+          ## 📚 原始碼與版本對應
 
-本 Release 的 Windows 執行檔是從 Git Tag $tag 對應的原始碼建置。
+          本 Release 的 Windows 執行檔是從 Git Tag $tag 對應的原始碼建置。
 
-GitHub Repository：
+          GitHub Repository：
 
-https://github.com/DickyR15/DPort
+          https://github.com/DickyR15/DPort
 
-## ⚖️ 授權
+          ## ⚖️ 授權
 
-DPort Windows 使用 **GNU General Public License v3.0 (GPL-3.0)**。
+          DPort Windows 使用 **GNU General Public License v3.0 (GPL-3.0)**。
 
-DPort 基於 GPL-3.0 授權的 GeoPort 進行修改與再開發，並使用多項第三方開源元件。
-第三方元件的原始著作權與授權仍歸各自權利人所有。
+          DPort 基於 GPL-3.0 授權的 GeoPort 進行修改與再開發，並使用多項第三方開源元件。
+          第三方元件的原始著作權與授權仍歸各自權利人所有。
 
-完整授權：
+          完整授權：
 
-https://github.com/DickyR15/DPort/blob/$tag/LICENSE
+          https://github.com/DickyR15/DPort/blob/$tag/LICENSE
 
-第三方授權與來源：
+          第三方授權與來源：
 
-https://github.com/DickyR15/DPort/blob/$tag/THIRD_PARTY_NOTICES.md
+          https://github.com/DickyR15/DPort/blob/$tag/THIRD_PARTY_NOTICES.md
 
-## 🧩 第三方元件
+          ## 🧩 第三方元件
 
-本版本可能包含 GPL、LGPL、MIT、BSD、Apache 等不同授權的第三方元件。
-實際權利與義務以各元件所附 LICENSE / NOTICE 及本 Release 對應的 Source 為準。
+          本版本可能包含 GPL、LGPL、MIT、BSD、Apache 等不同授權的第三方元件。
+          實際權利與義務以各元件所附 LICENSE / NOTICE 及本 Release 對應的 Source 為準。
 
-## 🏷️ 商標與 Apple 聲明
+          ## 🏷️ 商標與 Apple 聲明
 
-DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或官方合作。
+          DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或官方合作。
 
-Apple、iPhone、iPad、iOS、iPadOS 及相關商標屬 Apple Inc. 或相關權利人所有。
-DPort 軟體授權本身不授予任何第三方商標權。
+          Apple、iPhone、iPad、iOS、iPadOS 及相關商標屬 Apple Inc. 或相關權利人所有。
+          DPort 軟體授權本身不授予任何第三方商標權。
 
-## ⚠️ 免責聲明
+          ## ⚠️ 免責聲明
 
-DPort 依「現況」提供，不保證所有 Windows、iOS 版本、裝置型號或第三方服務均可正常運作。
-使用者應自行確認使用方式符合所在地適用法律、相關服務條款及第三方授權。
+          DPort 依「現況」提供，不保證所有 Windows、iOS 版本、裝置型號或第三方服務均可正常運作。
+          使用者應自行確認使用方式符合所在地適用法律、相關服務條款及第三方授權。
 
-© 2026 DickyR15 / DPort。
+          © 2026 DickyR15 / DPort。
 "@
 
 $finalBody = if ([string]::IsNullOrWhiteSpace($body)) { $footer.Trim() } else { "$($body.TrimEnd())`r`n`r`n$($footer.Trim())" }
