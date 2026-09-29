@@ -182,7 +182,9 @@ If fso.FileExists(selfPath) Then fso.DeleteFile selfPath, True
 '''
 
     try:
-        script_path.write_text(script, encoding="utf-8-sig")
+        # WScript/VBScript on Windows accepts UTF-16LE reliably. UTF-8 BOM
+        # can be parsed as an invalid character by the VBScript compiler.
+        script_path.write_text(script, encoding="utf-16")
         wscript = Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "wscript.exe"
 
         startupinfo = subprocess.STARTUPINFO()
