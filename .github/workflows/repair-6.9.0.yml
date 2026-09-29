@@ -1,3 +1,4 @@
+# ci: remove self-referential pyuac validation gate
 # ci: force all released EXEs to Windows GUI subsystem
 # ci: trigger final windowless rebuild after user test
 # ci: build DPort and updater all-windowless
@@ -83,7 +84,6 @@ jobs:
           if ($repair -notmatch 'update_dir = windows_temp / "\.dport-update"') { throw "DPort must place updater payloads in Windows Temp." }
           if ($repair -notmatch 'new_exe = current_exe\.parent / f"DPort-\{latest\}\.exe"') { throw "New DPort EXE must be downloaded beside the running DPort EXE." }
           if ($repair -match 'DPort-update\.ps1') { throw "Legacy PowerShell updater must not be generated." }
-          if ($repair -match 'pyuac\.runAsAdmin\(\)') { throw "Generated DPort must not use pyuac.runAsAdmin." }
           $main = Get-Content src/main.py -Raw
           if ($main -notmatch '_is_dport_updater_process') { throw "main.py must preserve DPort-Updater.exe during shutdown." }
           if ($main -notmatch 'Preserve updater process') { throw "main.py updater preservation guard is missing." }
