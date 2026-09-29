@@ -122,12 +122,19 @@ def _start_detached(exe: Path, arguments: list[str], restarted: bool = False) ->
     env = os.environ.copy()
     if restarted:
         env["DPORT_RESTARTED"] = "1"
+    startupinfo = None
+    if os.name == "nt":
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = 0  # SW_HIDE
+
     return subprocess.Popen(
         [str(exe), *arguments],
         cwd=str(exe.parent),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        startupinfo=startupinfo,
         creationflags=(
             getattr(subprocess, "CREATE_NO_WINDOW", 0)
             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
@@ -136,7 +143,6 @@ def _start_detached(exe: Path, arguments: list[str], restarted: bool = False) ->
         close_fds=True,
         env=env,
     )
-
 
 def _schedule_cleanup(folder: Path) -> None:
     """Delete C:\\Windows\\Temp\\.dport-update after all child handles settle."""
