@@ -1,3 +1,4 @@
+# ci: tag sync without workflow file mutation
 name: Sync Existing Release Sources
 
 on:
@@ -51,7 +52,6 @@ jobs:
               Copy-Item (Join-Path $root.FullName '*') $work -Recurse -Force
               $legacyZip = Join-Path $work 'DPort-source-6.9.0.zip'
               if (Test-Path $legacyZip) { Remove-Item $legacyZip -Force }
-              Copy-Item (Join-Path $env:GITHUB_WORKSPACE '.github\workflows\build-release.yml') (Join-Path $work '.github\workflows\build-release.yml') -Force
               Set-Location $work
               git config user.name 'Dicky'
               git config user.email '125186855+DickyR15@users.noreply.github.com'
@@ -89,7 +89,7 @@ jobs:
             $tag = "v$v"
             $ver = (git show "$tag`:src\dport_version.py").Trim()
             if ($ver -ne "DPORT_VERSION=\"$v\"") { throw "$tag version mismatch: $ver" }
-            foreach ($path in @('src\main.py','src\dport_release_updater.py','src\dport_updater_helper.py','src\templates\map.html','requirements-build.txt','.github\workflows\build-release.yml')) {
+            foreach ($path in @('src\main.py','src\dport_release_updater.py','src\dport_updater_helper.py','src\templates\map.html','requirements-build.txt')) {
               git cat-file -e "$tag`:$path"
               if ($LASTEXITCODE -ne 0) { throw "$tag missing $path" }
             }
