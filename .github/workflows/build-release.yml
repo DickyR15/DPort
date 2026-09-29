@@ -1,3 +1,4 @@
+# ci: never mutate main from build workflow
 name: DPort Build & Release
 
 on:
@@ -132,13 +133,16 @@ jobs:
         run: |
           python scripts/fix_startup_render.py
 
-      - name: Sync final source package
+      - name: Prepare final source package locally
         shell: pwsh
         run: |
-          if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing.' }
+          $raw = Get-Content -LiteralPath 'src\dport_version.py' -Raw
+          if ($raw -notmatch 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') { throw 'DPORT_VERSION not found.' }
+          $v = $Matches[1]
           $tmp = Join-Path $env:RUNNER_TEMP 'dport-final-source'
           if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          if (-not (Test-Path 'DPort-source-6.9.0.zip')) { throw 'DPort-source-6.9.0.zip is missing.' }
           Expand-Archive -LiteralPath 'DPort-source-6.9.0.zip' -DestinationPath $tmp -Force
           $root = Join-Path $tmp 'DPort-6.9.0'
           $packageSrc = Join-Path $root 'src'
@@ -150,16 +154,8 @@ jobs:
           if (Test-Path $newZip) { Remove-Item $newZip -Force }
           Compress-Archive -Path $root -DestinationPath $newZip -CompressionLevel Optimal -Force
           Copy-Item -LiteralPath $newZip -Destination 'DPort-source-6.9.0.zip' -Force
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add DPort-source-6.9.0.zip
-          if (-not (git diff --cached --quiet)) {
-            git commit -m 'chore: sync final DPort source package [skip ci]'
-            git push origin HEAD:main
-            Write-Host 'Final source package committed before release.'
-          } else {
-            Write-Host 'Final source package already matches the build source.'
-          }
+          Write-Host "Final source package prepared locally for this build: $newZip"
+
       - name: Validate source
         shell: pwsh
         run: |
