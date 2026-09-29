@@ -32,6 +32,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          git config core.autocrlf false
+          git config core.eol lf
           git fetch origin --tags --force
           foreach ($v in @('6.9.0','6.9.1')) {
             $tag = "v$v"
