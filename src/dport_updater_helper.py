@@ -145,54 +145,56 @@ def _start_detached(exe: Path, arguments: list[str], restarted: bool = False) ->
     )
 
 def _schedule_cleanup(folder: Path) -> None:
-    """Delete C:\\Windows\\Temp\\.dport-update without ever spawning cmd.exe."""
+    """Silently delete the updater temp folder after the updater exits."""
     folder = folder.resolve()
     parent = folder.parent.resolve()
 
-    # Use Windows Script Host (wscript.exe), which has no console subsystem,
-    # instead of cmd.exe + timeout/rmdir. The updater itself lives inside the
-    # folder being removed, so an external short-lived helper is required.
-    script_path = parent / f"DPort-cleanup-{os.getpid()}.vbs"
+    # Do not use cmd.exe, timeout.exe, rmdir.exe, or a .vbs file. Those
+    # approaches can briefly flash a console or leave a cleanup script behind.
+    # Use an inline hidden Windows PowerShell process instead.
+    powershell = Path(
+        os.environ.get("WINDIR", r"C:\\Windows")
+    ) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
 
-    def vb_escape(value: str) -> str:
-        return str(value).replace('"', '""')
+    def ps_escape(value: str) -> str:
+        return str(value).replace("'", "''")
 
-    folder_vb = vb_escape(folder)
-    script_vb = vb_escape(script_path)
+    folder_ps = ps_escape(folder)
+    parent_ps = ps_escape(parent)
 
-    script = f'''Option Explicit
-Dim fso, folderPath, selfPath, i
-Set fso = CreateObject("Scripting.FileSystemObject")
-folderPath = "{folder_vb}"
-selfPath = "{script_vb}"
-
-For i = 1 To 20
-    WScript.Sleep 1000
-    On Error Resume Next
-    If fso.FolderExists(folderPath) Then
-        fso.DeleteFolder folderPath, True
-    End If
-    On Error GoTo 0
-
-    If Not fso.FolderExists(folderPath) Then Exit For
-Next
-
-On Error Resume Next
-If fso.FileExists(selfPath) Then fso.DeleteFile selfPath, True
-'''
+    command = (
+        "Start-Sleep -Milliseconds 1000; "
+        f"for ($i=0; $i -lt 24; $i++) {{ "
+        f"Remove-Item -LiteralPath '{folder_ps}' -Recurse -Force -ErrorAction SilentlyContinue; "
+        f"if (-not (Test-Path -LiteralPath '{folder_ps}')) {{ break }}; "
+        "Start-Sleep -Milliseconds 500 }; "
+        f"Get-ChildItem -LiteralPath '{parent_ps}' -Filter 'DPort-cleanup-*.vbs' "
+        "-File -ErrorAction SilentlyContinue | "
+        "Remove-Item -Force -ErrorAction SilentlyContinue"
+    )
 
     try:
-        # WScript/VBScript on Windows accepts UTF-16LE reliably. UTF-8 BOM
-        # can be parsed as an invalid character by the VBScript compiler.
-        script_path.write_text(script, encoding="utf-16")
-        wscript = Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "wscript.exe"
+        encoded = __import__("base64").b64encode(
+            command.encode("utf-16le")
+        ).decode("ascii")
 
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startupinfo.wShowWindow = 0  # SW_HIDE
 
         subprocess.Popen(
-            [str(wscript), str(script_path)],
+            [
+                str(powershell),
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-WindowStyle",
+                "Hidden",
+                "-EncodedCommand",
+                encoded,
+            ],
             cwd=str(parent),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -205,9 +207,8 @@ If fso.FileExists(selfPath) Then fso.DeleteFile selfPath, True
             close_fds=True,
         )
     except Exception as exc:
-        # Never fall back to cmd.exe. Leaving the folder is preferable to
-        # showing a console window to the user.
-        LOGGER.debug("Unable to start silent cleanup helper: %s", exc)
+        # Never fall back to cmd.exe or a visible script host.
+        LOGGER.debug("Unable to start silent cleanup process: %s", exc)
 
 
 def main() -> int:
