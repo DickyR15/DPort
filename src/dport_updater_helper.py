@@ -166,12 +166,16 @@ def main() -> int:
         _wait_for_pid_exit(args.pid, timeout=180)
         log("舊版 DPort 已完全關閉")
 
-        # The new EXE was downloaded and verified before EXIT.
-        # Temp and the DPort folder may be on different drives, so copy it.
-        shutil.copy2(downloaded, new_target)
+        # 6.9.1 is downloaded directly beside the running 6.9.0.
+        # Therefore downloaded and new_target MUST be the same file.
+        # Do not copy the file onto itself.
+        if downloaded.resolve() != new_target.resolve():
+            raise RuntimeError(
+                f"新版下載路徑錯誤：{downloaded}；預期：{new_target}"
+            )
         if not new_target.exists():
             raise RuntimeError(f"DPort-{args.version}.exe 沒有成功建立")
-        log(f"新版 EXE 已建立：{new_target}")
+        log(f"新版 EXE 已位於應用程式資料夾：{new_target}")
 
         # Start 6.9.1 before removing 6.9.0.
         process = _start_detached(new_target, relaunch_args)
