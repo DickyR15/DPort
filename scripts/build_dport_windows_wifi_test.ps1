@@ -140,6 +140,7 @@ $args = @(
     '--onefile',
     '--windowed',
     '--name',"DPort-WiFi-Test-$version",
+    '--icon',(Join-Path $buildRoot 'DPort-6.9.0.ico'),
     '--collect-all','pymobiledevice3',
     '--collect-all','pytun_pmd3',
     '--collect-all','pyimg4',
