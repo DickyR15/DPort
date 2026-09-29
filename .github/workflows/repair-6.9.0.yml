@@ -1,3 +1,4 @@
+# maintenance: repair workflow is manual-only and never publishes releases
 # ci: verify cleanup never flashes cmd
 # ci: remove self-referential pyuac validation gate
 # ci: force all released EXEs to Windows GUI subsystem
@@ -26,16 +27,7 @@
 name: DPort Repair Releases
 
 on:
-  push:
-    paths:
-      - ".github/workflows/repair-6.9.0.yml"
-      - "scripts/repair_release_source.py"
-      - "src/dport_release_updater.py"
-      - "src/dport_updater_helper.py"
-      - "src/main.py"
-      - "src/templates/map.html"
   workflow_dispatch:
-
 permissions:
   contents: write
 
@@ -279,24 +271,10 @@ jobs:
             }
           }
 
-      - name: Publish repaired release assets
+      - name: Keep repair artifacts off GitHub Releases
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = "Stop"
-
-          gh release upload v6.9.0 repair-bin/DPort-6.9.0.exe repair-bin/DPort-6.9.0.exe.sha256 repair-bin/DPort-Updater.exe repair-bin/DPort-Updater.exe.sha256 repair/DPort-source-6.9.0.zip --repo DickyR15/DPort --clobber
-          if ($LASTEXITCODE -ne 0) { throw "Failed to publish v6.9.0 assets." }
-
-          gh release upload v6.9.1 repair-bin/DPort-6.9.1.exe repair-bin/DPort-6.9.1.exe.sha256 repair-bin/DPort-Updater.exe repair-bin/DPort-Updater.exe.sha256 repair/DPort-source-6.9.1.zip --repo DickyR15/DPort --clobber
-          if ($LASTEXITCODE -ne 0) { throw "Failed to publish v6.9.1 assets." }
-
-          gh release edit v6.9.0 --repo DickyR15/DPort --latest=false
-          if ($LASTEXITCODE -ne 0) { throw "Failed to mark v6.9.0 as non-latest." }
-
-          gh release edit v6.9.1 --repo DickyR15/DPort --latest=true
-          if ($LASTEXITCODE -ne 0) { throw "Failed to mark v6.9.1 as latest." }
+          Write-Host "Repair workflow is validation/build-only. It does not publish release source assets."
 
       - name: Upload repaired artifacts
         if: ${{ always() }}
