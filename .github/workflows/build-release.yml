@@ -207,11 +207,11 @@ DPort 基於 GPL-3.0 授權的 GeoPort 進行修改與再開發，並使用多�
 
 完整授權：
 
-https://github.com/DickyR15/DPort/blob/main/LICENSE
+https://github.com/DickyR15/DPort/blob/$tag/LICENSE
 
 第三方授權與來源：
 
-https://github.com/DickyR15/DPort/blob/main/THIRD_PARTY_NOTICES.md
+https://github.com/DickyR15/DPort/blob/$tag/THIRD_PARTY_NOTICES.md
 
 ## 🧩 第三方元件
 
