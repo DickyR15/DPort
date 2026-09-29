@@ -78,6 +78,7 @@ jobs:
           if ($helper -notmatch 'old_target\.unlink\(\)') { throw "Updater must remove the old EXE only after the new process starts." }
           if ($helper -notmatch '_schedule_cleanup\(work_dir\)') { throw "Updater must clean the temporary folder." }
           if ($helper -match 'COMSPEC|timeout /t|rmdir /s /q') { throw "Updater cleanup must not invoke cmd.exe." }
+          if ($helper -notmatch 'encoding="utf-16"') { throw "Updater cleanup VBS must be UTF-16 encoded for WScript." }
           if ($helper -notmatch 'wscript\.exe') { throw "Updater cleanup must use silent Windows Script Host." }
           $workflowText = Get-Content .github/workflows/repair-6.9.0.yml -Raw
           if ($workflowText -notmatch '--noconsole --name DPort-Updater') { throw "DPort-Updater must be windowless." }
