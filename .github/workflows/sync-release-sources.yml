@@ -1,0 +1,93 @@
+name: Sync Existing Release Sources
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download last confirmed release-build artifact
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 36553717448
+          name: DPort-repaired-6.9.0-6.9.1
+          path: repair-artifact
+          github-token: ${{ github.token }}
+
+      - name: Prepare synchronization script
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'repair-artifact\repair\DPort-source-6.9.0.zip')) { throw '6.9.0 source package from Run #96 is missing.' }
+          if (-not (Test-Path 'repair-artifact\repair\DPort-source-6.9.1.zip')) { throw '6.9.1 source package from Run #96 is missing.' }
+          $standard = Join-Path $env:RUNNER_TEMP 'build-release-standard.yml'
+          Copy-Item '.github\workflows\build-release.yml' $standard -Force
+          $sync = Join-Path $env:RUNNER_TEMP 'sync_release_tags.ps1'
+          @'
+param([string]$Version,[string]$SourceZip,[string]$StandardWorkflow)
+$ErrorActionPreference = 'Stop'
+$tag = "v$Version"
+$work = Join-Path $env:RUNNER_TEMP "tag-$Version-work"
+$source = Join-Path $env:RUNNER_TEMP "tag-$Version-source"
+if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+if (Test-Path $source) { Remove-Item $source -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $source | Out-Null
+Expand-Archive -LiteralPath $SourceZip -DestinationPath $source -Force
+$root = Get-ChildItem $source -Directory | Select-Object -First 1
+if (-not $root) { throw "Source root not found for $Version." }
+git fetch origin "refs/tags/$tag:refs/tags/$tag"
+git worktree add --detach $work $tag
+try {
+  # Overlay the exact source used by Run #96.
+  Copy-Item (Join-Path $root.FullName '*') $work -Recurse -Force
+  $legacy = Join-Path $work 'DPort-source-6.9.0.zip'
+  if (Test-Path $legacy) { Remove-Item $legacy -Force }
+  # Keep the standardized future release workflow in the tag snapshot too.
+  Copy-Item $StandardWorkflow (Join-Path $work '.github\workflows\build-release.yml') -Force
+  Set-Location $work
+  git config user.name 'Dicky'
+  git config user.email '125186855+DickyR15@users.noreply.github.com'
+  git add -A
+  $status = git status --porcelain
+  if (-not $status) { throw "No source changes were produced for $Version." }
+  git commit -m "chore: sync v$Version tag with released build source"
+  git push origin "HEAD:refs/tags/$tag" --force
+} finally {
+  Set-Location $env:GITHUB_WORKSPACE
+  git worktree remove $work --force
+  if (Test-Path $source) { Remove-Item $source -Recurse -Force -ErrorAction SilentlyContinue }
+}
+Write-Host "Synchronized $tag with the exact source used for the released build."
+'@ | Set-Content $sync -Encoding utf8
+
+      - name: Sync v6.9.0 and v6.9.1 tags
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          & (Join-Path $env:RUNNER_TEMP 'sync_release_tags.ps1') '6.9.0' (Join-Path $PWD 'repair-artifact\repair\DPort-source-6.9.0.zip') (Join-Path $env:RUNNER_TEMP 'build-release-standard.yml')
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to sync v6.9.0.' }
+          & (Join-Path $env:RUNNER_TEMP 'sync_release_tags.ps1') '6.9.1' (Join-Path $PWD 'repair-artifact\repair\DPort-source-6.9.1.zip') (Join-Path $env:RUNNER_TEMP 'build-release-standard.yml')
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to sync v6.9.1.' }
+
+      - name: Verify tags now contain released build source
+        shell: pwsh
+        run: |
+          git fetch origin --tags --force
+          foreach ($v in @('6.9.0','6.9.1')) {
+            $raw = git show "v$v`:src\dport_version.py"
+            if ($raw -notmatch [regex]::Escape("DPORT_VERSION=\"$v\"")) { throw "v$v source version mismatch." }
+            foreach ($required in @('src\main.py','src\dport_release_updater.py','src\dport_updater_helper.py','src\templates\map.html','requirements-build.txt','.github\workflows\build-release.yml')) {
+              git cat-file -e "v$v`:$required"
+              if ($LASTEXITCODE -ne 0) { throw "v$v missing $required." }
+            }
+          }
+          if (Test-Path 'repair-artifact') { Remove-Item repair-artifact -Recurse -Force }
