@@ -691,6 +691,38 @@ def patch_main(main_text: str) -> str:
         main_text,
     )
 
+    # During update, shutdown_server() calls clear_geoport(). Preserve the
+    # standalone updater process so it can finish the replacement after EXIT.
+    if "def _is_dport_updater_process" not in main_text:
+        guard = '''
+def _is_dport_updater_process(name: str) -> bool:
+    normalized = str(name or "").lower()
+    return normalized in {
+        "dport-updater.exe",
+        "dport_updater_helper.exe",
+    } or "dport-updater" in normalized
+
+
+'''
+        main_text = main_text.replace("def clear_geoport():", guard + "def clear_geoport():", 1)
+
+    main_text = re.sub(
+        r'(?ms)(def clear_geoport\(\):\n.*?current_pid\s*=\s*os\.getpid\(\)\n)(.*?)(?=\n\ndef clear_old_geoport)',
+        r'''\1    for process in psutil.process_iter(["pid", "name"]):
+        try:
+            if int(process.info.get("pid") or 0) == current_pid:
+                continue
+            if _is_dport_updater_process(process.info.get("name")):
+                continue
+            if "dport" in str(process.info.get("name") or "").lower():
+                process.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+''',
+        main_text,
+        count=1,
+    )
+
     if "/dport/update" in main_text:
         main_text = re.sub(
             r'(?ms)^@app\.get\("/dport/update"\)\s*def _dport_user_confirmed_update\(\):.*?(?=^@app\.|^def |^if __name__ ==)',
