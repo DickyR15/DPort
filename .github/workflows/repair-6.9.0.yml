@@ -1,3 +1,4 @@
+# ci: trigger repair releases on updater source changes
 # ci: rebuild after self-copy updater fix
 # ci: enforce download target beside launched DPort executable
 # ci: final deterministic update order - download, verify, exit, install, delete, cleanup, relaunch
@@ -22,6 +23,11 @@ on:
   push:
     paths:
       - ".github/workflows/repair-6.9.0.yml"
+      - "scripts/repair_release_source.py"
+      - "src/dport_release_updater.py"
+      - "src/dport_updater_helper.py"
+      - "src/main.py"
+      - "src/templates/map.html"
   workflow_dispatch:
 
 permissions:
