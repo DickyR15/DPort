@@ -685,6 +685,34 @@ def get_good_zip() -> bytes:
 
 
 def patch_main(main_text: str) -> str:
+    # Force Windows UAC re-elevation through hidden ShellExecuteW.
+    # This replaces pyuac.runAsAdmin() in generated releases so the GUI binary
+    # never flashes a console window while elevating.
+    admin_re = re.compile(
+        r'(?ms)^        if not pyuac\.isUserAdmin\(\):\n.*?(?=^    chosen_port\s*=)',
+    )
+    main_text = admin_re.sub(
+        '''        if not pyuac.isUserAdmin():
+            import ctypes
+            executable = str(Path(sys.executable).resolve())
+            params = subprocess.list2cmdline(sys.argv[1:])
+            result = ctypes.windll.shell32.ShellExecuteW(
+                None,
+                "runas",
+                executable,
+                params,
+                str(Path(executable).parent),
+                0,
+            )
+            if result <= 32:
+                raise RuntimeError(f"Hidden elevation failed: {result}")
+            raise SystemExit(0)
+
+''',
+        main_text,
+        count=1,
+    )
+
     # The updater exports bootstrap_dport_updater(). Older source referenced a
     # non-existent bootstrap symbol and caused immediate startup ImportError.
     main_text = re.sub(
@@ -695,6 +723,13 @@ def patch_main(main_text: str) -> str:
 
     # During update, shutdown_server() calls clear_geoport(). Preserve the
     # standalone updater process so it can finish the replacement after EXIT.
+    if "pyuac.runAsAdmin()" in main_text:
+        main_text = main_text.replace(
+            "            pyuac.runAsAdmin()",
+            "            raise RuntimeError('pyuac.runAsAdmin must not be used in generated release builds')",
+            1,
+        )
+
     if "def _is_dport_updater_process" not in main_text:
         guard = '''
 def _is_dport_updater_process(name: str) -> bool:
