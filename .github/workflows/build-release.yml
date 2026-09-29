@@ -1,4 +1,4 @@
-name: DPort Build & Release
+name: DPort Windows — Build & Release
 
 on:
   push:
