@@ -35,12 +35,51 @@ jobs:
         run: |
           ./scripts/build_dport_windows_wifi_test.ps1
 
+      - name: Verify final ZIP contents
+        shell: pwsh
+        run: |
+          $zip = 'DPort-WiFi-Test-6.9.1.zip'
+          if (-not (Test-Path $zip)) {
+            throw "Final ZIP was not produced: $zip"
+          }
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
+          try {
+            $names = @($archive.Entries | ForEach-Object { $_.FullName.TrimEnd('/') })
+
+            $expected = @(
+              'DPort-WiFi-Test-6.9.1.exe',
+              'DPort-WiFi-Test-6.9.1.exe.sha256',
+              'README-WiFi-Test.txt'
+            )
+
+            foreach ($item in $expected) {
+              if ($names -notcontains $item) {
+                throw "Final ZIP is missing: $item"
+              }
+            }
+
+            if ($names | Where-Object { $_ -like '*/*' }) {
+              throw 'Final ZIP contains nested directories.'
+            }
+
+            if ($names | Where-Object { $_ -like '*.zip' }) {
+              throw 'Final ZIP contains a nested ZIP.'
+            }
+
+            Write-Host 'Final ZIP contents are clean.'
+            $names | ForEach-Object { Write-Host " - $_" }
+          }
+          finally {
+            $archive.Dispose()
+          }
+
       - name: Upload WiFi Test artifact
         uses: actions/upload-artifact@v4
         with:
           name: DPort-WiFi-Test-6.9.1
-          path: |
-            DPort-WiFi-Test-6.9.1.zip
-            dist/DPort-WiFi-Test-6.9.1.exe
-            dist/DPort-WiFi-Test-6.9.1.exe.sha256
+          path: DPort-WiFi-Test-6.9.1.zip
+          if-no-files-found: error
+          compression-level: 0
           retention-days: 14
