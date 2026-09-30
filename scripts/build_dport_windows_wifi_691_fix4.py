@@ -1502,65 +1502,146 @@ def device_disconnected():
     # ========================================================================
     # FIX4 FINAL PASS
     # ========================================================================
-    # 1) Device selector remembers the user's explicit transport selection.
-    #    USB remains the initial default, but WiFi is never overwritten just
-    #    because USB is present.
+    # 1) Device selector persistence.
+    # Wrap populateDeviceList once. It captures the current selection before
+    # every refresh and restores it after the original function rebuilds the
+    # list. Thus USB stays the initial default, but a user-selected WiFi row
+    # remains selected when USB is inserted or the list is refreshed.
 
-    pop_start = page.find("async function populateDeviceList(options) {")
-    if pop_start < 0:
-        raise RuntimeError("FIX4 cannot locate populateDeviceList()")
+    wrapper_marker = "/* FIX4 populateDeviceList selection wrapper */"
+    wrapper_code = r'''/* FIX4 populateDeviceList selection wrapper */
+(function(){
+    if (window.__dportFix4PopulateWrapped) return;
+    if (typeof populateDeviceList !== 'function') return;
 
-    pop_clear = page.find("deviceDropdown.innerHTML = '';", pop_start)
-    if pop_clear < 0:
-        raise RuntimeError("FIX4 cannot locate device list clear point")
+    const __dportOriginalPopulateDeviceList = populateDeviceList;
 
-    selection_capture = """        var __dportSelectedConnectionType = '';
-        var __dportSelectedIdentifier = '';
-        var __dportSelectedOption = deviceDropdown.options[deviceDropdown.selectedIndex];
+    function __dportGetSelectionKey(dropdown){
+        if(!dropdown) return null;
+        const option = dropdown.options[dropdown.selectedIndex];
+        if(!option || !option.value) return null;
 
-        if (__dportSelectedOption) {
-            try {
-                var __dportSelectedInfo = JSON.parse(__dportSelectedOption.value || '{}');
-                __dportSelectedConnectionType = String(
-                    __dportSelectedInfo.ConnectionType ||
-                    __dportSelectedInfo.connectionType ||
-                    __dportSelectedInfo.wifiTransport ||
+        try{
+            const info = JSON.parse(option.value || '{}');
+            const type = String(
+                info.ConnectionType ||
+                info.connectionType ||
+                info.wifiTransport ||
+                ''
+            ).toUpperCase();
+
+            const identifier = String(
+                info.Identifier ||
+                info.UniqueDeviceID ||
+                ''
+            );
+
+            if(!identifier) return null;
+
+            return {
+                type: type,
+                identifier: identifier
+            };
+        }catch(e){
+            return null;
+        }
+    }
+
+    function __dportRestoreSelection(dropdown,key){
+        if(!dropdown || !key) return false;
+
+        const option = Array.from(dropdown.options).find(function(item){
+            try{
+                const info = JSON.parse(item.value || '{}');
+                const type = String(
+                    info.ConnectionType ||
+                    info.connectionType ||
+                    info.wifiTransport ||
                     ''
                 ).toUpperCase();
-                __dportSelectedIdentifier = String(
-                    __dportSelectedInfo.Identifier ||
-                    __dportSelectedInfo.UniqueDeviceID ||
+                const identifier = String(
+                    info.Identifier ||
+                    info.UniqueDeviceID ||
                     ''
                 );
-            } catch (e) {}
+
+                return type === key.type && identifier === key.identifier;
+            }catch(e){
+                return false;
+            }
+        });
+
+        if(option){
+            dropdown.value = option.value;
+            return true;
         }
 
-"""
+        return false;
+    }
 
-    page = page[:pop_clear] + selection_capture + page[pop_clear:]
+    populateDeviceList = async function(options){
+        const dropdown = document.getElementById('device');
+        const key = __dportGetSelectionKey(dropdown);
 
-    # Locate the default-selection block inside the same populate function.
-    pop_end = page.find("/* Manual device-list refresh:", pop_start)
-    if pop_end < 0:
-        raise RuntimeError("FIX4 cannot locate populateDeviceList() end")
+        const result = await __dportOriginalPopulateDeviceList(options);
 
-    default_pos = page.find("        // USB is the default when present.", pop_start, pop_end)
-    if default_pos < 0:
-        raise RuntimeError("FIX4 cannot locate USB default block")
+        // Restore the exact transport the user had chosen.
+        if(key){
+            __dportRestoreSelection(dropdown,key);
+        }
 
-    default_end = page.find("        if (!deviceDropdown.dataset.geoportHandlersBound)", default_pos, pop_end)
-    if default_end < 0:
-        raise RuntimeError("FIX4 cannot locate USB default block end")
+        return result;
+    };
 
-    default_block = page[default_pos:default_end]
+    window.__dportFix4PopulateWrapped = true;
+})();
+'''
 
-    # Preserve an explicit Network/WiFi selection. Only use USB as a fallback
-    # when no previous user choice can be restored.
-    new_default_block = """        // Restore the transport the user had selected before this refresh.
-        var __dportRestoredSelection = false;
+    if wrapper_marker not in page:
+        pop_insert = page.find("async function checkDeviceAutoDetect() {")
+        if pop_insert < 0:
+            raise RuntimeError("FIX4 cannot locate checkDeviceAutoDetect() for wrapper insertion")
+        page = page[:pop_insert] + wrapper_code + "\n" + page[pop_insert:]
 
-        if (__dportSelectedConnectionType && __dportSelectedIdentifier) {
-            var __dportSelectedAfterRefresh = Array.from(deviceDropdown.options).find(function(option) {
+    # 2) Auto detection must NEVER force USB over an explicit WiFi selection.
+    ad_start=page.find("async function checkDeviceAutoDetect() {")
+    ad_end=page.find("function startDeviceAutoDetect()",ad_start)
+    if ad_start<0 or ad_end<0:
+        raise RuntimeError("FIX4 cannot locate checkDeviceAutoDetect()")
+
+    auto_fix=r'''async function checkDeviceAutoDetect() {
+    if (
+        isDeviceConnected ||
+        deviceAutoDetectBusy ||
+        deviceListManualRefreshInFlight
+    ) {
+        return;
+    }
+
+    var deviceDropdown = document.getElementById('device');
+    if (!deviceDropdown) return;
+
+    deviceAutoDetectBusy = true;
+
+    try {
+        var presence = await fetchJsonWithTimeout(
+            '/usb_presence?_=' + Date.now(),
+            1500
+        );
+
+        var usbDevices = presence && Array.isArray(presence.devices)
+            ? presence.devices
+            : [];
+
+        var rawIds = usbDevices
+            .map(function(device) {
+                return String(device.Identifier || '');
+            })
+            .filter(Boolean)
+            .sort();
+
+        var displayedUsbIds = Array.from(deviceDropdown.options)
+            .map(function(option) {
                 try {
                     var info = JSON.parse(option.value || '{}');
                     var type = String(
@@ -1570,107 +1651,115 @@ def device_disconnected():
                         ''
                     ).toUpperCase();
 
-                    var identifier = String(
+                    if (type !== 'USB') return '';
+
+                    return String(
                         info.Identifier ||
                         info.UniqueDeviceID ||
                         ''
                     );
-
-                    return type === __dportSelectedConnectionType &&
-                        identifier === __dportSelectedIdentifier;
                 } catch (e) {
-                    return false;
+                    return '';
                 }
-            });
+            })
+            .filter(Boolean)
+            .sort();
 
-            if (__dportSelectedAfterRefresh) {
-                deviceDropdown.value = __dportSelectedAfterRefresh.value;
-                __dportRestoredSelection = true;
-            }
-        }
-
-        // USB is the initial default only when there is no explicit selection.
-        if (!__dportRestoredSelection && !isDeviceConnected) {
-            var usbDefault = Array.from(deviceDropdown.options).find(function(option) {
-                try {
-                    var info = JSON.parse(option.value || '{}');
-                    return String(
-                        info.ConnectionType ||
-                        info.connectionType ||
-                        ''
-                    ).toUpperCase() === 'USB';
-                } catch (e) {
-                    return false;
-                }
-            });
-
-            if (usbDefault) {
-                deviceDropdown.value = usbDefault.value;
-            }
-        }
-
-"""
-    page=page[:default_pos]+new_default_block+page[default_end:]
-
-    # 2) Auto detection must not force USB over an explicitly selected WiFi.
-    ad_start=page.find("async function checkDeviceAutoDetect() {")
-    ad_end=page.find("function startDeviceAutoDetect()",ad_start)
-    if ad_start<0 or ad_end<0:
-        raise RuntimeError("FIX4 cannot locate checkDeviceAutoDetect()")
-
-    auto_fix=page[ad_start:ad_end]
-    auto_usb_start=auto_fix.find("            // USB becomes the default")
-    auto_usb_end=auto_fix.find("\n            deviceAutoRefreshSignature = rawIds.join('|');", auto_usb_start)
-    if auto_usb_start<0 or auto_usb_end<0:
-        raise RuntimeError("FIX4 cannot locate auto USB selection block")
-
-    auto_block="""            // USB is the initial default only. Once the user selects WiFi,
-            // periodic USB detection must leave that selection untouched.
-            var currentSelectionIsNetwork = false;
-            var currentSelection = deviceDropdown.options[deviceDropdown.selectedIndex];
-
-            if (currentSelection) {
-                try {
-                    var currentInfo = JSON.parse(currentSelection.value || '{}');
-                    var currentType = String(
-                        currentInfo.ConnectionType ||
-                        currentInfo.connectionType ||
-                        currentInfo.wifiTransport ||
-                        ''
-                    ).toUpperCase();
-
-                    currentSelectionIsNetwork =
-                        currentType === 'NETWORK' ||
-                        currentType === 'WIFI' ||
-                        !!currentInfo.wifiAddress ||
-                        !!currentInfo.wifiPort ||
-                        !!currentInfo.wifiTransport;
-                } catch (e) {}
-            }
-
-            if (
-                !currentSelectionIsNetwork &&
-                !dportConnectionInProgress &&
-                !isDeviceConnected
-            ) {
-                var usbDefault = Array.from(deviceDropdown.options).find(function(option) {
-                    try {
-                        var info = JSON.parse(option.value || '{}');
-                        return String(
-                            info.ConnectionType ||
-                            info.connectionType ||
-                            ''
-                        ).toUpperCase() === 'USB';
-                    } catch (e) {
-                        return false;
-                    }
+        if (rawIds.length > 0) {
+            var sameUsb =
+                rawIds.length === displayedUsbIds.length &&
+                rawIds.every(function(id,index){
+                    return id === displayedUsbIds[index];
                 });
 
-                if (usbDefault) {
-                    deviceDropdown.value = usbDefault.value;
+            if (!sameUsb && Date.now() >= deviceFallbackFullScanNext) {
+                deviceFallbackFullScanNext = Date.now() + 700;
+
+                // The wrapper above preserves the user's current WiFi/USB
+                // selection across this rebuild.
+                await populateDeviceList({
+                    silent: true,
+                    autoDetect: true,
+                    forceFresh: true
+                });
+            }
+
+            // IMPORTANT:
+            // Do not assign deviceDropdown.value here.
+            // USB is already the initial default from populateDeviceList().
+            // Once the user picks WiFi, this monitor must leave it alone.
+            deviceAutoRefreshSignature = rawIds.join('|');
+            return;
+        }
+
+        // USB is absent. Remove only USB rows and rediscover the combined list
+        // so WiFi appears without a manual Refresh click.
+        Array.from(deviceDropdown.options).forEach(function(option){
+            try{
+                var info = JSON.parse(option.value || '{}');
+                var type = String(
+                    info.ConnectionType ||
+                    info.connectionType ||
+                    info.wifiTransport ||
+                    ''
+                ).toUpperCase();
+
+                if(type === 'USB'){
+                    option.remove();
                 }
-            }"""
-    page=page[:ad_start]+auto_fix[:auto_usb_start]+auto_block+auto_fix[auto_usb_end:]+page[ad_end:]
+            }catch(e){}
+        });
+
+        var hasNetwork = Array.from(deviceDropdown.options).some(function(option){
+            try{
+                var info=JSON.parse(option.value || '{}');
+                var type=String(
+                    info.ConnectionType ||
+                    info.connectionType ||
+                    info.wifiTransport ||
+                    ''
+                ).toUpperCase();
+
+                return (
+                    type === 'NETWORK' ||
+                    type === 'WIFI' ||
+                    !!info.wifiAddress ||
+                    !!info.wifiPort ||
+                    !!info.wifiTransport
+                );
+            }catch(e){
+                return false;
+            }
+        });
+
+        if(
+            !hasNetwork &&
+            Date.now() >= deviceFallbackFullScanNext
+        ){
+            deviceFallbackFullScanNext = Date.now() + 1800;
+
+            await populateDeviceList({
+                silent: true,
+                autoDetect: true,
+                forceFresh: true
+            });
+        }
+
+        deviceAutoRefreshSignature = '';
+
+    } catch(e) {
+        if (!e || e.name !== 'AbortError') {
+            console.debug('自動偵測裝置略過一次:', e);
+        }
+    } finally {
+        deviceAutoDetectBusy = false;
+    }
+}
+
+
+
+'''
+    page=page[:ad_start]+auto_fix+page[ad_end:]
 
     # 3) Use the official upstream WiFi RemotePairing TCP tunnel path.
     #    CoreDeviceTunnelProxy is the USB lockdown service; WiFi uses the
