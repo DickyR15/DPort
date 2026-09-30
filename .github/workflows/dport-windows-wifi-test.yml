@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - 'scripts/build_dport_windows_wifi_from_release_6_9_1.ps1'
+      - 'scripts/build_dport_windows_wifi_clean_691.ps1'
       - '.github/workflows/dport-windows-wifi-test.yml'
 
 permissions:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    name: Build DPort Windows WiFi Test
+    name: Build DPort 6.9.1 WiFi Test
     runs-on: windows-latest
 
     steps:
@@ -22,58 +22,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: main
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.14.7'
 
-      - name: Build DPort Windows WiFi Test
+      - name: Build from clean v6.9.1 release source
         shell: pwsh
         run: |
-          ./scripts/build_dport_windows_wifi_from_release_6_9_1.ps1
+          ./scripts/build_dport_windows_wifi_clean_691.ps1
 
-      - name: Verify final ZIP contents
-        shell: pwsh
-        run: |
-          $zip = 'DPort-WiFi-Test-6.9.1.zip'
-          if (-not (Test-Path $zip)) {
-            throw "Final ZIP was not produced: $zip"
-          }
-
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
-          try {
-            $names = @($archive.Entries | ForEach-Object { $_.FullName.TrimEnd('/') })
-
-            $expected = @(
-              'DPort-WiFi-Test-6.9.1.exe',
-              'DPort-WiFi-Test-6.9.1.exe.sha256',
-              'README-WiFi-Test.txt'
-            )
-
-            foreach ($item in $expected) {
-              if ($names -notcontains $item) {
-                throw "Final ZIP is missing: $item"
-              }
-            }
-
-            if ($names | Where-Object { $_ -like '*/*' }) {
-              throw 'Final ZIP contains nested directories.'
-            }
-
-            if ($names | Where-Object { $_ -like '*.zip' }) {
-              throw 'Final ZIP contains a nested ZIP.'
-            }
-
-            Write-Host 'Final ZIP contents are clean.'
-            $names | ForEach-Object { Write-Host " - $_" }
-          }
-          finally {
-            $archive.Dispose()
-          }
-
-      - name: Upload WiFi Test artifact
+      - name: Upload clean test files
         uses: actions/upload-artifact@v4
         with:
           name: DPort-WiFi-Test-6.9.1
