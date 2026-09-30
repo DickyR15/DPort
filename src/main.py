@@ -1216,13 +1216,19 @@ async def _geoport_location_worker():
                             if not location_worker_ready.is_set():
                                 location_worker_ready.set()
                         except Exception as set_error:
-                            location_worker_error = str(set_error)
-                            logger.exception(
-                                f"Location set failed: {location_worker_error}"
-                            )
+                            if is_device_locked_error(set_error):
+                                location_worker_error = PASSWORD_PROTECTED_LOCATION_MESSAGE
+                                logger.warning(
+                                    "Location set blocked because the Apple device is password-protected/locked."
+                                )
+                            else:
+                                location_worker_error = str(set_error)
+                                logger.exception(
+                                    f"Location set failed: {location_worker_error}"
+                                )
                             if result_box is not None:
                                 result_box["success"] = False
-                                result_box["error"] = str(set_error)
+                                result_box["error"] = location_worker_error
                             if not location_worker_ready.is_set():
                                 location_worker_ready.set()
                         finally:
