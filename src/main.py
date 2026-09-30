@@ -1,4 +1,3 @@
-# repair: final shutdown flag in source
 import dport_release_updater
 import locale
 import os
@@ -33,7 +32,7 @@ from pymobiledevice3.usbmux import list_devices
 from pymobiledevice3.cli.mounter import auto_mount
 from pymobiledevice3.lockdown import create_using_usbmux, create_using_tcp, get_mobdev2_lockdowns
 from pymobiledevice3.services.amfi import AmfiService
-from pymobiledevice3.exceptions import DeviceHasPasscodeSetError, NoDeviceConnectedError
+from pymobiledevice3.exceptions import DeviceHasPasscodeSetError, NoDeviceConnectedError, PasscodeRequiredError, PasswordRequiredError
 from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
 from pymobiledevice3.services.dvt.instruments.location_simulation import LocationSimulation
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
@@ -75,12 +74,9 @@ def _detach_console_if_needed():
         return
     try:
         import ctypes
-        kernel32 = ctypes.windll.kernel32
-        # Detach from a console inherited from a launcher (e.g. cmd.exe).
-        kernel32.FreeConsole()
+        ctypes.windll.kernel32.FreeConsole()
     except Exception:
         pass
-
 
 
 
@@ -151,7 +147,7 @@ location_worker_stop = threading.Event()
 location_worker_ready = threading.Event()
 location_worker_error = None
 
-PASSWORD_PROTECTED_LOCATION_MESSAGE = "iPhone 目前已鎖定，請先解鎖裝置後再進行模擬定位。"
+PASSWORD_PROTECTED_LOCATION_MESSAGE = "裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。"
 timeout = DEFAULT_BONJOUR_TIMEOUT
 
 # Get the current platform using sys.platform
@@ -207,22 +203,7 @@ def create_geoport_folder():
     # Set permissions for the GeoPort folder
     if current_platform == 'win32':
         # Windows permissions (read/write for everyone)
-        if current_platform == 'win32':
-            try:
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = 0
-                subprocess.run(
-                    ["icacls", geoport_folder, "/grant", "Everyone:(OI)(CI)F"],
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    startupinfo=startupinfo,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                    check=False,
-                )
-            except Exception:
-                pass
+        os.system(f"icacls {geoport_folder} /grant Everyone:(OI)(CI)F")
         logger.info("Permissions set for GeoPort folder on Windows")
     else:  # Linux and MacOS
         # POSIX permissions (read/write for everyone)
@@ -471,7 +452,7 @@ def get_wifi_with_retry(max_attempts=10):
 
     iTunes Wi-Fi Sync advertises _apple-mobdev2._tcp.  This is a different
     discovery path from RemotePairing (_remotepairing._tcp), which FIX4 used.
-    Normal iPhones on iOS 17.4+ should use mobdev2 + CoreDeviceProxy for the
+    Normal Apple devices on iOS 17.4+ should use mobdev2 + CoreDeviceProxy for the
     Wi-Fi lockdown tunnel.
     """
     global udid, wifi_address, wifi_port, ios_version
@@ -570,7 +551,7 @@ def get_wifi_with_retry(max_attempts=10):
 
     raise RuntimeError(
         "No Wi-Fi device found. iTunes Wi-Fi Sync uses mobdev2 (_apple-mobdev2._tcp), "
-        "not RemotePairing. Verify the iPhone was paired by USB, Wi-Fi management is enabled, "
+        "not RemotePairing. Verify the Apple device was paired by USB, Wi-Fi management is enabled, "
         "the PC and iPhone are on the same LAN, and Windows Firewall allows mDNS/Bonjour."
     )
 
@@ -818,7 +799,7 @@ def enable_developer_mode_route():
 
         if connection_type == "Network":
             return jsonify({
-                'error': 'Developer Mode must be enabled once over USB. Reconnect the iPhone by USB, enable Developer Mode, then use Wi-Fi.'
+                'error': 'Developer Mode must be enabled once over USB. Reconnect the Apple device by USB, enable Developer Mode, then use Wi-Fi.'
             })
         success, error_message = enable_developer_mode(udid, connection_type)
 
@@ -872,7 +853,7 @@ def connect_device():
 
     if connection_type != "USB":
         logger.warning(f"USB-ONLY build: rejecting non-USB connection type: {connection_type}")
-        return jsonify({"error": "USB-only mode: please connect the iPhone by USB."}), 400
+        return jsonify({"error": "USB-only mode: please connect the Apple device by USB."}), 400
 
     # Reuse an already-established connection when valid.
     if connection_type != "USB" and udid in rsd_data_map:
@@ -1060,7 +1041,7 @@ async def start_wifi_tcp_tunnel() -> None:
 
         if lockdown is None:
             raise RuntimeError(
-                f"mobdev2 could not reconnect to paired iPhone {udid} over Wi-Fi"
+                f"mobdev2 could not reconnect to the paired Apple device {udid} over Wi-Fi"
             )
 
         # iOS 17.4+ exposes CoreDeviceProxy through the normal lockdown service.
@@ -1237,7 +1218,7 @@ async def _geoport_location_worker():
                         await asyncio.sleep(1.0)
                     except Exception as clear_error:
                         location_worker_error = str(clear_error)
-                        if "PasswordProtected" in location_worker_error:
+                        if is_device_locked_error(clear_error):
                             location_worker_error = PASSWORD_PROTECTED_LOCATION_MESSAGE
                             logger.warning(
                                 "Location clear blocked because the iPhone is password-protected/locked."
@@ -1251,7 +1232,7 @@ async def _geoport_location_worker():
             location_worker_ready.set()
     except Exception as e:
         error_text = str(e)
-        if "PasswordProtected" in error_text:
+        if is_device_locked_error(e):
             location_worker_error = PASSWORD_PROTECTED_LOCATION_MESSAGE
             logger.warning(
                 "LocationSimulation blocked because the iPhone is password-protected/locked."
@@ -1588,8 +1569,8 @@ def py_list_devices():
                         fallback_info = {
                             "Identifier": getattr(device, "serial", None),
                             "ConnectionType": getattr(device, "connection_type", "USB") or "USB",
-                            "DeviceName": "iPhone",
-                            "DeviceClass": "iPhone",
+                            "DeviceName": "Apple 裝置",
+                            "DeviceClass": "Apple 裝置",
                             "ProductVersion": "?",
                             "wifiAddress": None,
                             "wifiPort": None,
@@ -1613,6 +1594,7 @@ def py_list_devices():
         return jsonify({"error": str(e)}), 500
 
 
+
 def _is_dport_updater_process(name: str) -> bool:
     normalized = str(name or "").lower()
     return normalized in {
@@ -1622,47 +1604,31 @@ def _is_dport_updater_process(name: str) -> bool:
 
 
 def clear_geoport():
-    logger.info("clear DPort instances")
-    substring = "dport"
-    current_pid = os.getpid()
+    logger.info("clear any DPort instances")
+    substring = "DPort"
 
     for process in psutil.process_iter(['pid', 'name']):
-        try:
-            pid = int(process.info.get('pid') or 0)
-            name = str(process.info.get('name') or "")
-            if pid == current_pid:
-                continue
-            # The updater MUST survive shutdown; otherwise it can never install
-            # the already-downloaded next version.
-            if _is_dport_updater_process(name):
-                logger.info(f"Preserve updater process: {pid} - {name}")
-                continue
-            if substring in name.lower():
-                logger.info(f"Terminate DPort process: {pid} - {name}")
-                process.terminate()
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            continue
+        if substring in process.info['name']:
+            logger.info(f"Found process: {process.info['pid']} - {process.info['name']}")
+
+            # Terminate the process
+            process.terminate()
+    else:
+        logger.warning("No GeoPort found")
 
 
 def clear_old_geoport():
     logger.info("clear old DPort instances")
-    substring = "dport"
+    substring = "DPort"
+
     current_pid = os.getpid()
 
     for process in psutil.process_iter(['pid', 'name']):
-        try:
-            pid = int(process.info.get('pid') or 0)
-            name = str(process.info.get('name') or "")
-            if pid == current_pid:
-                continue
-            if _is_dport_updater_process(name):
-                logger.info(f"Preserve updater process: {pid} - {name}")
-                continue
-            if substring in name.lower():
-                logger.info(f"Terminate old DPort process: {pid} - {name}")
-                process.terminate()
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            continue
+        if substring in process.info['name'] and process.info['pid'] != current_pid:
+            logger.info(f"Found process: {process.info['pid']} - {process.info['name']}")
+
+            # Terminate the process
+            process.terminate()
 
 
 def shutdown_server(preserve_updater=False):
@@ -1738,97 +1704,6 @@ def exit_app():
     threading.Thread(target=delayed_shutdown, daemon=True).start()
     return jsonify({"success": True, "message": "DPort is shutting down..."})
 
-
-@app.route('/api/public_toilets')
-def public_toilets():
-    """Return public toilets from MOENV, with an OSM bbox fallback."""
-    now = time.time()
-    cache = getattr(public_toilets, "_cache", None)
-    cache_time = getattr(public_toilets, "_cache_time", 0)
-    if cache and now - cache_time < 3600:
-        return jsonify({"ok": True, "records": cache, "cached": True, "count": len(cache), "source": "MOENV"})
-
-    bbox = request.args.get("bbox", "").strip()
-
-    def valid_record(r):
-        if not isinstance(r, dict): return False
-        keys = {str(k).strip().lower().replace("_", ""): k for k in r.keys()}
-        lk = next((keys.get(k) for k in ("latitude", "lat", "緯度") if keys.get(k)), None)
-        ok = next((keys.get(k) for k in ("longitude", "lon", "lng", "經度") if keys.get(k)), None)
-        if not lk or not ok: return False
-        try:
-            lat, lon = float(str(r[lk]).strip()), float(str(r[ok]).strip())
-            return -90 <= lat <= 90 and -180 <= lon <= 180 and not (lat == 0 and lon == 0)
-        except Exception: return False
-
-    def extract_records(payload):
-        out, seen = [], set()
-        def walk(v, depth=0):
-            if depth > 8 or v is None: return
-            if isinstance(v, list):
-                for x in v: walk(x, depth + 1)
-            elif isinstance(v, dict):
-                if valid_record(v):
-                    sig = str((v.get("latitude", v.get("Latitude", v.get("緯度"))), v.get("longitude", v.get("Longitude", v.get("經度"))), v.get("number", v.get("Number", v.get("name", v.get("Name", ""))))))
-                    if sig not in seen: seen.add(sig); out.append(v)
-                else:
-                    for k, x in v.items():
-                        if str(k).lower() in {"records", "data", "result", "items", "results", "rows"}: walk(x, depth + 1)
-        walk(payload)
-        return out
-
-    def osm_fallback():
-        if not bbox: return []
-        try:
-            west, south, east, north = [float(x) for x in bbox.split(",")]
-            if east < west: west, east = east, west
-            if north < south: south, north = north, south
-            if (east - west) > 5 or (north - south) > 5: return []
-            q = f"[out:json][timeout:25];nwr[amenity=toilets]({south},{west},{north},{east});out center tags;"
-            for endpoint in ("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"):
-                try:
-                    rr = requests.post(endpoint, data=q, timeout=30, verify=False); rr.raise_for_status(); data = rr.json()
-                    records = []
-                    for el in data.get("elements", []):
-                        tags = el.get("tags") or {}; center = el.get("center") or {}
-                        lat = el.get("lat", center.get("lat")); lon = el.get("lon", center.get("lon"))
-                        if lat is None or lon is None: continue
-                        records.append({"latitude": lat, "longitude": lon, "name": tags.get("name") or "Public Toilet", "address": tags.get("addr:full") or tags.get("addr:street") or "", "source": "OpenStreetMap", "opening_hours": tags.get("opening_hours", ""), "wheelchair": tags.get("wheelchair", ""), "fee": tags.get("fee", "")})
-                    if records: return records
-                except Exception as exc: logger.warning("OSM toilet endpoint failed: %s", exc)
-        except Exception as exc: logger.warning("OSM toilet fallback failed: %s", exc)
-        return []
-
-    api_key = os.environ.get("MOENV_API_KEY", "").strip()
-    key_source = "environment" if api_key else ""
-    for key_file in (Path(app_directory)/"moenv_api_key.txt", Path(app_directory)/"moenv_api_key", Path(base_directory)/"moenv_api_key.txt", Path(base_directory)/"moenv_api_key"):
-        if api_key: break
-        try:
-            if key_file.exists() and key_file.read_text(encoding="utf-8-sig").strip():
-                api_key = key_file.read_text(encoding="utf-8-sig").strip(); key_source = str(key_file)
-        except Exception as exc: logger.warning("Unable to read API key: %s", exc)
-
-    all_records, moenv_error = [], None
-    try:
-        if not api_key: raise RuntimeError("MOENV API key not found")
-        offset, page_size = 0, 1000
-        for _ in range(50):
-            r = requests.get("https://data.moenv.gov.tw/api/v2/FAC_P_07", params={"format":"json","offset":offset,"limit":page_size,"api_key":api_key}, timeout=30, verify=False)
-            r.raise_for_status(); page = extract_records(r.json()); all_records.extend(page)
-            logger.info("MOENV toilets: offset=%s usable=%s", offset, len(page))
-            if len(page) < page_size: break
-            offset += page_size
-    except Exception as exc:
-        moenv_error = str(exc); logger.warning("MOENV toilet API unavailable: %s", exc)
-
-    if all_records:
-        public_toilets._cache, public_toilets._cache_time = all_records, now
-        return jsonify({"ok":True,"records":all_records,"cached":False,"count":len(all_records),"source":"MOENV","key_source":key_source or "none"})
-
-    osm_records = osm_fallback()
-    if osm_records:
-        return jsonify({"ok":True,"records":osm_records,"cached":False,"count":len(osm_records),"source":"OpenStreetMap","key_source":key_source or "none","moenv_error":moenv_error})
-    return jsonify({"ok":False,"error":"PUBLIC_TOILETS_UNAVAILABLE","message":moenv_error or "No public toilet records were returned.","count":0}), 502
 
 @app.route('/pymobiledevice3/status')
 def pymobiledevice3_status():
@@ -1937,15 +1812,13 @@ def _dport_user_confirmed_update():
                 daemon=True,
             ).start()
 
-        body = jsonify(payload) if isinstance(payload, dict) else payload
-        return body, status
+        return (jsonify(payload) if isinstance(payload, dict) else payload), status
     except Exception as exc:
         return {"ok": False, "state": "update_failed", "message": str(exc)}, 500
 
 
 
 if __name__ == '__main__':
-    _detach_console_if_needed()
     #create_geoport_folder()
     if is_windows:
         try:
@@ -1957,31 +1830,20 @@ if __name__ == '__main__':
         except:
             pass
         if not pyuac.isUserAdmin():
-            print("Relaunching as Admin")
-            if os.environ.get("DPORT_RESTARTED") == "1":
-                # Update-restarted DPort should not create a visible console.
-                import ctypes
-                import shlex
-                executable = str(Path(sys.executable).resolve())
-                params = " ".join(
-                    shlex.quote(str(x)) for x in sys.argv[1:]
-                )
-                result = ctypes.windll.shell32.ShellExecuteW(
-                    None,
-                    "runas",
-                    executable,
-                    params,
-                    str(Path(executable).parent),
-                    0,  # SW_HIDE
-                )
-                if result <= 32:
-                    raise RuntimeError(f"Hidden elevation failed: {result}")
-                raise SystemExit(0)
-            pyuac.runAsAdmin()
-    #else:
-
-
-
+            import ctypes
+            executable = str(Path(sys.executable).resolve())
+            params = subprocess.list2cmdline(sys.argv[1:])
+            result = ctypes.windll.shell32.ShellExecuteW(
+                None,
+                "runas",
+                executable,
+                params,
+                str(Path(executable).parent),
+                0,
+            )
+            if result <= 32:
+                raise RuntimeError(f"Hidden elevation failed: {result}")
+            raise SystemExit(0)
 
     chosen_port = try_bind_listener_on_free_port()
 

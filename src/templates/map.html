@@ -446,25 +446,6 @@ body.dark-mode .geoport-fav-list button.btn-outline-danger:focus{color:#fff;back
 body.dark-mode .geoport-crosshair{text-shadow:0 0 3px #000}
 .geoport-status-active{font-weight:700}
 
-    .geoport-toilet-marker{background:transparent!important;border:0!important;font-size:23px;line-height: 22px;text-align:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
-    .geoport-toilet-layer-row{display:block;padding:5px 8px 7px 8px;white-space:nowrap;border-bottom:1px solid rgba(128,128,128,.45);font-weight:600;cursor:pointer}
-    .geoport-toilet-layer-row input{margin-right:5px;vertical-align:middle}
-    .geoport-toilet-badge{
-      width:26px;
-      height:26px;
-      border-radius:50%;
-      background:#1976d2;
-      border:2px solid #183153;
-      box-shadow:0 1px 5px rgba(0,0,0,.65);
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      color:#fff;
-      font:bold 13px/1 Arial,sans-serif;
-      text-shadow:0 1px 1px rgba(0,0,0,.35);
-    }
-    .geoport-toilet-status{position:absolute;top:8px;right:8px;z-index:1001;background:rgba(0,0,0,.78);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:6px 9px;font:12px Arial,sans-serif;box-shadow:0 1px 5px rgba(0,0,0,.35);pointer-events:none;max-width:300px}
-
 /* DPort UI Polish 1 — visual layer only; existing control IDs/functions preserved. */
 :root{
   --dport-bg:#eef3fb;
@@ -3471,7 +3452,7 @@ html, body{
           
         </div>
         <div class="dport-subtitle">Dicky－隨心定位，想去哪就去哪！</div>
-        <div class="dport-caption">iPhone 定位與 GPX 模擬工具</div>
+        <div class="dport-caption">iPhone / iPad 定位與 GPX 模擬工具</div>
         <div id="dport-pm3-status" class="dport-pm3-status">DPort：檢查更新中…</div>
       </div>
     </div>
@@ -3493,7 +3474,7 @@ html, body{
     </div>
   </div>
 </div>
-    <div class="dport-hero-actions"><a id="exit-btn" class="btn btn-outline-primary dport-header-btn" href="#" title="DPort" onclick="exitApp()">離開</a>
+    <div class="dport-hero-actions"><a id="exit-btn" class="btn btn-outline-primary dport-header-btn" href="#" title="DPort" onclick="return exitApp(false)">離開</a>
     </div>
   </header>
 
@@ -4035,7 +4016,7 @@ async function checkDeviceAutoDetect() {
 
             if (!refreshed && deviceDropdown.options.length === 0) {
                 var pending = document.createElement('option');
-                pending.text = 'USB：iPhone－（正在重新連線與讀取裝置資訊…）';
+                pending.text = 'USB：Apple 裝置－（正在重新連線與讀取裝置資訊…）';
                 pending.value = '';
                 pending.disabled = true;
                 pending.selected = true;
@@ -4597,150 +4578,6 @@ async function initializeMap(userLocale) {
     });
     openStreetMapTileLayer.addTo(map);
 
-    // 公共廁所 (MOENV FAC_P_07)
-    var toiletStatus = document.createElement("div");
-    toiletStatus.id = "geoport-toilet-status";
-    toiletStatus.className = "geoport-toilet-status";
-    toiletStatus.textContent = "🚻 公共廁所：未啟用";
-    map.getContainer().appendChild(toiletStatus);
-
-    function setToiletStatus(text, ok) {
-        toiletStatus.textContent = text;
-        toiletStatus.style.background = ok === false ? "rgba(170,35,35,.9)" : "rgba(0,0,0,.78)";
-    }
-
-    // FIX8: use a dedicated, deterministic overlay row so 公共廁所 is
-    // always the FIRST item in the layer selector, regardless of Leaflet DOM order.
-    var publicToiletLayer = L.featureGroup();
-    var publicToiletsLoaded = false;
-
-    function normalizeToiletKey(key) {
-        return String(key || "").toLowerCase().replace(/[\s_\-().:：]/g, "");
-    }
-    function toiletField(record, keys) {
-        if (!record || typeof record !== "object") return "";
-        const mapKeys = {};
-        Object.keys(record).forEach(k => { mapKeys[normalizeToiletKey(k)] = k; });
-        for (const key of keys) {
-            const actual = mapKeys[normalizeToiletKey(key)];
-            if (actual !== undefined && record[actual] !== undefined && record[actual] !== null) {
-                const v = String(record[actual]).trim();
-                if (v !== "") return v;
-            }
-        }
-        return "";
-    }
-    function collectToiletRecords(payload) {
-        const out = [];
-        const seen = new Set();
-        function walk(v, depth) {
-            if (depth > 6 || v == null) return;
-            if (Array.isArray(v)) {
-                for (const x of v) walk(x, depth + 1);
-                return;
-            }
-            if (typeof v !== "object") return;
-            const lat = toiletField(v,["latitude","Latitude","lat","LATITUDE","緯度"]);
-            const lng = toiletField(v,["longitude","Longitude","lng","lon","LONGITUDE","經度"]);
-            if (lat && lng) {
-                const sig = lat + "," + lng + "," + toiletField(v,["number","Number","name","Name"]);
-                if (!seen.has(sig)) { seen.add(sig); out.push(v); }
-                return;
-            }
-            for (const [k,x] of Object.entries(v)) {
-                if (["records","data","result","items","results","rows"].includes(String(k).toLowerCase())) walk(x, depth + 1);
-            }
-        }
-        walk(payload, 0);
-        return out;
-    }
-    function makeToiletIcon() {
-        return L.divIcon({
-            className: "geoport-toilet-marker",
-            html: '<div class="geoport-toilet-badge" title="公共廁所"><span>WC</span></div>',
-            iconSize: [30,30], iconAnchor: [15,15], popupAnchor: [0,-15]
-        });
-    }
-    const toiletIcon = makeToiletIcon();
-
-    function loadPublicToilets(force) {
-        if (publicToiletsLoaded && !force) return;
-        setToiletStatus("🚻 公共廁所：讀取中……", true);
-        fetch('/api/public_toilets?bbox=' + encodeURIComponent(map.getBounds().toBBoxString()) + '&ts=' + Date.now(), {cache:'no-store'})
-            .then(r => r.json().then(data => ({ok:r.ok,data})))
-            .then(({ok,data}) => {
-                if (!ok || !data || data.ok === false) {
-                    console.error("公共廁所 API failed:", data && data.error, data && data.message);
-                    setToiletStatus("🚻 公共廁所：資料讀取失敗", false);
-                    return;
-                }
-                // Render in small batches so hundreds of toilet markers do not freeze the page.
-                publicToiletLayer.clearLayers();
-                const bounds = map.getBounds();
-                const center = map.getCenter();
-                let records = collectToiletRecords(data).filter(record => {
-                    const lat = Number(toiletField(record,["latitude","Latitude","lat","LATITUDE","緯度"]));
-                    const lng = Number(toiletField(record,["longitude","Longitude","lng","lon","LONGITUDE","經度"]));
-                    return Number.isFinite(lat)&&Number.isFinite(lng)&&lat >= -90&&lat <= 90&&lng >= -180&&lng <= 180&&bounds.contains([lat,lng]);
-                });
-                // At wide zoom levels, show the closest toilets first and cap DOM markers.
-                // Zooming in automatically reveals more/all toilets in the current view.
-                const zoom = map.getZoom();
-                const markerLimit = zoom < 11 ? 120 : (zoom < 13 ? 300 : 1000);
-                if (records.length > markerLimit) {
-                    records.sort((a,b) => {
-                        const ad=Number(toiletField(a,["latitude","Latitude","lat","LATITUDE","緯度"]));
-                        const ao=Number(toiletField(a,["longitude","Longitude","lng","lon","LONGITUDE","經度"]));
-                        const bd=Number(toiletField(b,["latitude","Latitude","lat","LATITUDE","緯度"]));
-                        const bo=Number(toiletField(b,["longitude","Longitude","lng","lon","LONGITUDE","經度"]));
-                        return (ad-center.lat)**2+(ao-center.lng)**2-(bd-center.lat)**2-(bo-center.lng)**2;
-                    });
-                    records = records.slice(0, markerLimit);
-                }
-                let markerCount = 0;
-                let renderIndex = 0;
-                const renderBatch = () => {
-                    const started = renderIndex;
-                    const end = Math.min(renderIndex + 40, records.length);
-                    for (; renderIndex < end; renderIndex++) {
-                        const record = records[renderIndex];
-                        const lat = Number(toiletField(record,["latitude","Latitude","lat","LATITUDE","緯度"]));
-                        const lng = Number(toiletField(record,["longitude","Longitude","lng","lon","LONGITUDE","經度"]));
-                        const name=toiletField(record,["name","Name","建檔名稱"])||"公共廁所";
-                        const address=toiletField(record,["address","Address","地址"]);
-                        const county=toiletField(record,["county","County","縣市名稱"]);
-                        const area=toiletField(record,["areacode","Areacode","鄉鎮市名稱"]);
-                        const grade=toiletField(record,["grade","Grade","等級"]);
-                        const type2=toiletField(record,["type2","Type2","公廁類別"]);
-                        const type=toiletField(record,["type","Type","公廁類型"]);
-                        const diaper=toiletField(record,["diaper","Diaper","尿布檯組"]);
-                        const popup=`<div style="min-width:220px"><strong>🚻 ${name}</strong>${county||area?`<div>${county} ${area}</div>`:""}${address?`<div><b>地址：</b> ${address}</div>`:""}${grade?`<div><b>等級：</b> ${grade}</div>`:""}${type2?`<div><b>類型：</b> ${type2}</div>`:""}${type?`<div><b>類型：</b> ${type}</div>`:""}${diaper?`<div><b>尿布台：</b> ${diaper}</div>`:""}<div style="margin-top:6px;font-size:11px">資料來源：環境部 FAC_P_07</div></div>`;
-                        L.marker([lat,lng],{icon:toiletIcon,zIndexOffset:10000}).bindPopup(popup).addTo(publicToiletLayer);
-                        markerCount++;
-                    }
-                    if (renderIndex < records.length) {
-                        setToiletStatus(`🚻 公共廁所: ${markerCount}/${records.length} 讀取中……`, true);
-                        requestAnimationFrame(renderBatch);
-                    } else {
-                        publicToiletsLoaded = markerCount > 0;
-                        publicToiletLayer.bringToFront();
-                        console.info(`公共廁所已載入： API=${data.count ?? records.length}, markers=${markerCount}, 資料來源=${data.source || '環境部'}`);
-                        const rowText = document.querySelector('.geoport-toilet-layer-row span');
-                        if (rowText) rowText.textContent = `🚻 公共廁所 (${markerCount})`;
-                        setToiletStatus(`🚻 公共廁所: ${markerCount} 已顯示${records.length > markerCount ? ` / 目前範圍共 ${records.length} 筆` : ''}`, true);
-                    }
-                };
-                requestAnimationFrame(renderBatch);
-                return;
-                console.info(`公共廁所已載入： API=${data.count ?? records.length}, markers=${markerCount}, 資料來源=${data.source || '環境部'}`);
-                const rowText = document.querySelector('.geoport-toilet-layer-row span');
-                if (rowText) rowText.textContent = `🚻 公共廁所 (${markerCount})`;
-                if (!markerCount) { publicToiletsLoaded = false; console.warn("公共廁所 returned no usable coordinates in current map view.", data); setToiletStatus(`🚻 公共廁所: 0 in view / ${data.count ?? records.length} records`, true); }
-                else { setToiletStatus(`🚻 公共廁所: ${markerCount} shown / ${data.count ?? records.length} records`, true); }
-            })
-            .catch(e=>{ console.error("公共廁所 load failed:",e); setToiletStatus("🚻 公共廁所：連線失敗", false); });
-    }
-
     // Define base layers. OpenStreetMap is the default.
     // Keep a compact, useful set of base maps. The map selector should be
     // readable instead of exposing many near-duplicate styles.
@@ -4760,57 +4597,8 @@ async function initializeMap(userLocale) {
     });
     openStreetMapTileLayer.addTo(map);
 
-    // Create Leaflet control WITHOUT overlays. We add our own overlay row first.
     var layerControl = L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
     localizeMapControlText();
-    var layerControlContainer = layerControl.getContainer();
-    var baseContainer = layerControlContainer.querySelector('.leaflet-control-layers-base');
-    if (baseContainer) {
-        var toiletRow = document.createElement('label');
-        toiletRow.className = 'geoport-toilet-layer-row';
-        toiletRow.innerHTML = '<input type="checkbox" class="leaflet-control-layers-selector"> <span>🚻 公共廁所</span>';
-        var toiletCheckbox = toiletRow.querySelector('input');
-        toiletCheckbox.addEventListener('change', function(){
-            if (this.checked) {
-                if (!map.hasLayer(publicToiletLayer)) publicToiletLayer.addTo(map);
-                loadPublicToilets();
-                publicToiletLayer.bringToFront();
-            } else {
-                if (map.hasLayer(publicToiletLayer)) map.removeLayer(publicToiletLayer);
-            }
-        });
-        baseContainer.parentNode.insertBefore(toiletRow, baseContainer);
-    }
-
-    // Keep the toilet overlay state independent from base-map switching.
-    // 公共廁所 is OFF by default and must never be re-enabled automatically.
-    map.on('baselayerchange', function(){
-        const cb = layerControlContainer.querySelector('.geoport-toilet-layer-row input');
-        if (cb && cb.checked) {
-            if (!map.hasLayer(publicToiletLayer)) publicToiletLayer.addTo(map);
-            publicToiletLayer.bringToFront();
-        }
-    });
-
-    // Default: OpenStreetMap + 公共廁所 OFF.
-    // Do not request or render toilet data until the user explicitly enables it.
-    if (map.hasLayer(publicToiletLayer)) map.removeLayer(publicToiletLayer);
-    setToiletStatus("🚻 公共廁所：未啟用", true);
-
-    // Refresh the toilet data after map movement so the OSM fallback follows the current view.
-    let toiletReloadTimer = null;
-    map.on('moveend zoomend', function(){
-        const cb = layerControlContainer.querySelector('.geoport-toilet-layer-row input');
-        if (!cb || !cb.checked) return;
-        clearTimeout(toiletReloadTimer);
-        toiletReloadTimer = setTimeout(function(){
-            publicToiletsLoaded = false;
-            loadPublicToilets(true);
-            publicToiletLayer.bringToFront();
-        }, 800);
-    });
-
-
     //-----------------
    // Leaflet.FileLayer
 // Load GPX/KML/GeoJSON files by drag and drop, or file open
@@ -5357,7 +5145,7 @@ async function applyGPXPointToDevice(lat, lng) {
             if (response.status === 423 || /PasswordProtected|已鎖定|password-protected|locked/i.test(message)) {
                 return {
                     ok:false,
-                    message:"iPhone 目前已鎖定，請先解鎖裝置後再播放 GPX 路線。"
+                    message:"裝置目前已鎖定，請先解鎖裝置後再播放 GPX 路線。"
                 };
             }
             return {ok:false, message:message || "GPX 座標套用失敗"};
@@ -7233,8 +7021,8 @@ async function populateDeviceList(options) {
                         (connectionType === 'Network') ? 'Wi-Fi' : connectionType;
 
                     option.text =
-                        `${displayConnectionType}: ${deviceInfo.DeviceName || 'iPhone'} - ` +
-                        `(${deviceInfo.DeviceClass || 'iPhone'} - iOS: ${deviceInfo.ProductVersion || '?'})`;
+                        `${displayConnectionType}: ${deviceInfo.DeviceName || 'Apple 裝置'} - ` +
+                        `(${deviceInfo.DeviceClass || 'Apple 裝置'} - iOS: ${deviceInfo.ProductVersion || '?'})`;
                     option.value = JSON.stringify(deviceInfo);
 
                     devicesInfo[udid] = devicesInfo[udid] || {};
@@ -7978,6 +7766,8 @@ function setLocationArrows() {
             if (response.ok) {
                 geoportStatus('定位成功，可再次定位', true);
                 dportFollowCurrentLocation(c.lat,c.lng);
+            } else if (response.status === 423 || /PasswordProtected|已鎖定|password-protected|locked|passcode/i.test(message)) {
+                geoportStatus('裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。', false);
             } else {
                 geoportStatus('定位套用失敗', false);
             }
@@ -8035,24 +7825,33 @@ function setLocationArrows() {
         stopLocationButton.disabled = false;
     }
 
-    function exitApp() {
+    function exitApp(forUpdate) {
         console.log('Exit App function called');
 
         try {
             $('#aboutModal').modal('hide');
-            $('#shutdownModal').modal('show');
+            if (!forUpdate) {
+                $('#shutdownModal').modal('show');
+            }
 
-            const data = JSON.stringify({});
-            navigator.sendBeacon('/exit', data);
+            const data = JSON.stringify({reason: forUpdate ? 'update' : 'user_exit'});
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon('/exit', data);
+            } else {
+                fetch('/exit', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:data,
+                    keepalive:true
+                }).catch(function(){});
+            }
 
-            // Close immediately, matching the previous working behavior.
             window.open('', '_self', '');
             window.close();
-
-            console.log('POST request sent using sendBeacon');
         } catch (error) {
             console.error('錯誤 during server shutdown:', error);
         }
+        return false;
     }
 
     function aboutApp() {
@@ -8107,8 +7906,8 @@ function setLocationArrows() {
         "'NoneType' object has no attribute 'split'": "請先輸入或選擇座標，再進行模擬定位。",
         "座標格式不正確": "座標格式不正確，請使用「緯度 經度」。",
         "Stop failed": "停止定位失敗",
-        "PasswordProtected": "iPhone 目前已鎖定，請先解鎖裝置後再進行模擬定位。",
-        "iPhone is locked": "iPhone 目前已鎖定，請先解鎖裝置後再進行模擬定位。"
+        "PasswordProtected": "裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。",
+        "iPhone is locked": "裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。"
 
       };
 
@@ -8464,7 +8263,7 @@ function continueAfterDeveloperModeRequired() {
                 <p>開啟開發者模式只需要進行一次。</p>
             </div>
             <div class="modal-footer d-flex justify-content-center">
-                <button type="button" class="btn btn-secondary mx-auto" data-bs-dismiss="modal" onclick="window.location.href = '/'">確定</button>
+                <button type="button" class="btn btn-secondary mx-auto" data-bs-dismiss="modal" >確定</button>
             </div>
         </div>
     </div>
@@ -8529,7 +8328,7 @@ function continueAfterDeveloperModeRequired() {
 
             </div>
             <div class="modal-footer d-flex justify-content-center">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = '/'">關閉</button>
 
             </div>
         </div>
@@ -9696,7 +9495,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
@@ -10212,7 +10011,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
@@ -10728,7 +10527,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
@@ -11244,7 +11043,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
@@ -11760,7 +11559,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
@@ -12709,7 +12508,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
@@ -12893,8 +12692,52 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
     var box=document.getElementById('dport-update-dialog');
     if(box) box.classList.remove('show');
   }
+  function parts(v){
+    return String(v||'0').replace(/^v/i,'').split('.').map(function(x){
+      var m=x.match(/^\d+/); return m ? parseInt(m[0],10) : 0;
+    });
+  }
+  function atLeast(a,b){
+    var A=parts(a), B=parts(b);
+    for(var i=0;i<3;i++){
+      if((A[i]||0)>(B[i]||0)) return true;
+      if((A[i]||0)<(B[i]||0)) return false;
+    }
+    return true;
+  }
+  function waitForRestart(expectedVersion){
+    var msg=document.getElementById('dport-update-message');
+    var attempts=0;
+    var timer=setInterval(function(){
+      attempts++;
+      fetch('/pymobiledevice3/status?ts='+Date.now(),{cache:'no-store'})
+        .then(function(r){
+          if(!r.ok) throw new Error('HTTP '+r.status);
+          return r.json();
+        })
+        .then(function(status){
+          var current=String(status && status.current_version || '');
+          // Do not reload merely because the old 6.9.0 server answered.
+          if(!current || !atLeast(current, expectedVersion)){
+            if(msg) msg.textContent='正在等待 DPort '+expectedVersion+' 啟動…';
+            throw new Error('old-version-server');
+          }
+          clearInterval(timer);
+          if(msg) msg.textContent='DPort '+expectedVersion+' 已啟動，正在重新載入…';
+          setTimeout(function(){ window.location.reload(); },500);
+        })
+        .catch(function(){
+          if(attempts>=180){
+            clearInterval(timer);
+            if(msg) msg.textContent='新版程式尚未連回，請確認 DPort-'+expectedVersion+'.exe 是否已啟動。';
+          }
+        });
+    },1000);
+  }
+
   function start(){
     var btn=document.getElementById('dport-update-now');
+    var title=document.querySelector('#dport-update-dialog h3');
     if(!btn) return;
     btn.disabled=true;
     btn.textContent='更新中…';
@@ -12902,17 +12745,24 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
       .then(function(r){return r.json();})
       .then(function(result){
         if(result && result.ok){
+          if(title) title.textContent='DPort 正在關閉';
           var msg=document.getElementById('dport-update-message');
-          if(msg) msg.textContent='正在更新到 DPort '+result.version+'，程式即將重新啟動…';
+          if(msg) msg.textContent='6.9.1 已下載並驗證，正在關閉 6.9.0…';
+          // The backend now shuts down DPort after the verified download.
+          waitForRestart(String(result.version || ''));
         }else{
+          if(title) title.textContent='DPort 更新失敗';
           btn.disabled=false;
-          btn.textContent='立即更新';
+          btn.textContent='立即重試';
           var msg=document.getElementById('dport-update-message');
           if(msg) msg.textContent=(result && result.message) ? result.message : '更新失敗，請稍後再試。';
         }
       }).catch(function(){
+        if(title) title.textContent='DPort 更新失敗';
         btn.disabled=false;
-        btn.textContent='立即更新';
+        btn.textContent='立即重試';
+        var msg=document.getElementById('dport-update-message');
+        if(msg) msg.textContent='無法完成更新，請再次嘗試。';
       });
   }
 
@@ -13793,7 +13643,7 @@ body > div.toast-container{
         // refresh are performed here.
         wrapUsbEvent(
             'handleUsbCableConnected',
-            'USB 已重新插入，請按「重新整理」偵測 iPhone'
+            'USB 已重新插入，請按「重新整理」偵測 Apple 裝置'
         );
         wrapUsbEvent('handleUsbCableRemoved','USB 已拔除');
 
@@ -14774,1122 +14624,7 @@ body > div.toast-container{
         // refresh are performed here.
         wrapUsbEvent(
             'handleUsbCableConnected',
-            'USB 已重新插入，請按「重新整理」偵測 iPhone'
-        );
-        wrapUsbEvent('handleUsbCableRemoved','USB 已拔除');
-
-        // Keep Refresh available after startup too.
-        [500,1000,2000,3000,5000].forEach(function(ms){
-            setTimeout(function(){
-                enableManualRefresh();
-                redirectLegacyToast();
-                clearStaleDisconnectReminder();
-            },ms);
-        });
-    }
-
-    if(document.readyState==='loading'){
-        document.addEventListener('DOMContentLoaded',boot,{once:true});
-    }else{
-        boot();
-    }
-
-    window.addEventListener('load',function(){
-        boot();
-        watchConnectionState();
-        clearStaleDisconnectReminder();
-        [500,1200,2500].forEach(function(ms){
-            setTimeout(clearStaleDisconnectReminder,ms);
-        });
-    });
-})();
-</script>
-
-<style id="dport-unified-status-final">
-.toast-container,
-.toast-container.show,
-body > .toast-container,
-body > div.toast-container{
-    display:none!important;
-    visibility:hidden!important;
-    pointer-events:none!important;
-}
-
-#geoport-status,
-.geoport-status,
-#dport-status,
-.dport-status{
-    position:relative!important;
-    z-index:3200!important;
-    min-height:1.2em!important;
-    overflow:hidden!important;
-    transition:opacity .18s ease!important;
-}
-</style>
-
-<script id="dport-unified-status-final-script">
-(function(){
-    var hideTimer=null;
-    var originalStatus=null;
-    var installing=false;
-
-    function statusElement(){
-        return document.getElementById('geoport-status') ||
-               document.getElementById('dport-status') ||
-               document.querySelector('.geoport-status,.dport-status');
-    }
-
-    function clearStatusVisual(){
-        var el=statusElement();
-        if(!el) return;
-        try{
-            el.textContent='';
-            el.style.removeProperty('display');
-            el.style.removeProperty('opacity');
-        }catch(e){}
-    }
-
-    function armHide(message){
-        if(hideTimer) clearTimeout(hideTimer);
-        var msg=String(message||'').trim();
-        var delay=4500;
-        if(/請按「重新整理」|USB/.test(msg)) delay=8000;
-        if(/定位成功|已辨識地點/.test(msg)) delay=4000;
-
-        hideTimer=setTimeout(function(){
-            var el=statusElement();
-            if(!el) return;
-            try{
-                el.style.setProperty('opacity','0','important');
-                setTimeout(function(){
-                    var current=statusElement();
-                    if(current && String(current.textContent||'').trim()===msg){
-                        current.textContent='';
-                        current.style.removeProperty('opacity');
-                    }
-                },200);
-            }catch(e){}
-        },delay);
-    }
-
-    function install(){
-        if(installing) return;
-        installing=true;
-
-        try{
-            if(typeof window.geoportStatus==='function' &&
-               !window.geoportStatus.__dportUnifiedStatusFinal){
-
-                originalStatus=window.geoportStatus;
-
-                var wrapped=function(message){
-                    var args=Array.prototype.slice.call(arguments);
-                    var msg=String(message==null?'':message).trim();
-
-                    if(hideTimer) clearTimeout(hideTimer);
-
-                    if(!msg){
-                        clearStatusVisual();
-                        return;
-                    }
-
-                    var result;
-                    try{
-                        result=originalStatus.apply(this,args);
-                    }catch(e){}
-
-                    // Always collapse the status area to one text message.
-                    var el=statusElement();
-                    if(el){
-                        try{
-                            el.textContent=msg;
-                            el.style.setProperty('opacity','1','important');
-                            el.style.removeProperty('display');
-                        }catch(e){}
-                    }
-
-                    armHide(msg);
-                    return result;
-                };
-
-                wrapped.__dportUnifiedStatusFinal=true;
-                wrapped.__dportUnifiedStatusOriginal=originalStatus;
-                window.geoportStatus=wrapped;
-            }
-        }catch(e){
-            // Leave the original implementation untouched if the page is
-            // still initializing.
-        }
-
-        try{
-            if(typeof window.displayToast==='function' &&
-               !window.displayToast.__dportStatusOnlyFinal){
-
-                window.displayToast=function(message){
-                    var msg=String(message==null?'':message).trim();
-                    if(!msg) return;
-                    if(typeof window.geoportStatus==='function'){
-                        window.geoportStatus(msg,false);
-                    }
-                };
-
-                window.displayToast.__dportStatusOnlyFinal=true;
-            }
-        }catch(e){}
-
-        installing=false;
-    }
-
-    function updateDeviceTooltip(){
-        var select=document.getElementById('device');
-        if(!select) return false;
-
-        var option=select.options && select.selectedIndex>=0 ?
-            select.options[select.selectedIndex] : null;
-
-        var label=option ? String(option.textContent||'').trim() : '';
-        if(label && !/請選擇|選擇裝置|沒有裝置|找不到裝置|無裝置/i.test(label)){
-            select.title=label;
-        }else{
-            select.removeAttribute('title');
-        }
-        return true;
-    }
-
-    function watchDeviceList(){
-        var select=document.getElementById('device');
-        if(!select || select.dataset.dportTooltipWatch==='1') return;
-
-        select.dataset.dportTooltipWatch='1';
-        updateDeviceTooltip();
-
-        select.addEventListener('change',updateDeviceTooltip);
-
-        if(window.MutationObserver){
-            var observer=new MutationObserver(updateDeviceTooltip);
-            observer.observe(select,{childList:true,subtree:true});
-        }
-    }
-
-    function boot(){
-        install();
-        watchDeviceList();
-        var el=statusElement();
-        if(el){
-            el.style.setProperty('z-index','3200','important');
-        }
-    }
-
-    if(document.readyState==='loading'){
-        document.addEventListener('DOMContentLoaded',boot,{once:true});
-    }else{
-        boot();
-    }
-
-    window.addEventListener('load',boot);
-    [100,500,1200,2500,5000].forEach(function(ms){
-        setTimeout(boot,ms);
-    });
-})();
-</script>
-
-<style id="dport-location-gpx-interaction-final">
-/* Long place-name row: never push the sidebar wider than its grid column. */
-.dport-location-name,
-.geoport-location-name,
-.geoport-place-name,
-#geoport-place-name{
-    display:block!important;
-    width:100%!important;
-    max-width:100%!important;
-    min-width:0!important;
-    box-sizing:border-box!important;
-    overflow:hidden!important;
-    white-space:nowrap!important;
-    text-overflow:ellipsis!important;
-}
-
-.dport-location-name *,
-.geoport-location-name *,
-.geoport-place-name *,
-#geoport-place-name *{
-    max-width:100%!important;
-    min-width:0!important;
-    box-sizing:border-box!important;
-}
-
-.dport-location-name,
-.geoport-location-name,
-.geoport-place-name,
-#geoport-place-name{
-    flex:1 1 auto!important;
-}
-
-/* GPX speed selector gets its own interaction boundary. */
-.dport-gpx-speed-wrap,
-.dport-gpx-speed-select,
-.dport-gpx-speed-wrap select{
-    touch-action:manipulation!important;
-    user-select:none!important;
-}
-
-.dport-gpx-speed-wrap{
-    position:relative!important;
-    z-index:4000!important;
-}
-</style>
-
-<script id="dport-location-gpx-interaction-final-script">
-(function(){
-    function findPlaceNameElements(){
-        var all=document.querySelectorAll('body *');
-        var found=[];
-
-        for(var i=0;i<all.length;i++){
-            var el=all[i];
-            if(!el || el.children.length>3) continue;
-
-            var text=String(el.textContent||'').replace(/\s+/g,' ').trim();
-            if(text.length<8 || text.length>220) continue;
-
-            if(/^地點\s*[:：]/.test(text)){
-                found.push(el);
-            }
-        }
-        return found;
-    }
-
-    function constrainPlaceName(){
-        var found=findPlaceNameElements();
-
-        found.forEach(function(el){
-            try{
-                el.classList.add('dport-location-name');
-                el.title=String(el.textContent||'').replace(/\s+/g,' ').trim();
-
-                var parent=el.parentElement;
-                for(var level=0; parent && level<4; level++,parent=parent.parentElement){
-                    parent.style.setProperty('min-width','0','important');
-                    parent.style.setProperty('max-width','100%','important');
-                    parent.style.setProperty('box-sizing','border-box','important');
-                    parent.style.setProperty('overflow','hidden','important');
-                }
-            }catch(e){}
-        });
-    }
-
-    function protectGpxControls(){
-        var wraps=document.querySelectorAll(
-            '.dport-gpx-speed-wrap, .dport-gpx-speed-select, .dport-gpx-speed-wrap select'
-        );
-
-        wraps.forEach(function(el){
-            if(el.dataset.dportLeafletShield==='1') return;
-            el.dataset.dportLeafletShield='1';
-
-            [
-                'mousedown','mouseup','click','dblclick',
-                'pointerdown','pointerup',
-                'touchstart','touchend',
-                'wheel','contextmenu'
-            ].forEach(function(type){
-                el.addEventListener(type,function(event){
-                    event.stopPropagation();
-                },false);
-            });
-        });
-    }
-
-    function apply(){
-        constrainPlaceName();
-        protectGpxControls();
-    }
-
-    if(document.readyState==='loading'){
-        document.addEventListener('DOMContentLoaded',apply,{once:true});
-    }else{
-        apply();
-    }
-
-    window.addEventListener('load',apply);
-    window.addEventListener('resize',apply);
-
-    if(window.MutationObserver){
-        var observer=new MutationObserver(function(){
-            apply();
-        });
-        observer.observe(document.body,{childList:true,subtree:true});
-    }
-
-    [200,700,1500,3000].forEach(function(ms){
-        setTimeout(apply,ms);
-    });
-})();
-</script>
-
-
-<style>
-/* DPort 6.9.0 Favorite palette: match the main blue/red controls and keep
-   contrast strong in dark mode. */
-.geoport-favorites-title{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:10px;
-}
-.geoport-favorites-actions{
-    display:flex;
-    align-items:center;
-    gap:7px;
-}
-.geoport-fav-clear-all{
-    min-height:34px;
-    padding:5px 11px !important;
-    border-radius:9px !important;
-    font-size:13px !important;
-    font-weight:700 !important;
-    color:#fff !important;
-    background:#a33b3b !important;
-    border:1px solid #ffaaaa !important;
-    cursor:pointer;
-}
-.geoport-fav-clear-all:hover{
-    filter:brightness(1.08);
-}
-.geoport-fav-list{
-    display:grid !important;
-    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
-    grid-template-rows:repeat(3,64px);
-    grid-auto-rows:64px;
-    gap:8px;
-    padding:10px !important;
-    border:1px solid #667086 !important;
-    border-radius:12px;
-    max-height:228px !important; /* 3 rows = 6 visible Favorite buttons */
-    overflow-y:auto !important;
-    overflow-x:hidden !important;
-    scrollbar-width:thin;
-}
-.geoport-fav-card{
-    position:relative;
-    min-width:0;
-    min-height:64px;
-}
-.geoport-fav-open{
-    width:100%;
-    height:64px;
-    min-height:64px !important;
-    border:1px solid #9ab3ff !important;
-    border-radius:10px !important;
-    background:#2f3542 !important;
-    color:#ffffff !important;
-    display:flex;
-    align-items:center;
-    justify-content:flex-start;
-    text-align:left;
-    padding:8px 35px 8px 12px !important;
-    overflow:hidden;
-    box-shadow:none !important;
-}
-.geoport-fav-open:hover{
-    background:#36415a !important;
-    border-color:#9ab3ff !important;
-}
-.geoport-fav-open:focus-visible{
-    outline:2px solid #9ab3ff !important;
-    outline-offset:1px;
-}
-.geoport-fav-name{
-    width:100%;
-    font-size:16px !important;
-    font-weight:700 !important;
-    line-height:1.2;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    color:#fff !important;
-}
-.geoport-fav-name.long{
-    font-size:14px !important;
-    line-height:1.18;
-    white-space:normal;
-    overflow:hidden;
-    text-overflow:clip;
-    display:-webkit-box;
-    -webkit-box-orient:vertical;
-    -webkit-line-clamp:2;
-    word-break:break-word;
-}
-.geoport-fav-name.xlong{
-    font-size:13px !important;
-    line-height:1.15;
-}
-.geoport-fav-detail{display:none !important;}
-.geoport-fav-delete{
-    position:absolute;
-    top:50%;
-    right:6px;
-    transform:translateY(-50%);
-    width:22px;
-    height:22px;
-    padding:0 !important;
-    border:1px solid #69758b !important;
-    border-radius:6px !important;
-    background:rgba(86,96,116,.38) !important;
-    color:#c8d0df !important;
-    font-size:14px !important;
-    line-height:20px !important;
-    font-weight:700 !important;
-    cursor:pointer;
-    opacity:.86;
-}
-.geoport-fav-delete:hover{
-    border-color:#a7b1c5 !important;
-    background:rgba(110,120,142,.58) !important;
-    color:#ffffff !important;
-    opacity:1;
-}
-.geoport-fav-empty{
-    grid-column:1 / -1;
-    padding:16px 10px;
-    text-align:center;
-    opacity:.76;
-    font-size:14px;
-}
-.geoport-fav-count{
-    font-size:13px !important;
-    font-weight:600 !important;
-    opacity:.7;
-    margin-left:5px;
-}
-.geoport-fav-resolving{
-    opacity:.72;
-}
-@media (max-width:700px){
-    .geoport-fav-list{
-        grid-template-columns:repeat(2,minmax(0,1fr)) !important;
-        grid-auto-rows:60px;
-        max-height:216px !important;
-    }
-    .geoport-fav-card,.geoport-fav-open{
-        height:60px;
-        min-height:60px !important;
-    }
-    .geoport-fav-name{font-size:15px !important;}
-}
-</style>
-
-<script>
-(function(){
-    // Faster reverse geocoding: POI/landmark and map-label lookups run in
-    // parallel instead of waiting on each other. Address is a final fallback.
-    var geoportFastReverseController = null;
-
-    window.geoportScheduleReverseGeocode = function(lat,lng){
-        var a=Number(lat), b=Number(lng);
-        if(!Number.isFinite(a)||!Number.isFinite(b)) return;
-
-        if(geoportFastReverseController){
-            try{geoportFastReverseController.abort();}catch(e){}
-        }
-
-        var controller=new AbortController();
-        geoportFastReverseController=controller;
-        clearTimeout(window.geoportReverseGeocodeTimer);
-
-        window.geoportReverseGeocodeTimer=setTimeout(async function(){
-            var url='https://nominatim.openstreetmap.org/reverse?format=jsonv2'
-                +'&lat='+encodeURIComponent(a)
-                +'&lon='+encodeURIComponent(b)
-                +'&zoom=18&addressdetails=1&namedetails=1'
-                +'&accept-language=zh-TW,zh;q=0.9,en;q=0.7';
-
-            try{
-                var data=await fetchJsonWithTimeout(url,5000);
-                if(controller.signal.aborted || !data) return;
-
-                var finalName='';
-                if(typeof geoportFormatReverseName==='function'){
-                    finalName=geoportFormatReverseName(data);
-                }
-                finalName=finalName || String(data.display_name||'').trim();
-                finalName=finalName || '未辨識地點';
-
-                if(typeof geoportSetCurrentPlaceName==='function'){
-                    geoportSetCurrentPlaceName(finalName,a,b);
-                }
-                if(typeof window.dportUpdateRecentPlaceName==='function'){
-                    window.dportUpdateRecentPlaceName(a,b,finalName);
-                }
-
-                var status=document.getElementById('geoport-status');
-                if(status && /正在辨識地點/.test(status.textContent||'')){
-                    status.textContent='已辨識地點';
-                }
-            }catch(e){
-                if(!controller.signal.aborted){
-                    console.debug('快速反向地理編碼略過一次:',e);
-                }
-            }
-        },80);
-    };
-
-    // Save immediately. Reverse-geocoding and the optional name prompt run
-    // asynchronously after the Favorite has already been persisted.
-    window.geoportSaveFavorite = function(){
-        var c=geoportParseCoordinates(document.getElementById('coordinates').value);
-        if(!c){dportUiAlert('請輸入緯度與經度。');return;}
-
-        var current=geoportGetCurrentPlaceNameForCoordinates(c.lat,c.lng);
-        var placeholder='自動辨識中…';
-        var suggested=current || placeholder;
-
-        var items=geoportGetFavorites().filter(function(x){
-            return !(x.lat===c.lat && x.lng===c.lng);
-        });
-
-        // Persist first, so clicking「儲存最愛位置」never has to wait for
-        // reverse geocoding.
-        var item={name:suggested,lat:c.lat,lng:c.lng};
-        items.unshift(item);
-        geoportSetFavorites(items);
-        geoportRenderFavorites();
-
-        if(typeof displayToast==='function'){
-            displayToast('已加入我的最愛');
-        }
-
-        // Keep the manual naming feature, but do not block the save on it.
-        Promise.resolve()
-            .then(function(){
-                return dportUiPrompt(
-                    '請輸入此地點名稱（可稍後再命名）',
-                    suggested
-                );
-            })
-            .then(function(name){
-                if(name===null) return;
-                var cleanName=String(name).trim();
-                if(!cleanName){
-                    dportUiAlert('地點名稱不可空白。');
-                    return;
-                }
-
-                var latest=geoportGetFavorites();
-                var match=latest.find(function(x){
-                    return x.lat===c.lat && x.lng===c.lng;
-                });
-                if(!match) return;
-
-                match.name=cleanName;
-                geoportSetFavorites(latest);
-                geoportRenderFavorites();
-
-                // A custom name supplied by the user is final.
-                match._dportManualName=true;
-                geoportSetFavorites(latest);
-            })
-            .catch(function(e){
-                console.debug('最愛位置命名視窗略過一次:',e);
-            });
-
-        // Background name recognition. It can finish whenever it does; the
-        // Favorite already exists and the UI never waits for this request.
-        (async function(){
-            if(current) return;
-
-            var resolved='';
-            try{
-                if(typeof geoportResolvePlaceNameForCoordinates==='function'){
-                    resolved=await geoportResolvePlaceNameForCoordinates(c.lat,c.lng);
-                }
-            }catch(e){}
-
-            if(!resolved) return;
-
-            var latest=geoportGetFavorites();
-            var match=latest.find(function(x){
-                return x.lat===c.lat && x.lng===c.lng;
-            });
-            if(!match) return;
-
-            // Never overwrite a name the user has already entered.
-            if(match.name===placeholder && !match._dportManualName){
-                match.name=resolved;
-                geoportSetFavorites(latest);
-                geoportRenderFavorites();
-            }
-        })();
-    };
-
-    // One-click clear: remove all Favorite locations at once.
-    window.geoportClearFavorites = function(){
-        localStorage.removeItem('geoportFavorites');
-        geoportRenderFavorites();
-        if(typeof displayToast==='function'){
-            displayToast('我的最愛位置已全部刪除');
-        }
-    };
-
-    // Render Favorite cards without coordinates. Keep the list to six visible
-    // cards, with a scrollbar only when there are more.
-    window.geoportRenderFavorites = function(){
-        var box=document.getElementById('geoport-favorites');
-        if(!box) return;
-
-        var items=geoportGetFavorites();
-        box.innerHTML='';
-
-        var count=document.getElementById('geoport-fav-count');
-        if(count) count.textContent=items.length+'/20';
-
-        if(!items.length){
-            box.innerHTML='<div class="geoport-fav-empty">還沒有儲存的位置</div>';
-            return;
-        }
-
-        items.forEach(function(item,i){
-            var card=document.createElement('div');
-            card.className='geoport-fav-card';
-
-            var open=document.createElement('button');
-            open.type='button';
-            open.className='geoport-fav-open';
-            open.title='前往 '+String(item.name || '未命名位置');
-
-            var name=document.createElement('span');
-            const favNameText = String(item.name || '未命名位置');
-            name.className='geoport-fav-name';
-            if (favNameText.length > 16) name.classList.add('long');
-            if (favNameText.length > 28) name.classList.add('xlong');
-            name.textContent=favNameText;
-
-            open.appendChild(name);
-            open.onclick=function(){
-                geoportSetMapOnlyCoordinates(item.lat,item.lng);
-                geoportMoveActiveMarker(item.lat,item.lng,15);
-                geoportStatus('已載入最愛位置',false);
-            };
-
-            var del=document.createElement('button');
-            del.type='button';
-            del.className='geoport-fav-delete';
-            del.textContent='×';
-            del.title='刪除 '+String(item.name || '未命名位置');
-            del.setAttribute('aria-label','刪除 '+String(item.name || '未命名位置'));
-            del.onclick=function(event){
-                event.preventDefault();
-                event.stopPropagation();
-
-                var next=geoportGetFavorites();
-                next.splice(i,1);
-                geoportSetFavorites(next);
-                geoportRenderFavorites();
-            };
-
-            card.appendChild(open);
-            card.appendChild(del);
-            box.appendChild(card);
-        });
-    };
-})();
-</script>
-
-<style>
-/* One consistent DPort "delete/clear" appearance. */
-#geoport-clear-coordinates,
-.geoport-recent-delete-selected,
-.geoport-recent-clear,
-.geoport-fav-clear-all{
-    background:rgba(143,59,59,.58) !important;
-    border:1px solid rgba(223,158,158,.72) !important;
-    color:#f6eded !important;
-    box-shadow:none !important;
-}
-#geoport-clear-coordinates:hover,
-.geoport-recent-delete-selected:hover,
-.geoport-recent-clear:hover,
-.geoport-fav-clear-all:hover{
-    background:rgba(157,67,67,.70) !important;
-    border-color:rgba(239,178,178,.82) !important;
-    color:#ffffff !important;
-}
-
-/* Favorite X: small, top-right, semi-transparent red, and outside the main
-   text flow so the place name never runs beneath the button. */
-.geoport-fav-card{
-    position:relative !important;
-}
-.geoport-fav-open{
-    padding-right:26px !important;
-}
-.geoport-fav-delete{
-    position:absolute !important;
-    top:6px !important;
-    right:6px !important;
-    width:16px !important;
-    min-width:16px !important;
-    max-width:16px !important;
-    height:16px !important;
-    min-height:16px !important;
-    max-height:16px !important;
-    padding:0 !important;
-    margin:0 !important;
-    border-radius:5px !important;
-    background:rgba(143,59,59,.58) !important;
-    border:1px solid rgba(223,158,158,.68) !important;
-    color:#f6eded !important;
-    font-size:10px !important;
-    font-weight:700 !important;
-    line-height:14px !important;
-    text-align:center !important;
-    box-shadow:none !important;
-    opacity:.92 !important;
-    z-index:5 !important;
-}
-.geoport-fav-delete:hover{
-    background:rgba(157,67,67,.72) !important;
-    border-color:rgba(239,178,178,.82) !important;
-    color:#ffffff !important;
-    opacity:1 !important;
-}
-
-/* Long names keep two lines while reserving just enough space for the tiny X. */
-.geoport-fav-name.long{
-    font-size:14px !important;
-    line-height:1.16 !important;
-    white-space:normal !important;
-    display:-webkit-box !important;
-    -webkit-box-orient:vertical !important;
-    -webkit-line-clamp:2 !important;
-    overflow:hidden !important;
-    text-overflow:clip !important;
-    word-break:break-word !important;
-}
-.geoport-fav-name.xlong{
-    font-size:12.5px !important;
-    line-height:1.1 !important;
-}
-
-/* The Favorite header action remains exactly「清除」. */
-.geoport-fav-clear-all{
-    min-width:58px !important;
-    min-height:34px !important;
-    padding:5px 12px !important;
-    border-radius:9px !important;
-}
-</style>
-
-<style id="dport-exact-copy-button-appearance">
-/* Favorite X: visible box is 5x5, placed in the top-right corner. */
-.geoport-fav-card{position:relative !important;}
-.geoport-fav-open{padding-right:10px !important;}
-.geoport-fav-name.long,
-.geoport-fav-name.xlong{
-    padding-right:0 !important;
-}
-.geoport-fav-delete{
-    position:absolute !important;
-    top:5px !important;
-    right:5px !important;
-    width:5px !important;
-    min-width:5px !important;
-    max-width:5px !important;
-    height:5px !important;
-    min-height:5px !important;
-    max-height:5px !important;
-    margin:0 !important;
-    padding:0 !important;
-    border-radius:2px !important;
-    background:rgba(143,59,59,.58) !important;
-    border:1px solid rgba(223,158,158,.68) !important;
-    color:#f6eded !important;
-    font-size:5px !important;
-    font-weight:700 !important;
-    line-height:4px !important;
-    text-align:center !important;
-    box-shadow:none !important;
-    z-index:10 !important;
-    overflow:visible !important;
-}
-
-/* Keep the rest of the Favorite card visually unchanged. */
-.geoport-fav-open:hover{
-    background:#36415a !important;
-    border-color:#9ab3ff !important;
-}
-</style>
-
-<script id="dport-copy-button-style-sync">
-(function(){
-    function copyRenderedButtonAppearance(source, target){
-        if(!source || !target) return;
-        var cs=getComputedStyle(source);
-        var props=[
-            'appearance','background','background-color','background-image',
-            'border','border-width','border-style','border-color','border-radius',
-            'box-shadow','color','font','font-family','font-size','font-weight',
-            'line-height','letter-spacing','text-align','text-transform',
-            'padding','padding-top','padding-right','padding-bottom','padding-left',
-            'min-width','min-height','height','outline','text-shadow','opacity'
-        ];
-        props.forEach(function(p){
-            var v=cs.getPropertyValue(p);
-            if(v) target.style.setProperty(p,v,'important');
-        });
-    }
-
-    function sync(){
-        var source=document.getElementById('geoport-copy-coordinates');
-        if(!source) return;
-        var ids=[
-            'geoport-clear-coordinates',
-            'geoport-recent-delete-selected'
-        ];
-        ids.forEach(function(id){
-            var target=document.getElementById(id);
-            if(target) copyRenderedButtonAppearance(source,target);
-        });
-
-        document.querySelectorAll('.geoport-recent-clear, .geoport-fav-clear-all')
-            .forEach(function(target){
-                copyRenderedButtonAppearance(source,target);
-            });
-    }
-
-    document.addEventListener('DOMContentLoaded',sync);
-    window.addEventListener('load',sync);
-    setTimeout(sync,300);
-    setTimeout(sync,1000);
-})();
-</script>
-
-<style id="dport-usb-manual-refresh-status">
-/* Lower-left toast/notification panels are removed. */
-.toast-container,
-.toast-container.show,
-body > .toast-container,
-body > div.toast-container{
-    display:none!important;
-    visibility:hidden!important;
-    pointer-events:none!important;
-}
-
-/* The single allowed notification surface is the existing green status text. */
-.dport-status,
-#dport-status,
-.geoport-status,
-#geoport-status{
-    position:relative!important;
-    z-index:3200!important;
-}
-</style>
-
-<script id="dport-usb-manual-refresh-only">
-(function(){
-    function greenStatus(message){
-        try{
-            if(typeof geoportStatus==='function'){
-                geoportStatus(String(message||''),false);
-                return true;
-            }
-        }catch(e){}
-        return false;
-    }
-
-
-    function deviceListHasPhone(){
-        var select=document.getElementById('device');
-        if(!select) return false;
-
-        var options=Array.prototype.slice.call(select.options||[]);
-        return options.some(function(option){
-            var value=String(option.value||'').trim();
-            var label=String(option.textContent||'').trim();
-
-            if(!value) return false;
-            if(/請選擇|選擇裝置|找不到裝置|沒有裝置|無裝置/i.test(label)) return false;
-
-            // A real iPhone/USB device option normally contains USB / iPhone / iOS.
-            // Keep this permissive so it also works with custom device labels.
-            return true;
-        });
-    }
-
-    function clearStaleDisconnectStatus(){
-        if(!deviceListHasPhone()) return;
-
-        var stalePhrases=[
-            '裝置已中斷連接，重新插入 USB 後會自動出現在裝置清單。',
-            '裝置已中斷連接'
-        ];
-
-        var nodes=document.querySelectorAll('body *');
-        for(var i=0;i<nodes.length;i++){
-            var el=nodes[i];
-            if(!el || el.children.length>0) continue;
-
-            var text=String(el.textContent||'').trim();
-            if(!text) continue;
-
-            var stale=false;
-            for(var j=0;j<stalePhrases.length;j++){
-                if(text===stalePhrases[j] || text.indexOf(stalePhrases[j])>=0){
-                    stale=true;
-                    break;
-                }
-            }
-
-            if(!stale) continue;
-
-            try{
-                el.textContent='';
-                el.setAttribute('aria-hidden','true');
-                el.style.setProperty('display','none','important');
-            }catch(e){}
-        }
-    }
-
-    function watchDeviceEnumeration(){
-        var select=document.getElementById('device');
-
-        if(select && !select.dataset.dportStatusReconnectWatch){
-            select.dataset.dportStatusReconnectWatch='1';
-
-            var observer=new MutationObserver(function(){
-                if(deviceListHasPhone()){
-                    clearStaleDisconnectStatus();
-                }
-            });
-
-            observer.observe(select,{childList:true,subtree:true});
-        }
-
-        if(!window.__dportReconnectStatusObserver && document.body && window.MutationObserver){
-            var bodyObserver=new MutationObserver(function(){
-                clearStaleDisconnectStatus();
-            });
-
-            bodyObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
-            window.__dportReconnectStatusObserver=bodyObserver;
-        }
-
-        clearStaleDisconnectStatus();
-    }
-
-    function enableManualRefresh(){
-        var btn=document.getElementById('refresh-device');
-        if(!btn) return;
-        // The user controls Refresh. Never leave it disabled merely because
-        // a previous USB device was disconnected.
-        btn.disabled=false;
-        btn.removeAttribute('aria-disabled');
-    }
-
-    function wrapUsbEvent(name,message){
-        try{
-            if(typeof window[name]!=='function') return;
-            if(window[name].__dportManualRefreshOnly) return;
-
-            var original=window[name];
-            var wrapped=function(){
-                var result=original.apply(this,arguments);
-
-                // Give Windows/usbmux a moment to settle, but never trigger
-                // Refresh automatically.
-                if(name==='handleUsbCableConnected'){
-                    setTimeout(function(){
-                        enableManualRefresh();
-                        clearStaleDisconnectReminder();
-                        if(!isActuallyConnected()){
-                            greenStatus(message);
-                        }
-                    },250);
-                }else{
-                    setTimeout(function(){
-                        enableManualRefresh();
-                    },100);
-                }
-                return result;
-            };
-
-            wrapped.__dportManualRefreshOnly=true;
-            wrapped.__dportManualRefreshOriginal=original;
-            window[name]=wrapped;
-        }catch(e){}
-    }
-
-
-    function isActuallyConnected(){
-        try{
-            if(typeof isDeviceConnected!=='undefined' && isDeviceConnected===true) return true;
-        }catch(e){}
-
-        var disconnect=document.getElementById('disconnect');
-        if(disconnect && disconnect.disabled===false) return true;
-
-        var connect=document.getElementById('connect');
-        if(connect && connect.dataset && connect.dataset.connected==='true') return true;
-
-        return false;
-    }
-
-    function clearStaleDisconnectReminder(){
-        if(!isActuallyConnected()) return;
-
-        var exact='裝置已中斷連接，重新插入 USB 後會自動出現在裝置清單。';
-        var nodes=document.querySelectorAll('body *');
-
-        for(var i=0;i<nodes.length;i++){
-            var el=nodes[i];
-            var txt=String(el.textContent||'').trim();
-            if(txt!==exact) continue;
-
-            try{
-                el.textContent='';
-                el.setAttribute('aria-hidden','true');
-                el.style.setProperty('display','none','important');
-            }catch(e){}
-        }
-    }
-
-    function watchConnectionState(){
-        clearStaleDisconnectReminder();
-
-        if(window.__dportUsbStatusObserver) return;
-        if(!window.MutationObserver) return;
-
-        var observer=new MutationObserver(function(){
-            clearStaleDisconnectReminder();
-        });
-
-        observer.observe(document.body,{childList:true,subtree:true,characterData:true});
-        window.__dportUsbStatusObserver=observer;
-    }
-
-    function redirectLegacyToast(){
-        if(typeof window.displayToast!=='function') return;
-        if(window.displayToast.__dportStatusOnlyFinal) return;
-
-        window.displayToast=function(message){
-            var msg=String(message==null?'':message).trim();
-            if(!msg) return;
-            greenStatus(msg);
-        };
-        window.displayToast.__dportStatusOnlyFinal=true;
-    }
-
-    function boot(){
-        enableManualRefresh();
-        redirectLegacyToast();
-        watchConnectionState();
-        clearStaleDisconnectReminder();
-
-        // Only observe native USB callbacks. No polling and no automatic
-        // refresh are performed here.
-        wrapUsbEvent(
-            'handleUsbCableConnected',
-            'USB 已重新插入，請按「重新整理」偵測 iPhone'
+            'USB 已重新插入，請按「重新整理」偵測 Apple 裝置'
         );
         wrapUsbEvent('handleUsbCableRemoved','USB 已拔除');
 
@@ -17004,7 +15739,7 @@ body > div.toast-container{
         // refresh are performed here.
         wrapUsbEvent(
             'handleUsbCableConnected',
-            'USB 已重新插入，請按「重新整理」偵測 iPhone'
+            'USB 已重新插入，請按「重新整理」偵測 Apple 裝置'
         );
         wrapUsbEvent('handleUsbCableRemoved','USB 已拔除');
 
@@ -18119,7 +16854,1122 @@ body > div.toast-container{
         // refresh are performed here.
         wrapUsbEvent(
             'handleUsbCableConnected',
-            'USB 已重新插入，請按「重新整理」偵測 iPhone'
+            'USB 已重新插入，請按「重新整理」偵測 Apple 裝置'
+        );
+        wrapUsbEvent('handleUsbCableRemoved','USB 已拔除');
+
+        // Keep Refresh available after startup too.
+        [500,1000,2000,3000,5000].forEach(function(ms){
+            setTimeout(function(){
+                enableManualRefresh();
+                redirectLegacyToast();
+                clearStaleDisconnectReminder();
+            },ms);
+        });
+    }
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',boot,{once:true});
+    }else{
+        boot();
+    }
+
+    window.addEventListener('load',function(){
+        boot();
+        watchConnectionState();
+        clearStaleDisconnectReminder();
+        [500,1200,2500].forEach(function(ms){
+            setTimeout(clearStaleDisconnectReminder,ms);
+        });
+    });
+})();
+</script>
+
+<style id="dport-unified-status-final">
+.toast-container,
+.toast-container.show,
+body > .toast-container,
+body > div.toast-container{
+    display:none!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+}
+
+#geoport-status,
+.geoport-status,
+#dport-status,
+.dport-status{
+    position:relative!important;
+    z-index:3200!important;
+    min-height:1.2em!important;
+    overflow:hidden!important;
+    transition:opacity .18s ease!important;
+}
+</style>
+
+<script id="dport-unified-status-final-script">
+(function(){
+    var hideTimer=null;
+    var originalStatus=null;
+    var installing=false;
+
+    function statusElement(){
+        return document.getElementById('geoport-status') ||
+               document.getElementById('dport-status') ||
+               document.querySelector('.geoport-status,.dport-status');
+    }
+
+    function clearStatusVisual(){
+        var el=statusElement();
+        if(!el) return;
+        try{
+            el.textContent='';
+            el.style.removeProperty('display');
+            el.style.removeProperty('opacity');
+        }catch(e){}
+    }
+
+    function armHide(message){
+        if(hideTimer) clearTimeout(hideTimer);
+        var msg=String(message||'').trim();
+        var delay=4500;
+        if(/請按「重新整理」|USB/.test(msg)) delay=8000;
+        if(/定位成功|已辨識地點/.test(msg)) delay=4000;
+
+        hideTimer=setTimeout(function(){
+            var el=statusElement();
+            if(!el) return;
+            try{
+                el.style.setProperty('opacity','0','important');
+                setTimeout(function(){
+                    var current=statusElement();
+                    if(current && String(current.textContent||'').trim()===msg){
+                        current.textContent='';
+                        current.style.removeProperty('opacity');
+                    }
+                },200);
+            }catch(e){}
+        },delay);
+    }
+
+    function install(){
+        if(installing) return;
+        installing=true;
+
+        try{
+            if(typeof window.geoportStatus==='function' &&
+               !window.geoportStatus.__dportUnifiedStatusFinal){
+
+                originalStatus=window.geoportStatus;
+
+                var wrapped=function(message){
+                    var args=Array.prototype.slice.call(arguments);
+                    var msg=String(message==null?'':message).trim();
+
+                    if(hideTimer) clearTimeout(hideTimer);
+
+                    if(!msg){
+                        clearStatusVisual();
+                        return;
+                    }
+
+                    var result;
+                    try{
+                        result=originalStatus.apply(this,args);
+                    }catch(e){}
+
+                    // Always collapse the status area to one text message.
+                    var el=statusElement();
+                    if(el){
+                        try{
+                            el.textContent=msg;
+                            el.style.setProperty('opacity','1','important');
+                            el.style.removeProperty('display');
+                        }catch(e){}
+                    }
+
+                    armHide(msg);
+                    return result;
+                };
+
+                wrapped.__dportUnifiedStatusFinal=true;
+                wrapped.__dportUnifiedStatusOriginal=originalStatus;
+                window.geoportStatus=wrapped;
+            }
+        }catch(e){
+            // Leave the original implementation untouched if the page is
+            // still initializing.
+        }
+
+        try{
+            if(typeof window.displayToast==='function' &&
+               !window.displayToast.__dportStatusOnlyFinal){
+
+                window.displayToast=function(message){
+                    var msg=String(message==null?'':message).trim();
+                    if(!msg) return;
+                    if(typeof window.geoportStatus==='function'){
+                        window.geoportStatus(msg,false);
+                    }
+                };
+
+                window.displayToast.__dportStatusOnlyFinal=true;
+            }
+        }catch(e){}
+
+        installing=false;
+    }
+
+    function updateDeviceTooltip(){
+        var select=document.getElementById('device');
+        if(!select) return false;
+
+        var option=select.options && select.selectedIndex>=0 ?
+            select.options[select.selectedIndex] : null;
+
+        var label=option ? String(option.textContent||'').trim() : '';
+        if(label && !/請選擇|選擇裝置|沒有裝置|找不到裝置|無裝置/i.test(label)){
+            select.title=label;
+        }else{
+            select.removeAttribute('title');
+        }
+        return true;
+    }
+
+    function watchDeviceList(){
+        var select=document.getElementById('device');
+        if(!select || select.dataset.dportTooltipWatch==='1') return;
+
+        select.dataset.dportTooltipWatch='1';
+        updateDeviceTooltip();
+
+        select.addEventListener('change',updateDeviceTooltip);
+
+        if(window.MutationObserver){
+            var observer=new MutationObserver(updateDeviceTooltip);
+            observer.observe(select,{childList:true,subtree:true});
+        }
+    }
+
+    function boot(){
+        install();
+        watchDeviceList();
+        var el=statusElement();
+        if(el){
+            el.style.setProperty('z-index','3200','important');
+        }
+    }
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',boot,{once:true});
+    }else{
+        boot();
+    }
+
+    window.addEventListener('load',boot);
+    [100,500,1200,2500,5000].forEach(function(ms){
+        setTimeout(boot,ms);
+    });
+})();
+</script>
+
+<style id="dport-location-gpx-interaction-final">
+/* Long place-name row: never push the sidebar wider than its grid column. */
+.dport-location-name,
+.geoport-location-name,
+.geoport-place-name,
+#geoport-place-name{
+    display:block!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+    overflow:hidden!important;
+    white-space:nowrap!important;
+    text-overflow:ellipsis!important;
+}
+
+.dport-location-name *,
+.geoport-location-name *,
+.geoport-place-name *,
+#geoport-place-name *{
+    max-width:100%!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+}
+
+.dport-location-name,
+.geoport-location-name,
+.geoport-place-name,
+#geoport-place-name{
+    flex:1 1 auto!important;
+}
+
+/* GPX speed selector gets its own interaction boundary. */
+.dport-gpx-speed-wrap,
+.dport-gpx-speed-select,
+.dport-gpx-speed-wrap select{
+    touch-action:manipulation!important;
+    user-select:none!important;
+}
+
+.dport-gpx-speed-wrap{
+    position:relative!important;
+    z-index:4000!important;
+}
+</style>
+
+<script id="dport-location-gpx-interaction-final-script">
+(function(){
+    function findPlaceNameElements(){
+        var all=document.querySelectorAll('body *');
+        var found=[];
+
+        for(var i=0;i<all.length;i++){
+            var el=all[i];
+            if(!el || el.children.length>3) continue;
+
+            var text=String(el.textContent||'').replace(/\s+/g,' ').trim();
+            if(text.length<8 || text.length>220) continue;
+
+            if(/^地點\s*[:：]/.test(text)){
+                found.push(el);
+            }
+        }
+        return found;
+    }
+
+    function constrainPlaceName(){
+        var found=findPlaceNameElements();
+
+        found.forEach(function(el){
+            try{
+                el.classList.add('dport-location-name');
+                el.title=String(el.textContent||'').replace(/\s+/g,' ').trim();
+
+                var parent=el.parentElement;
+                for(var level=0; parent && level<4; level++,parent=parent.parentElement){
+                    parent.style.setProperty('min-width','0','important');
+                    parent.style.setProperty('max-width','100%','important');
+                    parent.style.setProperty('box-sizing','border-box','important');
+                    parent.style.setProperty('overflow','hidden','important');
+                }
+            }catch(e){}
+        });
+    }
+
+    function protectGpxControls(){
+        var wraps=document.querySelectorAll(
+            '.dport-gpx-speed-wrap, .dport-gpx-speed-select, .dport-gpx-speed-wrap select'
+        );
+
+        wraps.forEach(function(el){
+            if(el.dataset.dportLeafletShield==='1') return;
+            el.dataset.dportLeafletShield='1';
+
+            [
+                'mousedown','mouseup','click','dblclick',
+                'pointerdown','pointerup',
+                'touchstart','touchend',
+                'wheel','contextmenu'
+            ].forEach(function(type){
+                el.addEventListener(type,function(event){
+                    event.stopPropagation();
+                },false);
+            });
+        });
+    }
+
+    function apply(){
+        constrainPlaceName();
+        protectGpxControls();
+    }
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',apply,{once:true});
+    }else{
+        apply();
+    }
+
+    window.addEventListener('load',apply);
+    window.addEventListener('resize',apply);
+
+    if(window.MutationObserver){
+        var observer=new MutationObserver(function(){
+            apply();
+        });
+        observer.observe(document.body,{childList:true,subtree:true});
+    }
+
+    [200,700,1500,3000].forEach(function(ms){
+        setTimeout(apply,ms);
+    });
+})();
+</script>
+
+
+<style>
+/* DPort 6.9.0 Favorite palette: match the main blue/red controls and keep
+   contrast strong in dark mode. */
+.geoport-favorites-title{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+}
+.geoport-favorites-actions{
+    display:flex;
+    align-items:center;
+    gap:7px;
+}
+.geoport-fav-clear-all{
+    min-height:34px;
+    padding:5px 11px !important;
+    border-radius:9px !important;
+    font-size:13px !important;
+    font-weight:700 !important;
+    color:#fff !important;
+    background:#a33b3b !important;
+    border:1px solid #ffaaaa !important;
+    cursor:pointer;
+}
+.geoport-fav-clear-all:hover{
+    filter:brightness(1.08);
+}
+.geoport-fav-list{
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    grid-template-rows:repeat(3,64px);
+    grid-auto-rows:64px;
+    gap:8px;
+    padding:10px !important;
+    border:1px solid #667086 !important;
+    border-radius:12px;
+    max-height:228px !important; /* 3 rows = 6 visible Favorite buttons */
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    scrollbar-width:thin;
+}
+.geoport-fav-card{
+    position:relative;
+    min-width:0;
+    min-height:64px;
+}
+.geoport-fav-open{
+    width:100%;
+    height:64px;
+    min-height:64px !important;
+    border:1px solid #9ab3ff !important;
+    border-radius:10px !important;
+    background:#2f3542 !important;
+    color:#ffffff !important;
+    display:flex;
+    align-items:center;
+    justify-content:flex-start;
+    text-align:left;
+    padding:8px 35px 8px 12px !important;
+    overflow:hidden;
+    box-shadow:none !important;
+}
+.geoport-fav-open:hover{
+    background:#36415a !important;
+    border-color:#9ab3ff !important;
+}
+.geoport-fav-open:focus-visible{
+    outline:2px solid #9ab3ff !important;
+    outline-offset:1px;
+}
+.geoport-fav-name{
+    width:100%;
+    font-size:16px !important;
+    font-weight:700 !important;
+    line-height:1.2;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    color:#fff !important;
+}
+.geoport-fav-name.long{
+    font-size:14px !important;
+    line-height:1.18;
+    white-space:normal;
+    overflow:hidden;
+    text-overflow:clip;
+    display:-webkit-box;
+    -webkit-box-orient:vertical;
+    -webkit-line-clamp:2;
+    word-break:break-word;
+}
+.geoport-fav-name.xlong{
+    font-size:13px !important;
+    line-height:1.15;
+}
+.geoport-fav-detail{display:none !important;}
+.geoport-fav-delete{
+    position:absolute;
+    top:50%;
+    right:6px;
+    transform:translateY(-50%);
+    width:22px;
+    height:22px;
+    padding:0 !important;
+    border:1px solid #69758b !important;
+    border-radius:6px !important;
+    background:rgba(86,96,116,.38) !important;
+    color:#c8d0df !important;
+    font-size:14px !important;
+    line-height:20px !important;
+    font-weight:700 !important;
+    cursor:pointer;
+    opacity:.86;
+}
+.geoport-fav-delete:hover{
+    border-color:#a7b1c5 !important;
+    background:rgba(110,120,142,.58) !important;
+    color:#ffffff !important;
+    opacity:1;
+}
+.geoport-fav-empty{
+    grid-column:1 / -1;
+    padding:16px 10px;
+    text-align:center;
+    opacity:.76;
+    font-size:14px;
+}
+.geoport-fav-count{
+    font-size:13px !important;
+    font-weight:600 !important;
+    opacity:.7;
+    margin-left:5px;
+}
+.geoport-fav-resolving{
+    opacity:.72;
+}
+@media (max-width:700px){
+    .geoport-fav-list{
+        grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+        grid-auto-rows:60px;
+        max-height:216px !important;
+    }
+    .geoport-fav-card,.geoport-fav-open{
+        height:60px;
+        min-height:60px !important;
+    }
+    .geoport-fav-name{font-size:15px !important;}
+}
+</style>
+
+<script>
+(function(){
+    // Faster reverse geocoding: POI/landmark and map-label lookups run in
+    // parallel instead of waiting on each other. Address is a final fallback.
+    var geoportFastReverseController = null;
+
+    window.geoportScheduleReverseGeocode = function(lat,lng){
+        var a=Number(lat), b=Number(lng);
+        if(!Number.isFinite(a)||!Number.isFinite(b)) return;
+
+        if(geoportFastReverseController){
+            try{geoportFastReverseController.abort();}catch(e){}
+        }
+
+        var controller=new AbortController();
+        geoportFastReverseController=controller;
+        clearTimeout(window.geoportReverseGeocodeTimer);
+
+        window.geoportReverseGeocodeTimer=setTimeout(async function(){
+            var url='https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+                +'&lat='+encodeURIComponent(a)
+                +'&lon='+encodeURIComponent(b)
+                +'&zoom=18&addressdetails=1&namedetails=1'
+                +'&accept-language=zh-TW,zh;q=0.9,en;q=0.7';
+
+            try{
+                var data=await fetchJsonWithTimeout(url,5000);
+                if(controller.signal.aborted || !data) return;
+
+                var finalName='';
+                if(typeof geoportFormatReverseName==='function'){
+                    finalName=geoportFormatReverseName(data);
+                }
+                finalName=finalName || String(data.display_name||'').trim();
+                finalName=finalName || '未辨識地點';
+
+                if(typeof geoportSetCurrentPlaceName==='function'){
+                    geoportSetCurrentPlaceName(finalName,a,b);
+                }
+                if(typeof window.dportUpdateRecentPlaceName==='function'){
+                    window.dportUpdateRecentPlaceName(a,b,finalName);
+                }
+
+                var status=document.getElementById('geoport-status');
+                if(status && /正在辨識地點/.test(status.textContent||'')){
+                    status.textContent='已辨識地點';
+                }
+            }catch(e){
+                if(!controller.signal.aborted){
+                    console.debug('快速反向地理編碼略過一次:',e);
+                }
+            }
+        },80);
+    };
+
+    // Save immediately. Reverse-geocoding and the optional name prompt run
+    // asynchronously after the Favorite has already been persisted.
+    window.geoportSaveFavorite = function(){
+        var c=geoportParseCoordinates(document.getElementById('coordinates').value);
+        if(!c){dportUiAlert('請輸入緯度與經度。');return;}
+
+        var current=geoportGetCurrentPlaceNameForCoordinates(c.lat,c.lng);
+        var placeholder='自動辨識中…';
+        var suggested=current || placeholder;
+
+        var items=geoportGetFavorites().filter(function(x){
+            return !(x.lat===c.lat && x.lng===c.lng);
+        });
+
+        // Persist first, so clicking「儲存最愛位置」never has to wait for
+        // reverse geocoding.
+        var item={name:suggested,lat:c.lat,lng:c.lng};
+        items.unshift(item);
+        geoportSetFavorites(items);
+        geoportRenderFavorites();
+
+        if(typeof displayToast==='function'){
+            displayToast('已加入我的最愛');
+        }
+
+        // Keep the manual naming feature, but do not block the save on it.
+        Promise.resolve()
+            .then(function(){
+                return dportUiPrompt(
+                    '請輸入此地點名稱（可稍後再命名）',
+                    suggested
+                );
+            })
+            .then(function(name){
+                if(name===null) return;
+                var cleanName=String(name).trim();
+                if(!cleanName){
+                    dportUiAlert('地點名稱不可空白。');
+                    return;
+                }
+
+                var latest=geoportGetFavorites();
+                var match=latest.find(function(x){
+                    return x.lat===c.lat && x.lng===c.lng;
+                });
+                if(!match) return;
+
+                match.name=cleanName;
+                geoportSetFavorites(latest);
+                geoportRenderFavorites();
+
+                // A custom name supplied by the user is final.
+                match._dportManualName=true;
+                geoportSetFavorites(latest);
+            })
+            .catch(function(e){
+                console.debug('最愛位置命名視窗略過一次:',e);
+            });
+
+        // Background name recognition. It can finish whenever it does; the
+        // Favorite already exists and the UI never waits for this request.
+        (async function(){
+            if(current) return;
+
+            var resolved='';
+            try{
+                if(typeof geoportResolvePlaceNameForCoordinates==='function'){
+                    resolved=await geoportResolvePlaceNameForCoordinates(c.lat,c.lng);
+                }
+            }catch(e){}
+
+            if(!resolved) return;
+
+            var latest=geoportGetFavorites();
+            var match=latest.find(function(x){
+                return x.lat===c.lat && x.lng===c.lng;
+            });
+            if(!match) return;
+
+            // Never overwrite a name the user has already entered.
+            if(match.name===placeholder && !match._dportManualName){
+                match.name=resolved;
+                geoportSetFavorites(latest);
+                geoportRenderFavorites();
+            }
+        })();
+    };
+
+    // One-click clear: remove all Favorite locations at once.
+    window.geoportClearFavorites = function(){
+        localStorage.removeItem('geoportFavorites');
+        geoportRenderFavorites();
+        if(typeof displayToast==='function'){
+            displayToast('我的最愛位置已全部刪除');
+        }
+    };
+
+    // Render Favorite cards without coordinates. Keep the list to six visible
+    // cards, with a scrollbar only when there are more.
+    window.geoportRenderFavorites = function(){
+        var box=document.getElementById('geoport-favorites');
+        if(!box) return;
+
+        var items=geoportGetFavorites();
+        box.innerHTML='';
+
+        var count=document.getElementById('geoport-fav-count');
+        if(count) count.textContent=items.length+'/20';
+
+        if(!items.length){
+            box.innerHTML='<div class="geoport-fav-empty">還沒有儲存的位置</div>';
+            return;
+        }
+
+        items.forEach(function(item,i){
+            var card=document.createElement('div');
+            card.className='geoport-fav-card';
+
+            var open=document.createElement('button');
+            open.type='button';
+            open.className='geoport-fav-open';
+            open.title='前往 '+String(item.name || '未命名位置');
+
+            var name=document.createElement('span');
+            const favNameText = String(item.name || '未命名位置');
+            name.className='geoport-fav-name';
+            if (favNameText.length > 16) name.classList.add('long');
+            if (favNameText.length > 28) name.classList.add('xlong');
+            name.textContent=favNameText;
+
+            open.appendChild(name);
+            open.onclick=function(){
+                geoportSetMapOnlyCoordinates(item.lat,item.lng);
+                geoportMoveActiveMarker(item.lat,item.lng,15);
+                geoportStatus('已載入最愛位置',false);
+            };
+
+            var del=document.createElement('button');
+            del.type='button';
+            del.className='geoport-fav-delete';
+            del.textContent='×';
+            del.title='刪除 '+String(item.name || '未命名位置');
+            del.setAttribute('aria-label','刪除 '+String(item.name || '未命名位置'));
+            del.onclick=function(event){
+                event.preventDefault();
+                event.stopPropagation();
+
+                var next=geoportGetFavorites();
+                next.splice(i,1);
+                geoportSetFavorites(next);
+                geoportRenderFavorites();
+            };
+
+            card.appendChild(open);
+            card.appendChild(del);
+            box.appendChild(card);
+        });
+    };
+})();
+</script>
+
+<style>
+/* One consistent DPort "delete/clear" appearance. */
+#geoport-clear-coordinates,
+.geoport-recent-delete-selected,
+.geoport-recent-clear,
+.geoport-fav-clear-all{
+    background:rgba(143,59,59,.58) !important;
+    border:1px solid rgba(223,158,158,.72) !important;
+    color:#f6eded !important;
+    box-shadow:none !important;
+}
+#geoport-clear-coordinates:hover,
+.geoport-recent-delete-selected:hover,
+.geoport-recent-clear:hover,
+.geoport-fav-clear-all:hover{
+    background:rgba(157,67,67,.70) !important;
+    border-color:rgba(239,178,178,.82) !important;
+    color:#ffffff !important;
+}
+
+/* Favorite X: small, top-right, semi-transparent red, and outside the main
+   text flow so the place name never runs beneath the button. */
+.geoport-fav-card{
+    position:relative !important;
+}
+.geoport-fav-open{
+    padding-right:26px !important;
+}
+.geoport-fav-delete{
+    position:absolute !important;
+    top:6px !important;
+    right:6px !important;
+    width:16px !important;
+    min-width:16px !important;
+    max-width:16px !important;
+    height:16px !important;
+    min-height:16px !important;
+    max-height:16px !important;
+    padding:0 !important;
+    margin:0 !important;
+    border-radius:5px !important;
+    background:rgba(143,59,59,.58) !important;
+    border:1px solid rgba(223,158,158,.68) !important;
+    color:#f6eded !important;
+    font-size:10px !important;
+    font-weight:700 !important;
+    line-height:14px !important;
+    text-align:center !important;
+    box-shadow:none !important;
+    opacity:.92 !important;
+    z-index:5 !important;
+}
+.geoport-fav-delete:hover{
+    background:rgba(157,67,67,.72) !important;
+    border-color:rgba(239,178,178,.82) !important;
+    color:#ffffff !important;
+    opacity:1 !important;
+}
+
+/* Long names keep two lines while reserving just enough space for the tiny X. */
+.geoport-fav-name.long{
+    font-size:14px !important;
+    line-height:1.16 !important;
+    white-space:normal !important;
+    display:-webkit-box !important;
+    -webkit-box-orient:vertical !important;
+    -webkit-line-clamp:2 !important;
+    overflow:hidden !important;
+    text-overflow:clip !important;
+    word-break:break-word !important;
+}
+.geoport-fav-name.xlong{
+    font-size:12.5px !important;
+    line-height:1.1 !important;
+}
+
+/* The Favorite header action remains exactly「清除」. */
+.geoport-fav-clear-all{
+    min-width:58px !important;
+    min-height:34px !important;
+    padding:5px 12px !important;
+    border-radius:9px !important;
+}
+</style>
+
+<style id="dport-exact-copy-button-appearance">
+/* Favorite X: visible box is 5x5, placed in the top-right corner. */
+.geoport-fav-card{position:relative !important;}
+.geoport-fav-open{padding-right:10px !important;}
+.geoport-fav-name.long,
+.geoport-fav-name.xlong{
+    padding-right:0 !important;
+}
+.geoport-fav-delete{
+    position:absolute !important;
+    top:5px !important;
+    right:5px !important;
+    width:5px !important;
+    min-width:5px !important;
+    max-width:5px !important;
+    height:5px !important;
+    min-height:5px !important;
+    max-height:5px !important;
+    margin:0 !important;
+    padding:0 !important;
+    border-radius:2px !important;
+    background:rgba(143,59,59,.58) !important;
+    border:1px solid rgba(223,158,158,.68) !important;
+    color:#f6eded !important;
+    font-size:5px !important;
+    font-weight:700 !important;
+    line-height:4px !important;
+    text-align:center !important;
+    box-shadow:none !important;
+    z-index:10 !important;
+    overflow:visible !important;
+}
+
+/* Keep the rest of the Favorite card visually unchanged. */
+.geoport-fav-open:hover{
+    background:#36415a !important;
+    border-color:#9ab3ff !important;
+}
+</style>
+
+<script id="dport-copy-button-style-sync">
+(function(){
+    function copyRenderedButtonAppearance(source, target){
+        if(!source || !target) return;
+        var cs=getComputedStyle(source);
+        var props=[
+            'appearance','background','background-color','background-image',
+            'border','border-width','border-style','border-color','border-radius',
+            'box-shadow','color','font','font-family','font-size','font-weight',
+            'line-height','letter-spacing','text-align','text-transform',
+            'padding','padding-top','padding-right','padding-bottom','padding-left',
+            'min-width','min-height','height','outline','text-shadow','opacity'
+        ];
+        props.forEach(function(p){
+            var v=cs.getPropertyValue(p);
+            if(v) target.style.setProperty(p,v,'important');
+        });
+    }
+
+    function sync(){
+        var source=document.getElementById('geoport-copy-coordinates');
+        if(!source) return;
+        var ids=[
+            'geoport-clear-coordinates',
+            'geoport-recent-delete-selected'
+        ];
+        ids.forEach(function(id){
+            var target=document.getElementById(id);
+            if(target) copyRenderedButtonAppearance(source,target);
+        });
+
+        document.querySelectorAll('.geoport-recent-clear, .geoport-fav-clear-all')
+            .forEach(function(target){
+                copyRenderedButtonAppearance(source,target);
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded',sync);
+    window.addEventListener('load',sync);
+    setTimeout(sync,300);
+    setTimeout(sync,1000);
+})();
+</script>
+
+<style id="dport-usb-manual-refresh-status">
+/* Lower-left toast/notification panels are removed. */
+.toast-container,
+.toast-container.show,
+body > .toast-container,
+body > div.toast-container{
+    display:none!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+}
+
+/* The single allowed notification surface is the existing green status text. */
+.dport-status,
+#dport-status,
+.geoport-status,
+#geoport-status{
+    position:relative!important;
+    z-index:3200!important;
+}
+</style>
+
+<script id="dport-usb-manual-refresh-only">
+(function(){
+    function greenStatus(message){
+        try{
+            if(typeof geoportStatus==='function'){
+                geoportStatus(String(message||''),false);
+                return true;
+            }
+        }catch(e){}
+        return false;
+    }
+
+
+    function deviceListHasPhone(){
+        var select=document.getElementById('device');
+        if(!select) return false;
+
+        var options=Array.prototype.slice.call(select.options||[]);
+        return options.some(function(option){
+            var value=String(option.value||'').trim();
+            var label=String(option.textContent||'').trim();
+
+            if(!value) return false;
+            if(/請選擇|選擇裝置|找不到裝置|沒有裝置|無裝置/i.test(label)) return false;
+
+            // A real iPhone/USB device option normally contains USB / iPhone / iOS.
+            // Keep this permissive so it also works with custom device labels.
+            return true;
+        });
+    }
+
+    function clearStaleDisconnectStatus(){
+        if(!deviceListHasPhone()) return;
+
+        var stalePhrases=[
+            '裝置已中斷連接，重新插入 USB 後會自動出現在裝置清單。',
+            '裝置已中斷連接'
+        ];
+
+        var nodes=document.querySelectorAll('body *');
+        for(var i=0;i<nodes.length;i++){
+            var el=nodes[i];
+            if(!el || el.children.length>0) continue;
+
+            var text=String(el.textContent||'').trim();
+            if(!text) continue;
+
+            var stale=false;
+            for(var j=0;j<stalePhrases.length;j++){
+                if(text===stalePhrases[j] || text.indexOf(stalePhrases[j])>=0){
+                    stale=true;
+                    break;
+                }
+            }
+
+            if(!stale) continue;
+
+            try{
+                el.textContent='';
+                el.setAttribute('aria-hidden','true');
+                el.style.setProperty('display','none','important');
+            }catch(e){}
+        }
+    }
+
+    function watchDeviceEnumeration(){
+        var select=document.getElementById('device');
+
+        if(select && !select.dataset.dportStatusReconnectWatch){
+            select.dataset.dportStatusReconnectWatch='1';
+
+            var observer=new MutationObserver(function(){
+                if(deviceListHasPhone()){
+                    clearStaleDisconnectStatus();
+                }
+            });
+
+            observer.observe(select,{childList:true,subtree:true});
+        }
+
+        if(!window.__dportReconnectStatusObserver && document.body && window.MutationObserver){
+            var bodyObserver=new MutationObserver(function(){
+                clearStaleDisconnectStatus();
+            });
+
+            bodyObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
+            window.__dportReconnectStatusObserver=bodyObserver;
+        }
+
+        clearStaleDisconnectStatus();
+    }
+
+    function enableManualRefresh(){
+        var btn=document.getElementById('refresh-device');
+        if(!btn) return;
+        // The user controls Refresh. Never leave it disabled merely because
+        // a previous USB device was disconnected.
+        btn.disabled=false;
+        btn.removeAttribute('aria-disabled');
+    }
+
+    function wrapUsbEvent(name,message){
+        try{
+            if(typeof window[name]!=='function') return;
+            if(window[name].__dportManualRefreshOnly) return;
+
+            var original=window[name];
+            var wrapped=function(){
+                var result=original.apply(this,arguments);
+
+                // Give Windows/usbmux a moment to settle, but never trigger
+                // Refresh automatically.
+                if(name==='handleUsbCableConnected'){
+                    setTimeout(function(){
+                        enableManualRefresh();
+                        clearStaleDisconnectReminder();
+                        if(!isActuallyConnected()){
+                            greenStatus(message);
+                        }
+                    },250);
+                }else{
+                    setTimeout(function(){
+                        enableManualRefresh();
+                    },100);
+                }
+                return result;
+            };
+
+            wrapped.__dportManualRefreshOnly=true;
+            wrapped.__dportManualRefreshOriginal=original;
+            window[name]=wrapped;
+        }catch(e){}
+    }
+
+
+    function isActuallyConnected(){
+        try{
+            if(typeof isDeviceConnected!=='undefined' && isDeviceConnected===true) return true;
+        }catch(e){}
+
+        var disconnect=document.getElementById('disconnect');
+        if(disconnect && disconnect.disabled===false) return true;
+
+        var connect=document.getElementById('connect');
+        if(connect && connect.dataset && connect.dataset.connected==='true') return true;
+
+        return false;
+    }
+
+    function clearStaleDisconnectReminder(){
+        if(!isActuallyConnected()) return;
+
+        var exact='裝置已中斷連接，重新插入 USB 後會自動出現在裝置清單。';
+        var nodes=document.querySelectorAll('body *');
+
+        for(var i=0;i<nodes.length;i++){
+            var el=nodes[i];
+            var txt=String(el.textContent||'').trim();
+            if(txt!==exact) continue;
+
+            try{
+                el.textContent='';
+                el.setAttribute('aria-hidden','true');
+                el.style.setProperty('display','none','important');
+            }catch(e){}
+        }
+    }
+
+    function watchConnectionState(){
+        clearStaleDisconnectReminder();
+
+        if(window.__dportUsbStatusObserver) return;
+        if(!window.MutationObserver) return;
+
+        var observer=new MutationObserver(function(){
+            clearStaleDisconnectReminder();
+        });
+
+        observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+        window.__dportUsbStatusObserver=observer;
+    }
+
+    function redirectLegacyToast(){
+        if(typeof window.displayToast!=='function') return;
+        if(window.displayToast.__dportStatusOnlyFinal) return;
+
+        window.displayToast=function(message){
+            var msg=String(message==null?'':message).trim();
+            if(!msg) return;
+            greenStatus(msg);
+        };
+        window.displayToast.__dportStatusOnlyFinal=true;
+    }
+
+    function boot(){
+        enableManualRefresh();
+        redirectLegacyToast();
+        watchConnectionState();
+        clearStaleDisconnectReminder();
+
+        // Only observe native USB callbacks. No polling and no automatic
+        // refresh are performed here.
+        wrapUsbEvent(
+            'handleUsbCableConnected',
+            'USB 已重新插入，請按「重新整理」偵測 Apple 裝置'
         );
         wrapUsbEvent('handleUsbCableRemoved','USB 已拔除');
 
@@ -19384,7 +19234,7 @@ body > div.toast-container{
         // refresh are performed here.
         wrapUsbEvent(
             'handleUsbCableConnected',
-            'USB 已重新插入，請按「重新整理」偵測 iPhone'
+            'USB 已重新插入，請按「重新整理」偵測 Apple 裝置'
         );
         wrapUsbEvent('handleUsbCableRemoved','USB 已拔除');
 
