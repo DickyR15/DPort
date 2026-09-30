@@ -1,23 +1,26 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Clean research build:
-# DPort Release v6.9.1 -> enable WiFi discovery -> build test EXE.
+# ============================================================================
+# DPort WiFi Research Build
+# BASE = Release v6.9.1
+# No previous WiFi test source is used.
+# ============================================================================
+
 $Root = $PWD
 $Tag = 'v6.9.1'
 $Version = '6.9.1'
-$Work = Join-Path $env:RUNNER_TEMP 'DPort-WiFi-v691-clean'
+$Work = Join-Path $env:RUNNER_TEMP 'DPort-WiFi-v691-diagnostic'
 $Source = Join-Path $Work 'source'
 $Build = Join-Path $Work 'build'
 $Tar = Join-Path $Work 'source.tar'
-
 $Out = Join-Path $Root "DPort-WiFi-Test-$Version"
 $Exe = Join-Path $Out "DPort-WiFi-Test-$Version.exe"
 $Sha = "$Exe.sha256"
 $Readme = Join-Path $Out 'README-WiFi-Test.txt'
 
-Write-Host "=== DPort Windows WiFi Test ==="
-Write-Host "Base release: $Tag"
+Write-Host '=== DPort 6.9.1 WiFi Diagnostic Test ==='
+Write-Host "BASE: $Tag"
 
 if (Test-Path $Work) { Remove-Item $Work -Recurse -Force }
 if (Test-Path $Out) { Remove-Item $Out -Recurse -Force }
@@ -46,221 +49,43 @@ $MapPath = Join-Path $Build 'src\templates\map.html'
 $VersionPath = Join-Path $Build 'src\dport_version.py'
 
 foreach ($p in @($MainPath,$MapPath,$VersionPath)) {
-    if (-not (Test-Path $p)) { throw "Required v6.9.1 file missing: $p" }
+    if (-not (Test-Path $p)) { throw "Missing v6.9.1 file: $p" }
 }
 
 $VersionSource = Get-Content $VersionPath -Raw
 if ($VersionSource -notmatch 'DPORT_VERSION\s*=\s*["'']6\.9\.1["'']') {
-    throw 'Source version is not 6.9.1.'
+    throw 'Extracted source is not DPort 6.9.1.'
 }
 
 $Main = Get-Content $MainPath -Raw
 $Map = Get-Content $MapPath -Raw
 
-# ---- Add detailed WiFi tunnel diagnostics to the clean v6.9.1 source ----
-$Main = $Main.Replace(
-'rsd_port = None
-connection_type = None',
-'rsd_port = None
-wifi_tunnel_error = None
-connection_type = None'
-)
-
-$WifiConnectOld = @'
-            rsd_host = None
-            rsd_port = None
-
-            # Run tun(devices) as a background task
-            #asyncio.create_task(tun(devices))
-            #await tun(devices)
-            #start_wifi_tunnel_thread(devices)
-            start_wifi_tunnel_thread()
-
-            if not check_rsd_data():
-                logger.error("RSD Data is None, Perhaps the tunnel isn't established")
-            else:
-                rsd_data = rsd_host, rsd_port
-                logger.info(f"RSD Data: {rsd_data}")
-
-            rsd_data_map.setdefault(udid, {})[connection_type] = {"host": rsd_host, "port": rsd_port}
-            return jsonify({'rsd_data': rsd_data})
-'@
-
-$WifiConnectNew = @'
-            rsd_host = None
-            rsd_port = None
-            wifi_tunnel_error = None
-
-            # Start the WiFi tunnel and keep the first concrete error so the
-            # caller does not have to wait for a blind 60-second timeout.
-            start_wifi_tunnel_thread()
-
-            if not check_rsd_data():
-                detail = wifi_tunnel_error or (
-                    "WiFi tunnel did not provide RSD host/port within the "
-                    "connection window."
-                )
-                logger.error(f"WiFi tunnel failed: {detail}")
-                return jsonify({
-                    'error': 'WiFi Tunnel Failed',
-                    'details': detail,
-                    'stage': 'CoreDeviceProxy/TCP Tunnel'
-                }), 504
-
-            rsd_data = rsd_host, rsd_port
-            logger.info(f"RSD Data: {rsd_data}")
-
-            rsd_data_map.setdefault(udid, {})[connection_type] = {"host": rsd_host, "port": rsd_port}
-            return jsonify({'rsd_data': rsd_data})
-'@
-
-if (-not $Main.Contains($WifiConnectOld)) {
-    throw 'WiFi connect response block was not found in clean v6.9.1 source.'
-}
-$Main = $Main.Replace($WifiConnectOld,$WifiConnectNew)
-
-# Make the WiFi tunnel expose concrete stage failures.
-$TunnelStartOld = @'
-async def start_wifi_tcp_tunnel() -> None:
-    """Start the official iOS 17.4+ CoreDeviceProxy TCP tunnel over mobdev2 Wi-Fi."""
-    logger.warning("Start Wi-Fi TCP tunnel via mobdev2 + CoreDeviceProxy")
-    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_address
-
-    lockdown = None
-    service = None
-    try:
-'@
-
-$TunnelStartNew = @'
-async def start_wifi_tcp_tunnel() -> None:
-    """Start the official iOS 17.4+ CoreDeviceProxy TCP tunnel over mobdev2 Wi-Fi."""
-    logger.warning("Start Wi-Fi TCP tunnel via mobdev2 + CoreDeviceProxy")
-    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_address, wifi_tunnel_error
-
-    lockdown = None
-    service = None
-    stage = "mobdev2 discovery"
-    try:
-'@
-
-if (-not $Main.Contains($TunnelStartOld)) {
-    throw 'WiFi TCP tunnel function header was not found.'
-}
-$Main = $Main.Replace($TunnelStartOld,$TunnelStartNew)
-
-$TunnelBodyOld = @'
-        if lockdown is None:
-            raise RuntimeError(
-                f"mobdev2 could not reconnect to the paired Apple device {udid} over Wi-Fi"
-            )
-
-        # iOS 17.4+ exposes CoreDeviceProxy through the normal lockdown service.
-        # This is the correct Wi-Fi tunnel path for ordinary iPhones; RemotePairing
-        # is not required for this path.
-        service = await CoreDeviceTunnelProxy.create(lockdown)
-
-        async with service.start_tcp_tunnel() as tunnel_result:
-'@
-
-$TunnelBodyNew = @'
-        if lockdown is None:
-            stage = "mobdev2 lockdown"
-            raise RuntimeError(
-                f"mobdev2 could not reconnect to the paired Apple device {udid} over Wi-Fi"
-            )
-
-        # iOS 17.4+ exposes CoreDeviceProxy through the normal lockdown service.
-        # This is the correct Wi-Fi tunnel path for ordinary iPhones; RemotePairing
-        # is not required for this path.
-        stage = "CoreDeviceProxy.create"
-        service = await CoreDeviceTunnelProxy.create(lockdown)
-
-        stage = "CoreDeviceProxy.start_tcp_tunnel"
-        async with service.start_tcp_tunnel() as tunnel_result:
-'@
-
-if (-not $Main.Contains($TunnelBodyOld)) {
-    throw 'WiFi TCP tunnel body anchor was not found.'
-}
-$Main = $Main.Replace($TunnelBodyOld,$TunnelBodyNew)
-
-$TunnelCatchMarker = @'
-    finally:
-        resume_remoted_if_required()
-'@
-
-$TunnelCatch = @'
-    except Exception as exc:
-        wifi_tunnel_error = f"{stage}: {type(exc).__name__}: {exc}"
-        logger.exception(f"WiFi tunnel failed at {wifi_tunnel_error}")
-        raise
-    finally:
-        resume_remoted_if_required()
-'@
-
-if (-not $Main.Contains($TunnelCatchMarker)) {
-    throw 'WiFi tunnel finally block was not found.'
-}
-$Main = $Main.Replace($TunnelCatchMarker,$TunnelCatch,1)
-
-# run_wifi_tunnel must preserve the exact exception instead of swallowing it.
-$RunWifiOld = @'
-def run_wifi_tunnel():
-    try:
-        if is_major_version_17_or_greater(ios_version) and not version_check(ios_version):
-'@
-
-$RunWifiNew = @'
-def run_wifi_tunnel():
-    global wifi_tunnel_error
-    try:
-        if is_major_version_17_or_greater(ios_version) and not version_check(ios_version):
-'@
-
-if (-not $Main.Contains($RunWifiOld)) {
-    throw 'run_wifi_tunnel header was not found.'
-}
-$Main = $Main.Replace($RunWifiOld,$RunWifiNew)
-
-$RunWifiCatchOld = @'
-    except Exception as e:
-        logger.error(f"Error in run_wifi_tunnel: {e}")
-'@
-
-$RunWifiCatchNew = @'
-    except Exception as e:
-        wifi_tunnel_error = f"{type(e).__name__}: {e}"
-        logger.exception(f"Error in run_wifi_tunnel: {wifi_tunnel_error}")
-'@
-
-if (-not $Main.Contains($RunWifiCatchOld)) {
-    throw 'run_wifi_tunnel exception handler was not found.'
-}
-$Main = $Main.Replace($RunWifiCatchOld,$RunWifiCatchNew,1)
-
-# ---- Open the v6.9.1 Network/WiFi connection entry point ----
-$UsbOnlyConnectGate = @'
+# ---------------------------------------------------------------------------
+# 1. Open Network/WiFi connection path.
+# ---------------------------------------------------------------------------
+$UsbGate = @'
     if connection_type != "USB":
         logger.warning(f"USB-ONLY build: rejecting non-USB connection type: {connection_type}")
         return jsonify({"error": "USB-only mode: please connect the Apple device by USB."}), 400
 
 '@
 
-if (-not $Main.Contains($UsbOnlyConnectGate)) {
-    throw 'The v6.9.1 USB-only connect gate was not found.'
+if (-not $Main.Contains($UsbGate)) {
+    throw 'v6.9.1 USB-only connection gate not found.'
 }
+$Main = $Main.Replace($UsbGate,'')
 
-$Main = $Main.Replace($UsbOnlyConnectGate, '')
-
-# ---- Enable WiFi discovery in the clean v6.9.1 source ----
-$UsbOnly = @'
+# ---------------------------------------------------------------------------
+# 2. Enable WiFi discovery in /list_devices.
+# ---------------------------------------------------------------------------
+$UsbOnlyDiscovery = @'
             # USB-ONLY: Wi-Fi / Network discovery intentionally disabled.
             logger.info("USB-ONLY mode: Wi-Fi/Bonjour/mDNS/RemotePairing discovery skipped")
 '@
 
 $WifiDiscovery = @'
-            # Wi-Fi discovery enabled for this research build.
-            # Normal Apple Wi-Fi sync uses _apple-mobdev2._tcp (Bonjour/mDNS).
+            # WiFi discovery enabled for the research build.
+            # Uses pymobiledevice3 mobdev2 Bonjour discovery.
             try:
                 wifi_count = 0
 
@@ -271,7 +96,6 @@ $WifiDiscovery = @'
                 ):
                     try:
                         info = dict(network_device.short_info)
-
                         network_udid = (
                             getattr(network_device, "udid", None)
                             or info.get("UniqueDeviceID")
@@ -279,7 +103,7 @@ $WifiDiscovery = @'
                         )
 
                         if not network_udid:
-                            logger.warning(f"Wi-Fi device found at {ip} without a UDID")
+                            logger.warning(f"WiFi device found at {ip} without UDID")
                             continue
 
                         info["ConnectionType"] = "Network"
@@ -291,180 +115,303 @@ $WifiDiscovery = @'
 
                         add_device(network_udid, "Network", info)
                         wifi_count += 1
-
                         logger.info(
-                            f"Wi-Fi device added: udid={network_udid}, host={ip}, port=62078"
+                            f"WiFi device added: udid={network_udid}, host={ip}, port=62078"
                         )
                     except Exception as exc:
-                        logger.warning(f"Wi-Fi metadata failed for {ip}: {exc}")
+                        logger.warning(f"WiFi device metadata failed for {ip}: {exc}")
                     finally:
                         try:
                             await network_device.close()
                         except Exception:
                             pass
 
-                logger.info(f"Wi-Fi device-list count: {wifi_count}")
+                logger.info(f"WiFi device-list count: {wifi_count}")
             except Exception as exc:
-                logger.exception(f"Wi-Fi discovery failed: {exc}")
+                logger.exception(f"WiFi discovery failed: {exc}")
 '@
 
-if (-not $Main.Contains($UsbOnly)) {
-    throw 'Clean v6.9.1 USB-only discovery block was not found.'
+if (-not $Main.Contains($UsbOnlyDiscovery)) {
+    throw 'v6.9.1 USB-only discovery block not found.'
 }
-$Main = $Main.Replace($UsbOnly,$WifiDiscovery)
+$Main = $Main.Replace($UsbOnlyDiscovery,$WifiDiscovery)
 
-# ---- Keep Network/WiFi entries alive when USB watcher sees no cable ----
-$OldDisplayed = @'
-        const displayedIds = Array.from(deviceDropdown.options)
-            .map(function(option){
-                try {
-                    const info = JSON.parse(option.value || '{}');
-                    return String(info.Identifier || '');
-                } catch (e) {
-                    return '';
-                }
-            })
-            .filter(Boolean)
-            .sort();
+# ---------------------------------------------------------------------------
+# 3. Use pymobiledevice3's normal pairing-record search for both discovery
+#    and tunnel reconnect. Do not hard-code the home folder.
+# ---------------------------------------------------------------------------
+$DiscoveryPairOld = @'
+async for ip, device in get_mobdev2_lockdowns(
+                    udid=udid,
+                    pair_records=home,
+                    only_paired=True,
+                    timeout=timeout,
+                ):
+'@
+$DiscoveryPairNew = @'
+async for ip, device in get_mobdev2_lockdowns(
+                    udid=udid,
+                    only_paired=True,
+                    timeout=timeout,
+                ):
 '@
 
-$NewDisplayed = @'
-        const displayedIds = Array.from(deviceDropdown.options)
-            .map(function(option){
-                try {
-                    const info = JSON.parse(option.value || '{}');
-                    const type = String(
-                        info.ConnectionType ||
-                        info.connectionType ||
-                        info.wifiTransport ||
-                        ''
-                    ).toUpperCase();
-
-                    if (type !== 'USB') return '';
-                    return String(info.Identifier || '');
-                } catch (e) {
-                    return '';
-                }
-            })
-            .filter(Boolean)
-            .sort();
-'@
-
-if (-not $Map.Contains($OldDisplayed)) {
-    throw 'Clean v6.9.1 USB watcher block was not found.'
+if ($Main.Contains($DiscoveryPairOld)) {
+    $Main = $Main.Replace($DiscoveryPairOld,$DiscoveryPairNew)
 }
-$Map = $Map.Replace($OldDisplayed,$NewDisplayed)
 
-$OldEmpty = @'
-        if (rawIds.length === 0) {
-            // Only a successful, error-free empty snapshot may clear stale
-            // device entries.
-            deviceReinsertRetryCount = 0;
-            deviceReinsertRetryUntil = 0;
-            deviceAutoRefreshSignature = '';
-            deviceAutoRefreshScheduled = false;
-
-            if (deviceDropdown.options.length > 0) {
-                deviceDropdown.innerHTML = '';
-                deviceDropdown.value = '';
-            }
-
-            var connectionDropdown = document.getElementById('connection');
-            if (connectionDropdown) {
-                connectionDropdown.innerHTML = '';
-                connectionDropdown.value = '';
-            }
-            return;
-        }
+$TunnelPairOld = @'
+async for ip, candidate in get_mobdev2_lockdowns(
+            udid=udid,
+            pair_records=get_home_folder(),
+            only_paired=True,
+            timeout=timeout,
+        ):
+'@
+$TunnelPairNew = @'
+async for ip, candidate in get_mobdev2_lockdowns(
+            udid=udid,
+            only_paired=True,
+            timeout=timeout,
+        ):
 '@
 
-$NewEmpty = @'
-        if (rawIds.length === 0) {
-            // /usb_presence is USB-only. Do not erase a Network/WiFi option.
-            deviceReinsertRetryCount = 0;
-            deviceReinsertRetryUntil = 0;
-            deviceAutoRefreshSignature = '';
-            deviceAutoRefreshScheduled = false;
-
-            const hasNetworkEntry = Array.from(deviceDropdown.options).some(function(option){
-                try {
-                    const info = JSON.parse(option.value || '{}');
-                    const type = String(
-                        info.ConnectionType ||
-                        info.connectionType ||
-                        info.wifiTransport ||
-                        ''
-                    ).toUpperCase();
-
-                    return (
-                        type === 'NETWORK' ||
-                        type === 'WIFI' ||
-                        !!info.wifiAddress ||
-                        !!info.wifiPort ||
-                        !!info.wifiTransport
-                    );
-                } catch (e) {
-                    return false;
-                }
-            });
-
-            if (hasNetworkEntry) {
-                return;
-            }
-
-            if (deviceDropdown.options.length > 0) {
-                deviceDropdown.innerHTML = '';
-                deviceDropdown.value = '';
-            }
-
-            var connectionDropdown = document.getElementById('connection');
-            if (connectionDropdown) {
-                connectionDropdown.innerHTML = '';
-                connectionDropdown.value = '';
-            }
-            return;
-        }
-'@
-
-if (-not $Map.Contains($OldEmpty)) {
-    throw 'Clean v6.9.1 USB empty-snapshot block was not found.'
+if ($Main.Contains($TunnelPairOld)) {
+    $Main = $Main.Replace($TunnelPairOld,$TunnelPairNew)
 }
-$Map = $Map.Replace($OldEmpty,$NewEmpty)
 
-# ---- Fix timeout modal flash in the research build ----
+# ---------------------------------------------------------------------------
+# 4. Add a concrete WiFi tunnel error state.
+# ---------------------------------------------------------------------------
+$Main = $Main.Replace(
+'rsd_port = None
+connection_type = None',
+'rsd_port = None
+wifi_tunnel_error = None
+connection_type = None'
+)
+
+$Main = $Main.Replace(
+@'
+def check_rsd_data():
+    max_attempts = 30
+    attempts = 0
+    while attempts < max_attempts:
+        if rsd_host is not None and rsd_port is not None:
+            return True  # Data is available
+        time.sleep(1)
+        attempts += 1
+    return False  # Data is still None after all attempts
+'@,
+@'
+def check_rsd_data():
+    global wifi_tunnel_error
+    max_attempts = 120
+    attempts = 0
+    while attempts < max_attempts:
+        if rsd_host is not None and rsd_port is not None:
+            return True
+        if wifi_tunnel_error:
+            return False
+        time.sleep(0.25)
+        attempts += 1
+    return False
+'@
+)
+
+# Reset the error when a new WiFi connection starts.
+$Main = $Main.Replace(
+@'
+def start_wifi_tunnel_thread():
+    global terminate_tunnel_thread
+    terminate_tunnel_thread = False  # Set the value of the global variable
+    thread = threading.Thread(target=run_wifi_tunnel)
+'@,
+@'
+def start_wifi_tunnel_thread():
+    global terminate_tunnel_thread, wifi_tunnel_error
+    terminate_tunnel_thread = False
+    wifi_tunnel_error = None
+    thread = threading.Thread(target=run_wifi_tunnel, name="DPort-WiFi-Tunnel")
+'@
+)
+
+# ---------------------------------------------------------------------------
+# 5. Make connect_wifi return the actual tunnel failure.
+# ---------------------------------------------------------------------------
+$TimeoutCheckOld = @'
+            if not check_rsd_data():
+                logger.error("RSD Data is None, Perhaps the tunnel isn't established")
+            else:
+                rsd_data = rsd_host, rsd_port
+                logger.info(f"RSD Data: {rsd_data}")
+
+            rsd_data_map.setdefault(udid, {})[connection_type] = {"host": rsd_host, "port": rsd_port}
+            return jsonify({'rsd_data': rsd_data})
+'@
+
+$TimeoutCheckNew = @'
+            if not check_rsd_data():
+                detail = wifi_tunnel_error or "WiFi tunnel did not produce RSD host/port."
+                logger.error(f"WiFi tunnel failed: {detail}")
+                return jsonify({
+                    'error': 'WiFi Tunnel Failed',
+                    'details': detail,
+                    'stage': 'WiFi lockdown / CoreDeviceProxy / TCP tunnel'
+                }), 504
+
+            rsd_data = rsd_host, rsd_port
+            logger.info(f"RSD Data: {rsd_data}")
+
+            rsd_data_map.setdefault(udid, {})[connection_type] = {"host": rsd_host, "port": rsd_port}
+            return jsonify({'rsd_data': rsd_data})
+'@
+
+if (-not $Main.Contains($TimeoutCheckOld)) {
+    throw 'v6.9.1 WiFi connection result block not found.'
+}
+$Main = $Main.Replace($TimeoutCheckOld,$TimeoutCheckNew)
+
+# ---------------------------------------------------------------------------
+# 6. Track exact tunnel stage and preserve the real exception.
+# ---------------------------------------------------------------------------
+$TunnelHeaderOld = @'
+async def start_wifi_tcp_tunnel() -> None:
+    """Start the official iOS 17.4+ CoreDeviceProxy TCP tunnel over mobdev2 Wi-Fi."""
+    logger.warning("Start Wi-Fi TCP tunnel via mobdev2 + CoreDeviceProxy")
+    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_address
+
+    lockdown = None
+    service = None
+    try:
+'@
+
+$TunnelHeaderNew = @'
+async def start_wifi_tcp_tunnel() -> None:
+    """Start the iOS 17.4+ CoreDeviceProxy TCP tunnel over mobdev2 Wi-Fi."""
+    logger.warning("Start Wi-Fi TCP tunnel via mobdev2 + CoreDeviceProxy")
+    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_address, wifi_tunnel_error
+
+    lockdown = None
+    service = None
+    stage = "mobdev2 discovery"
+    try:
+'@
+
+if (-not $Main.Contains($TunnelHeaderOld)) {
+    throw 'v6.9.1 WiFi tunnel function header not found.'
+}
+$Main = $Main.Replace($TunnelHeaderOld,$TunnelHeaderNew)
+
+$LockdownNoneOld = @'
+        if lockdown is None:
+            raise RuntimeError(
+                f"mobdev2 could not reconnect to the paired Apple device {udid} over Wi-Fi"
+            )
+'@
+$LockdownNoneNew = @'
+        if lockdown is None:
+            stage = "mobdev2 lockdown"
+            raise RuntimeError(
+                f"mobdev2 could not reconnect to the paired Apple device {udid} over Wi-Fi"
+            )
+'@
+if (-not $Main.Contains($LockdownNoneOld)) { throw 'v6.9.1 lockdown failure block not found.' }
+$Main = $Main.Replace($LockdownNoneOld,$LockdownNoneNew)
+
+$ServiceOld = @'
+        service = await CoreDeviceTunnelProxy.create(lockdown)
+
+        async with service.start_tcp_tunnel() as tunnel_result:
+'@
+$ServiceNew = @'
+        stage = "CoreDeviceProxy.create"
+        service = await CoreDeviceTunnelProxy.create(lockdown)
+
+        stage = "CoreDeviceProxy.start_tcp_tunnel"
+        async with service.start_tcp_tunnel() as tunnel_result:
+'@
+if (-not $Main.Contains($ServiceOld)) { throw 'v6.9.1 CoreDeviceProxy block not found.' }
+$Main = $Main.Replace($ServiceOld,$ServiceNew)
+
+$FinallyOld = @'
+    finally:
+        resume_remoted_if_required()
+'@
+$FinallyNew = @'
+    except Exception as exc:
+        wifi_tunnel_error = f"{stage}: {type(exc).__name__}: {exc}"
+        logger.exception(f"WiFi tunnel failed at {wifi_tunnel_error}")
+        raise
+    finally:
+        resume_remoted_if_required()
+'@
+if (-not $Main.Contains($FinallyOld)) { throw 'v6.9.1 WiFi tunnel finally block not found.' }
+$Main = $Main.Replace($FinallyOld,$FinallyNew,1)
+
+$RunWifiOld = @'
+def run_wifi_tunnel():
+    try:
+        if is_major_version_17_or_greater(ios_version) and not version_check(ios_version):
+'@
+$RunWifiNew = @'
+def run_wifi_tunnel():
+    global wifi_tunnel_error
+    try:
+        if is_major_version_17_or_greater(ios_version) and not version_check(ios_version):
+'@
+if (-not $Main.Contains($RunWifiOld)) { throw 'run_wifi_tunnel header not found.' }
+$Main = $Main.Replace($RunWifiOld,$RunWifiNew)
+
+$RunWifiCatchOld = @'
+    except Exception as e:
+        logger.error(f"Error in run_wifi_tunnel: {e}")
+'@
+$RunWifiCatchNew = @'
+    except Exception as e:
+        wifi_tunnel_error = f"run_wifi_tunnel: {type(e).__name__}: {e}"
+        logger.exception(f"Error in run_wifi_tunnel: {wifi_tunnel_error}")
+'@
+if (-not $Main.Contains($RunWifiCatchOld)) { throw 'run_wifi_tunnel exception block not found.' }
+$Main = $Main.Replace($RunWifiCatchOld,$RunWifiCatchNew,1)
+
+# ---------------------------------------------------------------------------
+# 7. Put a diagnostic log beside the EXE so Windows runtime errors are saved.
+# ---------------------------------------------------------------------------
+$AppDirAnchor = "app_directory = os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, 'frozen', False) else base_directory"
+$LogSetup = @'
+app_directory = os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, 'frozen', False) else base_directory
+
+try:
+    _dport_log_path = os.path.join(app_directory, "DPort-WiFi-Test-6.9.1.log")
+    _dport_file_handler = logging.FileHandler(_dport_log_path, encoding="utf-8")
+    _dport_file_handler.setLevel(logging.DEBUG)
+    _dport_file_handler.setFormatter(logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(message)s"
+    ))
+    logger.addHandler(_dport_file_handler)
+    logger.info("DPort WiFi diagnostic log initialized: %s", _dport_log_path)
+except Exception as _log_exc:
+    logger.warning("Unable to initialize WiFi diagnostic log: %s", _log_exc)
+'@
+if (-not $Main.Contains($AppDirAnchor)) { throw 'app_directory anchor not found.' }
+$Main = $Main.Replace($AppDirAnchor,$LogSetup,1)
+
+# ---------------------------------------------------------------------------
+# 8. Clean timeout-close behaviour.
+# ---------------------------------------------------------------------------
 $TimeoutOld = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = ''/''">關閉</button>'
 $TimeoutNew = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>'
 if ($Map.Contains($TimeoutOld)) {
     $Map = $Map.Replace($TimeoutOld,$TimeoutNew)
 }
 
-# The clean v6.9.1 get_wifi_with_retry() also hardcodes the user cache path.
-# Remove that restriction so pymobiledevice3 11.19.4 can find the Windows
-# system pairing records as well.
-$Main = $Main.Replace(
-@'
-for ip, device in get_mobdev2_lockdowns(
-                    udid=udid,
-                    pair_records=home,
-                    only_paired=True,
-                    timeout=timeout,
-                ):
-'@,
-@'
-for ip, device in get_mobdev2_lockdowns(
-                    udid=udid,
-                    only_paired=True,
-                    timeout=timeout,
-                ):
-'@
-)
-
-Write-Host "WiFi discovery: mobdev2 default pairing-record search"
-
 Set-Content -LiteralPath $MainPath -Value $Main -Encoding utf8
 Set-Content -LiteralPath $MapPath -Value $Map -Encoding utf8
 
-# ---- Verify the patch really exists before compiling ----
+# ---------------------------------------------------------------------------
+# 9. Verify the clean release source plus WiFi changes before build.
+# ---------------------------------------------------------------------------
 $CheckMain = Get-Content $MainPath -Raw
 $CheckMap = Get-Content $MapPath -Raw
 
@@ -472,27 +419,30 @@ foreach ($Needle in @(
     'get_mobdev2_lockdowns',
     'ConnectionType"] = "Network"',
     'wifiTransport"] = "mobdev2"',
-    'start_wifi_tcp_tunnel',
     'CoreDeviceTunnelProxy',
-    'if connection_type == "Network":'
+    'start_wifi_tcp_tunnel',
+    'if connection_type == "Network":',
+    'wifi_tunnel_error'
 )) {
     if ($CheckMain -notlike "*$Needle*") {
-        throw "WiFi verification failed: $Needle"
+        throw "WiFi build verification failed: $Needle"
     }
 }
 
 if ($CheckMain -like '*USB-ONLY: Wi-Fi / Network discovery intentionally disabled*') {
-    throw 'USB-only discovery block still exists.'
+    throw 'USB-only WiFi discovery block still remains.'
 }
 
 if ($CheckMain -like '*USB-ONLY build: rejecting non-USB connection type*') {
-    throw 'USB-only Network connection gate still exists.'
+    throw 'USB-only Network connection gate still remains.'
 }
 
 python -m py_compile src\main.py
 if ($LASTEXITCODE -ne 0) { throw 'main.py syntax check failed.' }
 
-# ---- Build ----
+# ---------------------------------------------------------------------------
+# 10. Build.
+# ---------------------------------------------------------------------------
 python -m pip install --upgrade pip setuptools wheel
 if ($LASTEXITCODE -ne 0) { throw 'pip bootstrap failed.' }
 
@@ -537,7 +487,6 @@ $Built = Get-ChildItem -Path $Build -Filter "DPort-WiFi-Test-$Version.exe" -File
 if (-not $Built) { throw 'Built EXE could not be found.' }
 
 Copy-Item $Built.FullName $Exe -Force
-
 if (-not (Test-Path $Exe)) { throw 'Final EXE copy failed.' }
 
 python -c "import pefile,sys; p=pefile.PE(sys.argv[1]); sys.exit(0 if p.OPTIONAL_HEADER.Subsystem==2 else 1)" $Exe
@@ -546,21 +495,26 @@ if ($LASTEXITCODE -ne 0) { throw 'Final EXE is not a Windows GUI executable.' }
 (Get-FileHash $Exe -Algorithm SHA256).Hash.ToLower() | Set-Content $Sha -Encoding ascii
 
 @"
-DPort Windows WiFi Research Test $Version
+DPort Windows WiFi Diagnostic Test 6.9.1
 
 BASE RELEASE:
-DPort v$Version
+DPort v6.9.1
 Git tag: $Tag
 Git commit: $ReleaseCommit
 
-WiFi:
-- Apple mobdev2 / Bonjour discovery
-- Network device entries enabled
-- iOS 17.4+ CoreDeviceProxy TCP tunnel preserved
+WiFi path:
+Apple mobdev2 Bonjour discovery
+Network/WiFi connection path
+CoreDeviceProxy TCP tunnel
 
-This is a research/test build, not a production release.
+Diagnostic log:
+DPort-WiFi-Test-6.9.1.log
+
+Research build only.
 "@ | Set-Content $Readme -Encoding utf8
 
-Write-Host '=== Build finished ==='
+Copy-Item (Join-Path $Out 'DPort-WiFi-Test-6.9.1.exe') (Join-Path $Out 'DPort-WiFi-Test-6.9.1.exe') -Force
+
+Write-Host '=== BUILD SUCCESS ==='
 Write-Host "EXE: $Exe"
 Write-Host "SHA: $Sha"
