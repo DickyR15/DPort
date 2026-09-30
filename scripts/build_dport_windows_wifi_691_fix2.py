@@ -13,10 +13,10 @@ from pathlib import Path
 
 TAG = "v6.9.1"
 VERSION = "6.9.1"
-FINAL_EXE_NAME = "DPort-WiFi-Test-6.9.1-USBWiFi-FIX2"
+FINAL_EXE_NAME = "DPort-WiFi-Test-6.9.1-USBWiFi-FIX3"
 
 ROOT = Path.cwd()
-WORK = Path(tempfile.gettempdir()) / "DPort-WiFi-691-CLEAN-FIX2"
+WORK = Path(tempfile.gettempdir()) / "DPort-WiFi-691-CLEAN-FIX3"
 SOURCE = WORK / "source"
 BUILD = WORK / "build"
 ARCHIVE = WORK / "source.tar"
@@ -984,6 +984,166 @@ def build_source() -> None:
         "var appVersionNum =",
         remove_function,
         "handleUsbCableRemoved()",
+    )
+
+    # ------------------------------------------------------------------
+    # FINAL RACE FIXES
+    # ------------------------------------------------------------------
+
+    # Frontend connection-attempt state. USB hotplug may update the list,
+    # but it must not steal the current WiFi selection while connectDevice()
+    # is awaiting /connect_device.
+    page = page.replace(
+        "var deviceAutoDetectTimer = null;\nvar deviceAutoDetectBusy = false;",
+        "var deviceAutoDetectTimer = null;\n"
+        "var deviceAutoDetectBusy = false;\n"
+        "var deviceConnectionAttemptInProgress = false;\n"
+        "var deviceConnectionAttemptTransport = '';\n"
+        "var deviceConnectionAttemptUdid = '';",
+        1,
+    )
+
+    page = page.replace(
+        "        // USB is the default when present.\n"
+        "        if (!isDeviceConnected) {",
+        "        // USB is the default when present, except during an active "
+        "WiFi connection request.\n"
+        "        if (!isDeviceConnected && !deviceConnectionAttemptInProgress) {",
+        1,
+    )
+
+    # The auto-detector's USB-default assignment is a second path that can
+    # steal the selection during WiFi connection.
+    page = page.replace(
+        "            if (usbDefault) {\n"
+        "                deviceDropdown.value = usbDefault.value;\n"
+        "            }\n\n"
+        "            deviceAutoRefreshSignature = rawIds.join('|');",
+        "            if (usbDefault && !deviceConnectionAttemptInProgress) {\n"
+        "                deviceDropdown.value = usbDefault.value;\n"
+        "            }\n\n"
+        "            deviceAutoRefreshSignature = rawIds.join('|');",
+        1,
+    )
+
+    # When a USB hotplug refresh completes, restore the in-flight WiFi option.
+    page = page.replace(
+        "        deviceDropdown.devicesInfo = devicesInfo;\n\n"
+        "        // USB is the default when present, except during an active "
+        "WiFi connection request.",
+        "        deviceDropdown.devicesInfo = devicesInfo;\n\n"
+        "        if (deviceConnectionAttemptInProgress &&\n"
+        "            deviceConnectionAttemptTransport === 'NETWORK') {\n"
+        "            var wifiInFlight = Array.from(deviceDropdown.options).find(function(option) {\n"
+        "                try {\n"
+        "                    var info = JSON.parse(option.value || '{}');\n"
+        "                    var type = String(info.ConnectionType || info.connectionType || info.wifiTransport || '').toUpperCase();\n"
+        "                    return (type === 'NETWORK' || type === 'WIFI') &&\n"
+        "                        String(info.Identifier || info.UniqueDeviceID || '') === String(deviceConnectionAttemptUdid || '');\n"
+        "                } catch (e) {\n"
+        "                    return false;\n"
+        "                }\n"
+        "            });\n"
+        "            if (wifiInFlight) deviceDropdown.value = wifiInFlight.value;\n"
+        "        }\n\n"
+        "        // USB is the default when present, except during an active "
+        "WiFi connection request.",
+        1,
+    )
+
+    # USB removal: rediscover WiFi immediately so manual Refresh is no longer
+    # required.
+    page = page.replace(
+        "    startDeviceAutoDetect();\n\n    fetch('/device_disconnected', {",
+        "    startDeviceAutoDetect();\n\n"
+        "    setTimeout(function() {\n"
+        "        if (!isDeviceConnected && !deviceConnectionAttemptInProgress) {\n"
+        "            populateDeviceList({silent:true, autoDetect:true, forceFresh:true})\n"
+        "                .catch(function(e) {\n"
+        "                    console.debug('USB 拔除後自動恢復 WiFi 清單略過一次:', e);\n"
+        "                });\n"
+        "        }\n"
+        "    }, 120);\n\n"
+        "    fetch('/device_disconnected', {",
+        1,
+    )
+
+    # Freeze the chosen transport as soon as connectDevice() has resolved the
+    # selected option.
+    page = page.replace(
+        "    var selectedDeviceConnType = selectedDeviceConnectionType;\n"
+        "    var selectedDeviceCountry = selectedOptionValue.userLocale;",
+        "    var selectedDeviceConnType = selectedDeviceConnectionType;\n"
+        "    var selectedDeviceCountry = selectedOptionValue.userLocale;\n\n"
+        "    deviceConnectionAttemptInProgress = true;\n"
+        "    deviceConnectionAttemptTransport = String(selectedDeviceConnType || '').toUpperCase();\n"
+        "    deviceConnectionAttemptUdid = String(selectedDeviceIdentifier || '');",
+        1,
+    )
+
+    # Always clear the attempt lock when the asynchronous connection request
+    # finishes, regardless of success, retryable failure, or modal path.
+    page = page.replace(
+        "            if (connectButton) {\n"
+        "                connectButton.disabled = false;  // 重新啟用連接按鈕\n"
+        "            }\n"
+        "});\n}",
+        "            if (connectButton) {\n"
+        "                connectButton.disabled = false;  // 重新啟用連接按鈕\n"
+        "            }\n"
+        "        })\n"
+        "        .finally(function() {\n"
+        "            deviceConnectionAttemptInProgress = false;\n"
+        "            deviceConnectionAttemptTransport = '';\n"
+        "            deviceConnectionAttemptUdid = '';\n"
+        "        });\n"
+        "}",
+        1,
+    )
+
+    # Backend: never report a successful WiFi connection until the actual RSD
+    # endpoint exists. This prevents "已連接" followed by immediate location
+    # failure while the background tunnel is still negotiating.
+    main = main.replace(
+        "            start_wifi_tunnel_thread()\n\n"
+        "            if not check_rsd_data():\n"
+        "                logger.error("RSD Data is None, Perhaps the tunnel isn't established")\n"
+        "            else:\n"
+        "                rsd_data = rsd_host, rsd_port\n"
+        "                logger.info(f"RSD Data: {rsd_data}")\n\n"
+        "            rsd_data_map.setdefault(udid, {})[connection_type] = {"host": rsd_host, "port": rsd_port}\n"
+        "            logger.info(f"Device Connection Map: {rsd_data_map}")\n"
+        "            return jsonify({'rsd_data': rsd_data})",
+        "            rsd_data = None\n"
+        "            rsd_host = None\n"
+        "            rsd_port = None\n"
+        "            start_wifi_tunnel_thread()\n\n"
+        "            if not check_rsd_data():\n"
+        "                logger.error("WiFi RSD tunnel did not become ready.")\n"
+        "                terminate_tunnel_thread = True\n"
+        "                return jsonify({\n"
+        "                    'error': 'WiFi Tunnel 建立失敗，尚未建立 RSD。請重新嘗試連線。',\n"
+        "                    'connection_retryable': True,\n"
+        "                    'connection_type': 'Network'\n"
+        "                }), 504\n\n"
+        "            rsd_data = rsd_host, rsd_port\n"
+        "            logger.info(f"WiFi RSD Data ready: {rsd_data}")\n\n"
+        "            rsd_data_map.setdefault(udid, {})[connection_type] = {\n"
+        "                "host": rsd_host,\n"
+        "                "port": rsd_port\n"
+        "            }\n"
+        "            logger.info(f"Device Connection Map: {rsd_data_map}")\n"
+        "            return jsonify({\n"
+        "                'rsd_data': rsd_data,\n"
+        "                'connection_type': 'Network'\n"
+        "            })",
+        1,
+    )
+
+    main = main.replace(
+        "def check_rsd_data():\n    max_attempts = 30",
+        "def check_rsd_data():\n    # Wait for the real tunnel endpoint, not just the background thread start.\n    max_attempts = 45",
+        1,
     )
 
     MAIN.write_text(main, encoding="utf-8")
