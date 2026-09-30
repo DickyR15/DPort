@@ -79,6 +79,7 @@ wifi_device_cache = {}
 
 # ---------------------------------------------------------------------------
 # Final combined USB-default + WiFi connection test build.
+# Trigger a clean rebuild after fixing the workflow script syntax.
 # Trigger build after repairing WiFi pairing/parser section.
 # Preserve WiFi options from the v6.9.1 USB auto-detector.
 # /usb_presence reports USB only; an empty USB snapshot must never erase a
