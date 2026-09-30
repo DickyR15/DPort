@@ -69,6 +69,39 @@ jobs:
           python -m py_compile src/dport_version.py
           python -m py_compile src/dport_release_updater.py
           python -m py_compile src/dport_updater_helper.py
+          python -m compileall -q src scripts
+
+      - name: Validate embedded JavaScript
+        shell: pwsh
+        run: |
+          $html = Get-Content -LiteralPath 'src\templates\map.html' -Raw
+          $matches = [regex]::Matches($html, '<script\b([^>]*)>([\s\S]*?)</script>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+          $checked = 0
+          $index = 0
+          foreach ($match in $matches) {
+            $attrs = $match.Groups[1].Value
+            if ($attrs -match 'type\s*=\s*["''](?!text/javascript|application/javascript)["'']') { continue }
+            $code = $match.Groups[2].Value
+            if ([string]::IsNullOrWhiteSpace($code)) { continue }
+            $tmp = Join-Path $env:RUNNER_TEMP ("dport-inline-$index.js")
+            Set-Content -LiteralPath $tmp -Value $code -Encoding utf8
+            node --check $tmp
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: block $index" }
+            $checked++
+            $index++
+          }
+          if ($checked -lt 1) { throw 'No JavaScript blocks were checked.' }
+
+      - name: Check duplicate injected block IDs
+        shell: pwsh
+        run: |
+          $html = Get-Content -LiteralPath 'src\templates\map.html' -Raw
+          $ids = @('dport-final-ui-polish-v8','dport-final-favorites-render-v8','dport-map-status-overlay-script','dport-header-brand-version-final','dport-exact-copy-button-appearance','dport-copy-button-style-sync','dport-usb-manual-refresh-status','dport-usb-manual-refresh-only','dport-unified-status-final','dport-unified-status-final-script','dport-location-gpx-interaction-final','dport-location-gpx-interaction-final-script','dport-definitive-location-gpx-fix','dport-definitive-location-gpx-fix-script')
+          foreach ($id in $ids) {
+            $pattern = 'id=["'']' + [regex]::Escape($id) + '["'']'
+            $count = ([regex]::Matches($html, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count
+            if ($count -ne 1) { throw "Injected block ID '$id' appears $count times; expected exactly once." }
+          }
 
       - name: Build standalone updater
         shell: pwsh
@@ -164,7 +197,7 @@ jobs:
           gh release view $tag --repo '${{ github.repository }}' *> $null
           $exists = ($LASTEXITCODE -eq 0)
           if (-not $exists) {
-            gh release create $tag "dist/DPort-$v.exe" "dist/DPort-$v.exe.sha256" 'dist/DPort-Updater.exe' 'dist/DPort-Updater.exe.sha256' --repo '${{ github.repository }}' --title "DPort v$v" --latest --generate-notes
+            gh release create $tag "dist/DPort-$v.exe" "dist/DPort-$v.exe.sha256" 'dist/DPort-Updater.exe' 'dist/DPort-Updater.exe.sha256' --repo '${{ github.repository }}' --title "DPort v$v" --latest=false --generate-notes
             if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag." }
           } else {
             gh release upload $tag "dist/DPort-$v.exe" "dist/DPort-$v.exe.sha256" 'dist/DPort-Updater.exe' 'dist/DPort-Updater.exe.sha256' --repo '${{ github.repository }}' --clobber
@@ -246,8 +279,41 @@ jobs:
           $notesPath = Join-Path $PWD 'dport-release-notes.md'
           Set-Content -LiteralPath $notesPath -Value $notes.Trim() -Encoding utf8
 
-          gh release edit $tag --repo '${{ github.repository }}' --title "DPort v$v" --notes-file $notesPath --latest
+          gh release edit $tag --repo '${{ github.repository }}' --title "DPort v$v" --notes-file $notesPath
           if ($LASTEXITCODE -ne 0) { throw "Failed to apply standardized release notes to $tag." }
+
+          # Set GitHub's Latest marker to the highest stable semantic version.
+          $releases = gh api --paginate "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json
+          $stable = @(
+            $releases | Where-Object {
+              -not $_.draft -and -not $_.prerelease -and $_.tag_name -match '^v[0-9]+\.[0-9]+\.[0-9]+
+          # Release policy:
+          # - Release builds run only from version tags or an explicit existing tag.
+          # - The checkout is the exact tag; no generated source package is used.
+          # - GitHub's automatic Source code (zip/tar.gz) is the canonical source distribution.
+          # - Release assets contain only the DPort executable, updater, and SHA-256 files.
+
+            } | ForEach-Object {
+              $parts = $_.tag_name.Substring(1).Split('.')
+              [pscustomobject]@{
+                Tag = $_.tag_name
+                Id = $_.id
+                Version = [version]::new([int]$parts[0], [int]$parts[1], [int]$parts[2])
+              }
+            }
+          )
+          if ($stable.Count -gt 0) {
+            $latestStable = $stable | Sort-Object Version -Descending | Select-Object -First 1
+            $currentRelease = $stable | Where-Object { $_.Tag -eq $tag } | Select-Object -First 1
+            if ($null -eq $currentRelease) { throw "Unable to locate release $tag." }
+
+            if ($latestStable.Tag -eq $tag) {
+              gh api --method PATCH "repos/${{ github.repository }}/releases/$($currentRelease.Id)" -F make_latest=true | Out-Null
+            } else {
+              gh api --method PATCH "repos/${{ github.repository }}/releases/$($currentRelease.Id)" -F make_latest=false | Out-Null
+            }
+            if ($LASTEXITCODE -ne 0) { throw "Failed to update Latest marker for $tag." }
+          }
 
           Write-Host "Published DPort release $tag with clean standardized release notes."
           # Release policy:
