@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - 'scripts/build_dport_windows_wifi_691_fix5.py'
+      - 'scripts/build_dport_windows_wifi_691_fix6.py'
       - '.github/workflows/dport-windows-wifi-test.yml'
 
 permissions:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    name: Build DPort 6.9.1 WiFi FIX5
+    name: Build DPort 6.9.1 WiFi FIX6
     runs-on: windows-latest
 
     steps:
@@ -32,12 +32,12 @@ jobs:
       - name: Build from clean v6.9.1 release source
         shell: pwsh
         run: |
-          python .\scripts\build_dport_windows_wifi_691_fix5.py
+          python .\scripts\build_dport_windows_wifi_691_fix6.py
 
       - name: Upload clean test files
         uses: actions/upload-artifact@v4
         with:
-          name: DPort-WiFi-Test-6.9.1-FIX5
+          name: DPort-WiFi-Test-6.9.1-FIX6
           path: DPort-WiFi-Test-6.9.1
           if-no-files-found: error
           compression-level: 0
