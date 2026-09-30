@@ -5357,7 +5357,7 @@ async function applyGPXPointToDevice(lat, lng) {
             if (response.status === 423 || /PasswordProtected|已鎖定|password-protected|locked/i.test(message)) {
                 return {
                     ok:false,
-                    message:"iPhone 目前已鎖定，請先解鎖裝置後再播放 GPX 路線。"
+                    message:"裝置目前已鎖定，請先解鎖裝置後再播放 GPX 路線。"
                 };
             }
             return {ok:false, message:message || "GPX 座標套用失敗"};
@@ -7979,7 +7979,7 @@ function setLocationArrows() {
                 geoportStatus('定位成功，可再次定位', true);
                 dportFollowCurrentLocation(c.lat,c.lng);
             } else if (response.status === 423 || /PasswordProtected|已鎖定|password-protected|locked|passcode/i.test(message)) {
-                geoportStatus('iPhone 目前已鎖定，請先解鎖裝置後再進行模擬定位。', false);
+                geoportStatus('裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。', false);
             } else {
                 geoportStatus('定位套用失敗', false);
             }
@@ -8118,8 +8118,8 @@ function setLocationArrows() {
         "'NoneType' object has no attribute 'split'": "請先輸入或選擇座標，再進行模擬定位。",
         "座標格式不正確": "座標格式不正確，請使用「緯度 經度」。",
         "Stop failed": "停止定位失敗",
-        "PasswordProtected": "iPhone 目前已鎖定，請先解鎖裝置後再進行模擬定位。",
-        "iPhone is locked": "iPhone 目前已鎖定，請先解鎖裝置後再進行模擬定位。"
+        "PasswordProtected": "裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。",
+        "iPhone is locked": "裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。"
 
       };
 
