@@ -8,6 +8,12 @@ on:
     paths:
       - 'scripts/build_dport_windows_wifi_test.ps1'
       - '.github/workflows/dport-windows-wifi-test.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/build_dport_windows_wifi_test.ps1'
+      - '.github/workflows/dport-windows-wifi-test.yml'
       - 'scripts/build_dport_windows_wifi_test.ps1'
 
 permissions:
