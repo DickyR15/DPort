@@ -116,6 +116,7 @@ if (-not $Map.Contains($guardAnchor)) {
 }
 
 # Insert a WiFi-preservation guard once, before the USB-only presence call.
+# This prevents WiFi entries from disappearing while USB polling is idle.
 $Map = $Map.Replace($guardAnchor, $WifiAutoDetectGuard, 1)
 
 # ---------------------------------------------------------------------------
