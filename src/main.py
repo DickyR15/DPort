@@ -147,6 +147,26 @@ location_worker_ready = threading.Event()
 location_worker_error = None
 
 PASSWORD_PROTECTED_LOCATION_MESSAGE = "裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。"
+
+def is_device_locked_error(error: BaseException | str) -> bool:
+    """Return True only when the location operation is blocked by a locked/password-protected device."""
+    if isinstance(error, (PasscodeRequiredError, PasswordRequiredError)):
+        return True
+
+    text = str(error).lower()
+    locked_markers = (
+        "passwordprotected",
+        "password protected",
+        "password-required",
+        "password required",
+        "passcode required",
+        "passcoderequired",
+        "device is locked",
+        "device locked",
+        "device currently locked",
+        "locked device",
+    )
+    return any(marker in text for marker in locked_markers)
 timeout = DEFAULT_BONJOUR_TIMEOUT
 
 # Get the current platform using sys.platform
@@ -1234,7 +1254,7 @@ async def _geoport_location_worker():
         if is_device_locked_error(e):
             location_worker_error = PASSWORD_PROTECTED_LOCATION_MESSAGE
             logger.warning(
-                "LocationSimulation blocked because the iPhone is password-protected/locked."
+                "LocationSimulation blocked because the Apple device is password-protected/locked."
             )
         else:
             location_worker_error = error_text
@@ -1394,8 +1414,13 @@ def set_location():
             return jsonify({'error': 'No iOS version present'})
 
     except Exception as e:
-        error_message = str(e)
-        return jsonify({'error': error_message})
+        if is_device_locked_error(e):
+            return jsonify({
+                'error': PASSWORD_PROTECTED_LOCATION_MESSAGE,
+                'error_type': 'PasswordProtected'
+            }), 423
+        logger.exception("Set location failed: %s", e)
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/stop_location', methods=['POST'])
