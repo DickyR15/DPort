@@ -21,10 +21,6 @@ Write-Host "=== DPort Windows WiFi Test ==="
 # Research build baseline: Release v6.9.1 only.
 Write-Host "Base: DPort $version"
 
-if ([string]::IsNullOrWhiteSpace($env:MOENV_API_KEY)) {
-    throw 'Missing MOENV_API_KEY secret.'
-}
-
 git fetch --tags --force
 if ($LASTEXITCODE -ne 0) { throw 'Failed to fetch Git tags.' }
 
@@ -38,6 +34,7 @@ if ($actualTagCommit -ne $expectedTagCommit) {
 
 Write-Host "Release base: $releaseUrl"
 Write-Host "Release tag commit: $actualTagCommit"
+Write-Host 'WiFi research build does not require MOENV_API_KEY.'
 
 foreach ($path in @($srcRoot, $buildRoot)) {
     if (Test-Path $path) { Remove-Item $path -Recurse -Force }
@@ -66,12 +63,6 @@ $rawVersion = Get-Content -LiteralPath 'src\dport_version.py' -Raw
 if ($rawVersion -notmatch 'DPORT_VERSION\s*=\s*["'']6\.9\.1["'']') {
     throw 'Tagged source version is not 6.9.1.'
 }
-
-[IO.File]::WriteAllText(
-    (Join-Path $buildRoot 'moenv_api_key.txt'),
-    $env:MOENV_API_KEY.Trim(),
-    (New-Object Text.UTF8Encoding($false))
-)
 
 $mainPath = Join-Path $buildRoot 'src\main.py'
 $main = Get-Content -LiteralPath $mainPath -Raw
@@ -370,7 +361,6 @@ $args = @(
     '--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation',
     '--hidden-import','pymobiledevice3.usbmux',
     '--add-data','src/templates;templates',
-    '--add-data','moenv_api_key.txt;.',
     'src/main.py'
 )
 
