@@ -1,0 +1,171 @@
+name: DPort Regression Test Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Test branch or commit, e.g. test/6.9.1-regression"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout selected test source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref }}
+
+      - name: Resolve test version
+        id: version
+        shell: pwsh
+        run: |
+          $raw = Get-Content -LiteralPath 'src\dport_version.py' -Raw
+          if ($raw -notmatch 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') { throw 'DPORT_VERSION not found.' }
+          $v = $Matches[1]
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid DPort version: $v" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.7'
+
+      - name: Prepare MOENV API key
+        shell: pwsh
+        env:
+          MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:MOENV_API_KEY)) { throw 'Missing MOENV_API_KEY secret.' }
+          [IO.File]::WriteAllText((Join-Path $PWD 'moenv_api_key.txt'), $env:MOENV_API_KEY.Trim(), (New-Object Text.UTF8Encoding($false)))
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements-build.txt
+          python -m pip install lzfse==0.4.2 pefile
+          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
+          $line = Get-Content requirements-build.txt | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1
+          if (-not $line) { throw 'pymobiledevice3 pin missing.' }
+          $expected = $line.Trim().Substring('pymobiledevice3=='.Length).Trim()
+          if ($pm3 -ne $expected) { throw "Expected pymobiledevice3 $expected, got $pm3" }
+
+      - name: Validate source
+        shell: pwsh
+        run: |
+          foreach ($required in @('src\main.py','src\dport_version.py','src\dport_release_updater.py','src\dport_updater_helper.py','requirements-build.txt','src\templates\map.html','DPort-6.9.0.ico')) {
+            if (-not (Test-Path $required)) { throw "Missing required test source: $required" }
+          }
+          python -m py_compile src/main.py
+          python -m py_compile src/dport_version.py
+          python -m py_compile src/dport_release_updater.py
+          python -m py_compile src/dport_updater_helper.py
+
+      - name: Build standalone updater
+        shell: pwsh
+        run: |
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name DPort-Updater --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to build DPort-Updater.exe.' }
+          if (-not (Test-Path 'dist\DPort-Updater.exe')) { throw 'DPort-Updater.exe missing.' }
+
+      - name: Generate Windows version metadata
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $p = $v.Split('.') | ForEach-Object { [int]$_ }
+          @(
+            '# UTF-8',
+            'VSVersionInfo(',
+            '  ffi=FixedFileInfo(',
+            "    filevers=($($p[0]),$($p[1]),$($p[2]),0),",
+            "    prodvers=($($p[0]),$($p[1]),$($p[2]),0),",
+            '    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)',
+            '  ),',
+            '  kids=[StringFileInfo([StringTable(''040404B0'', [',
+            "    StringStruct('CompanyName','Dicky'),",
+            "    StringStruct('FileDescription','DPort'),",
+            "    StringStruct('FileVersion','$v'),",
+            "    StringStruct('InternalName','DPort-$v-TEST'),",
+            "    StringStruct('LegalCopyright','Dicky'),",
+            "    StringStruct('OriginalFilename','DPort-$v-TEST.exe'),",
+            "    StringStruct('ProductName','DPort'),",
+            "    StringStruct('ProductVersion','$v'),",
+            "    StringStruct('Comments','Regression Test')])]),",
+            '  VarFileInfo([VarStruct(''Translation'',[0x0404,1200])])]',
+            ')'
+          ) -join [Environment]::NewLine | Set-Content version_info.generated.txt -Encoding utf8
+
+      - name: Build DPort test EXE
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $args = @(
+            '--noconfirm','--clean','--onefile','--windowed',
+            '--name',("DPort-$v-TEST"),
+            '--collect-all','pymobiledevice3',
+            '--collect-all','pytun_pmd3',
+            '--collect-all','pyimg4',
+            '--collect-all','inquirer3',
+            '--copy-metadata','pymobiledevice3',
+            '--copy-metadata','pyimg4',
+            '--copy-metadata','readchar',
+            '--hidden-import','pymobiledevice3.remote.userspace_tunnel',
+            '--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider',
+            '--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation',
+            '--hidden-import','pymobiledevice3.usbmux',
+            '--hidden-import','dport_release_updater',
+            '--hidden-import','dport_version',
+            '--add-data','src/templates;templates',
+            '--add-data','moenv_api_key.txt;.',
+            '--add-binary','dist/DPort-Updater.exe;dport_updater',
+            '--version-file','version_info.generated.txt',
+            '--icon','DPort-6.9.0.ico',
+            'src/main.py'
+          )
+          python -m PyInstaller @args
+          if ($LASTEXITCODE -ne 0) { throw "Failed to build DPort-$v-TEST.exe." }
+          if (-not (Test-Path "dist\DPort-$v-TEST.exe")) { throw "DPort-$v-TEST.exe missing." }
+
+      - name: Verify GUI executables
+        shell: pwsh
+        run: |
+          foreach ($file in @('dist\DPort-Updater.exe',"dist\DPort-${{ steps.version.outputs.version }}-TEST.exe")) {
+            if (-not (Test-Path $file)) { throw "Missing executable: $file" }
+            python -c "import pefile,sys; p=pefile.PE(sys.argv[1]); sys.exit(0 if p.OPTIONAL_HEADER.Subsystem==2 else 1)" $file
+            if ($LASTEXITCODE -ne 0) { throw "$file is not a Windows GUI executable." }
+          }
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $p = Start-Process -FilePath "dist\DPort-$v-TEST.exe" -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 20
+          if ($p.HasExited -and $p.ExitCode -ne 0) { throw "DPort-$v-TEST.exe exited with code $($p.ExitCode)" }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+
+      - name: Generate SHA-256
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          (Get-FileHash "dist\DPort-$v-TEST.exe" -Algorithm SHA256).Hash.ToLower() | Set-Content "dist\DPort-$v-TEST.exe.sha256" -Encoding ascii
+          (Get-FileHash 'dist\DPort-Updater.exe' -Algorithm SHA256).Hash.ToLower() | Set-Content 'dist\DPort-Updater.exe.sha256' -Encoding ascii
+
+      - name: Upload test artifact only
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-${{ steps.version.outputs.version }}-regression-test-${{ github.run_id }}
+          retention-days: 7
+          path: |
+            dist/DPort-${{ steps.version.outputs.version }}-TEST.exe
+            dist/DPort-${{ steps.version.outputs.version }}-TEST.exe.sha256
+            dist/DPort-Updater.exe
+            dist/DPort-Updater.exe.sha256
