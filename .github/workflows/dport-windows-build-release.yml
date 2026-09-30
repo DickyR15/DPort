@@ -1,4 +1,5 @@
-name: DPort Build & Release
+name: "DPort Windows Build & Release"
+
 
 on:
   push:
@@ -175,10 +176,75 @@ jobs:
             gh release upload $tag "dist/DPort-$v.exe" "dist/DPort-$v.exe.sha256" 'dist/DPort-Updater.exe' 'dist/DPort-Updater.exe.sha256' --repo '${{ github.repository }}' --clobber
             if ($LASTEXITCODE -ne 0) { throw "Failed to update release $tag." }
           }
-          Write-Host "Published standard GitHub release $tag from exact tagged source."
 
-# Release policy:
-# - Release builds run only from version tags or an explicit existing tag.
-# - The checkout is the exact tag; no generated source package is used.
-# - GitHub's automatic Source code (zip/tar.gz) is the canonical source distribution.
-# - Release assets contain only the DPort executable, updater, and SHA-256 files.
+          # Keep GitHub's automatic changelog and append the same legal/source section
+          # to every DPort Windows release. The marker makes reruns idempotent.
+          $marker = '<!-- DPORT-LEGAL-RELEASE-FOOTER -->'
+          $body = gh release view $tag --repo '${{ github.repository }}' --json body --jq .body
+          if ($LASTEXITCODE -ne 0) { throw "Failed to read release notes for $tag." }
+
+          $markerIndex = $body.IndexOf($marker)
+          if ($markerIndex -ge 0) {
+            $body = $body.Substring(0, $markerIndex).TrimEnd()
+          }
+
+          $footer = @"
+          $marker
+
+          ## 📚 原始碼與版本對應
+
+          本 Release 的 Windows 執行檔是從 Git Tag $tag 對應的原始碼建置。
+
+          GitHub Repository：
+
+          https://github.com/DickyR15/DPort
+
+          ## ⚖️ 授權
+
+          DPort Windows 使用 **GNU General Public License v3.0 (GPL-3.0)**。
+
+          DPort 基於 GPL-3.0 授權的 GeoPort 進行修改與再開發，並使用多項第三方開源元件。
+          第三方元件的原始著作權與授權仍歸各自權利人所有。
+
+          完整授權：
+
+          https://github.com/DickyR15/DPort/blob/$tag/LICENSE
+
+          第三方授權與來源：
+
+          https://github.com/DickyR15/DPort/blob/$tag/THIRD_PARTY_NOTICES.md
+
+          ## 🧩 第三方元件
+
+          本版本可能包含 GPL、LGPL、MIT、BSD、Apache 等不同授權的第三方元件。
+          實際權利與義務以各元件所附 LICENSE / NOTICE 及本 Release 對應的 Source 為準。
+
+          ## 🏷️ 商標與 Apple 聲明
+
+          DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或官方合作。
+
+          Apple、iPhone、iPad、iOS、iPadOS 及相關商標屬 Apple Inc. 或相關權利人所有。
+          DPort 軟體授權本身不授予任何第三方商標權。
+
+          ## ⚠️ 免責聲明
+
+          DPort 依「現況」提供，不保證所有 Windows、iOS 版本、裝置型號或第三方服務均可正常運作。
+          使用者應自行確認使用方式符合所在地適用法律、相關服務條款及第三方授權。
+
+          © 2026 DickyR15 / DPort。
+          "@
+
+          $finalBody = if ([string]::IsNullOrWhiteSpace($body)) { $footer.Trim() } else { "$($body.TrimEnd())`r`n`r`n$($footer.Trim())" }
+          $notesPath = Join-Path $PWD 'dport-release-notes.md'
+          Set-Content -LiteralPath $notesPath -Value $finalBody -Encoding utf8
+
+          gh release edit $tag --repo '${{ github.repository }}' --title "DPort v$v" --notes-file $notesPath --latest
+          if ($LASTEXITCODE -ne 0) { throw "Failed to apply standardized release notes to $tag." }
+
+          Write-Host "Published DPort release $tag with automatic changelog plus standardized legal/source notes."
+
+          # Release policy:
+          # - Release builds run only from version tags or an explicit existing tag.
+          # - The checkout is the exact tag; no generated source package is used.
+          # - GitHub's automatic Source code (zip/tar.gz) is the canonical source distribution.
+          # - Release assets contain only the DPort executable, updater, and SHA-256 files.
