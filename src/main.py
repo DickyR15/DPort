@@ -108,7 +108,6 @@ home_dir = os.path.expanduser("~")
 is_windows = sys.platform == 'win32'
 base_directory = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(sys.argv[0])))
 # When packaged with PyInstaller --onefile, _MEIPASS is a temporary folder.
-# User-supplied files such as the MOENV API key must be read beside the EXE.
 app_directory = os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, 'frozen', False) else base_directory
 flask_port = 54321
 api_url = "https://projectzerothree.info/api.php?format=json"
