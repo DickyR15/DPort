@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - 'scripts/build_dport_windows_wifi_test.ps1'
+      - 'scripts/build_dport_windows_wifi_from_release_6_9_1.ps1'
       - '.github/workflows/dport-windows-wifi-test.yml'
 
 permissions:
@@ -30,10 +30,8 @@ jobs:
 
       - name: Build DPort Windows WiFi Test
         shell: pwsh
-        env:
-          MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
         run: |
-          ./scripts/build_dport_windows_wifi_test.ps1
+          ./scripts/build_dport_windows_wifi_from_release_6_9_1.ps1
 
       - name: Verify final ZIP contents
         shell: pwsh
