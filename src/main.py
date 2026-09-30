@@ -32,7 +32,7 @@ from pymobiledevice3.usbmux import list_devices
 from pymobiledevice3.cli.mounter import auto_mount
 from pymobiledevice3.lockdown import create_using_usbmux, create_using_tcp, get_mobdev2_lockdowns
 from pymobiledevice3.services.amfi import AmfiService
-from pymobiledevice3.exceptions import DeviceHasPasscodeSetError, NoDeviceConnectedError
+from pymobiledevice3.exceptions import DeviceHasPasscodeSetError, NoDeviceConnectedError, PasscodeRequiredError, PasswordRequiredError
 from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
 from pymobiledevice3.services.dvt.instruments.location_simulation import LocationSimulation
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
@@ -1218,7 +1218,7 @@ async def _geoport_location_worker():
                         await asyncio.sleep(1.0)
                     except Exception as clear_error:
                         location_worker_error = str(clear_error)
-                        if "PasswordProtected" in location_worker_error:
+                        if is_device_locked_error(clear_error):
                             location_worker_error = PASSWORD_PROTECTED_LOCATION_MESSAGE
                             logger.warning(
                                 "Location clear blocked because the iPhone is password-protected/locked."
@@ -1232,7 +1232,7 @@ async def _geoport_location_worker():
             location_worker_ready.set()
     except Exception as e:
         error_text = str(e)
-        if "PasswordProtected" in error_text:
+        if is_device_locked_error(e):
             location_worker_error = PASSWORD_PROTECTED_LOCATION_MESSAGE
             logger.warning(
                 "LocationSimulation blocked because the iPhone is password-protected/locked."
