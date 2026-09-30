@@ -1,3 +1,5 @@
+# repair: final update shutdown handoff
+# repair: updater must be built from the same helper source
 from __future__ import annotations
 
 import argparse
@@ -20,8 +22,8 @@ import json
 import logging
 import os
 import subprocess
+import shutil
 import sys
-import tempfile
 import threading
 import time
 import urllib.request
@@ -33,12 +35,12 @@ try:
 except ImportError:
     from dport_version import DPORT_VERSION
 
-
 LOGGER = logging.getLogger("DPort-Updater")
 REPO = "DickyR15/DPort"
 RELEASE_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 VERSION = str(DPORT_VERSION)
 CHECK_INTERVAL = 1800.0
+
 _STATE = {
     "state": "idle",
     "message": "",
@@ -52,14 +54,21 @@ _STATE = {
 }
 _LOCK = threading.Lock()
 _STARTED = False
-_VERSION_RE = __import__("re").compile(r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+.]([0-9A-Za-z.-]+))?$")
+_VERSION_RE = __import__("re").compile(
+    r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+.]([0-9A-Za-z.-]+))?$"
+)
 
 
 def _version_key(value: str) -> tuple[int, int, int, str]:
     m = _VERSION_RE.match(str(value).strip())
     if not m:
         return (0, 0, 0, "")
-    return (int(m.group(1)), int(m.group(2) or 0), int(m.group(3) or 0), m.group(4) or "")
+    return (
+        int(m.group(1)),
+        int(m.group(2) or 0),
+        int(m.group(3) or 0),
+        m.group(4) or "",
+    )
 
 
 def _is_newer(current: str, latest: str) -> bool:
@@ -87,7 +96,7 @@ def _github_json(url: str) -> dict[str, Any]:
             "Pragma": "no-cache",
         },
     )
-    with urllib.request.urlopen(req, timeout=8) as resp:
+    with urllib.request.urlopen(req, timeout=10) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -101,11 +110,11 @@ def _get_update_candidate(current: str) -> tuple[str, str, str, str] | None:
         return None
 
     assets = {str(a.get("name")): a for a in release.get("assets", [])}
-    exe_name = f"DPort-{tag}.exe"
-    sha_name = f"DPort-{tag}.exe.sha256"
-    exe = assets.get(exe_name)
-    sha = assets.get(sha_name)
-    if not exe or not sha:
+    exe = assets.get(f"DPort-{tag}.exe")
+    sha = assets.get(f"DPort-{tag}.exe.sha256")
+    helper = assets.get("DPort-Updater.exe")
+    helper_sha = assets.get("DPort-Updater.exe.sha256")
+    if not exe or not sha or not helper or not helper_sha:
         return None
 
     return (
@@ -114,6 +123,27 @@ def _get_update_candidate(current: str) -> tuple[str, str, str, str] | None:
         str(exe.get("browser_download_url") or ""),
         str(sha.get("browser_download_url") or ""),
     )
+
+
+def _cleanup_restart_temp() -> None:
+    if os.environ.get("DPORT_RESTARTED") != "1":
+        return
+
+    def cleanup() -> None:
+        time.sleep(8.0)
+        folder = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Temp" / ".dport-update"
+        try:
+            if folder.exists():
+                shutil.rmtree(folder, ignore_errors=True)
+        except Exception:
+            LOGGER.debug("Unable to remove update temp directory", exc_info=True)
+
+
+    threading.Thread(
+        target=cleanup,
+        name="DPort-update-cleanup",
+        daemon=True,
+    ).start()
 
 
 def check_now() -> dict[str, Any]:
@@ -167,18 +197,22 @@ def start_background_update_check() -> None:
             check_now()
             time.sleep(CHECK_INTERVAL)
 
-    threading.Thread(target=runner, name="DPort-release-updater", daemon=True).start()
+    threading.Thread(
+        target=runner,
+        name="DPort-release-updater",
+        daemon=True,
+    ).start()
 
 
 def bootstrap_dport_updater() -> None:
-    # Startup is check-only. Never launch an updater or replace/delete the running EXE.
+    _cleanup_restart_temp()
     start_background_update_check()
 
 
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+    with path.open("rb") as fp:
+        for chunk in iter(lambda: fp.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest().lower()
 
@@ -186,9 +220,13 @@ def _sha256(path: Path) -> str:
 def _download(url: str, destination: Path) -> None:
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "DPort-Updater", "Accept": "*/*"},
+        headers={
+            "User-Agent": "DPort-Updater",
+            "Accept": "*/*",
+            "Cache-Control": "no-cache",
+        },
     )
-    with urllib.request.urlopen(req, timeout=60) as resp, destination.open("wb") as out:
+    with urllib.request.urlopen(req, timeout=120) as resp, destination.open("wb") as out:
         while True:
             chunk = resp.read(1024 * 1024)
             if not chunk:
@@ -197,125 +235,123 @@ def _download(url: str, destination: Path) -> None:
 
 
 def request_update() -> dict[str, Any]:
-    # Explicit user action only. No caller should invoke this during startup.
+    # Explicit user action only.
+    # Full order:
+    # 1) download DPort-<latest>.exe into C:\Windows\Temp\.dport-update
+    # 2) verify its SHA-256
+    # 3) download + verify DPort-Updater.exe
+    # 4) start the detached updater
+    # 5) return; the /dport/update route shuts down DPort
     status = check_now()
     latest = str(status.get("latest_version") or VERSION)
     if status.get("state") != "update_available" or not _is_newer(VERSION, latest):
-        return {"ok": False, "state": status.get("state"), "message": "No update is available."}
+        return {"ok": False, "state": status.get("state"), "message": "目前沒有可用更新。"}
 
     exe_url = str(status.get("latest_url") or "")
     release_url = str(status.get("release_url") or "")
     if not exe_url:
-        return {"ok": False, "state": "update_failed", "message": "Update package URL is unavailable."}
+        return {"ok": False, "state": "update_failed", "message": "找不到新版 DPort 安裝檔。"}
 
     current_exe = Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve()
-    current_exe = current_exe.parent / f"DPort-{VERSION}.exe" if getattr(sys, "frozen", False) else current_exe
-    target_exe = current_exe.parent / f"DPort-{latest}.exe"
+    if getattr(sys, "frozen", False):
+        current_exe = current_exe.parent / f"DPort-{VERSION}.exe"
 
-    temp_dir = Path(tempfile.mkdtemp(prefix="DPort-update-"))
-    new_exe = temp_dir / f"DPort-{latest}.exe"
-    sha_file = temp_dir / f"DPort-{latest}.exe.sha256"
+    windows_temp = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Temp"
+    update_dir = windows_temp / ".dport-update"
+    update_dir.mkdir(parents=True, exist_ok=True)
+
+    # Remove leftovers from a previous failed update.
+    for item in list(update_dir.iterdir()):
+        try:
+            if item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+            else:
+                item.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    # The new DPort executable is downloaded directly beside the currently
+    # running DPort executable. This remains true even when the user launches
+    # DPort from Desktop or any other folder.
+    new_exe = current_exe.parent / f"DPort-{latest}.exe"
+    sha_file = update_dir / f"DPort-{latest}.exe.sha256"
+    helper = update_dir / "DPort-Updater.exe"
+    helper_sha = update_dir / "DPort-Updater.exe.sha256"
+    helper_url = f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe"
+    helper_sha_url = f"https://github.com/{REPO}/releases/download/v{latest}/DPort-Updater.exe.sha256"
 
     try:
-        _set_state(state="updating", message=f"Downloading DPort {latest}")
+        _set_state(
+            state="updating",
+            message=f"正在下載 DPort {latest}…",
+            latest_version=latest,
+            release_url=release_url,
+            restart_required=True,
+        )
+
+        # 1. Download new DPort EXE directly into the same folder as
+        #    the current DPort EXE, BEFORE any EXIT.
         _download(exe_url, new_exe)
 
+        # 2. Verify new DPort EXE before any EXIT.
         sha_url = exe_url.rsplit("/", 1)[0] + f"/DPort-{latest}.exe.sha256"
         _download(sha_url, sha_file)
-        expected = sha_file.read_text(encoding="utf-8", errors="replace").strip().split()[0].lower()
-        actual = _sha256(new_exe)
-        if expected != actual:
-            raise RuntimeError("SHA-256 verification failed.")
+        expected_exe = sha_file.read_text(
+            encoding="utf-8", errors="replace"
+        ).strip().split()[0].lower()
+        actual_exe = _sha256(new_exe)
+        if actual_exe != expected_exe:
+            raise RuntimeError(f"DPort-{latest}.exe SHA-256 驗證失敗。")
 
-        script = temp_dir / "DPort-update.ps1"
-        script.write_text(
-            """param([int]$Pid,[string]$NewExe,[string]$OldExe,[string]$TargetExe)
-$ErrorActionPreference = 'Stop'
-while (Get-Process -Id $Pid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
+        # 3. Download and verify the standalone updater before EXIT.
+        _download(helper_url, helper)
+        _download(helper_sha_url, helper_sha)
+        helper_expected = helper_sha.read_text(
+            encoding="utf-8", errors="replace"
+        ).strip().split()[0].lower()
+        if _sha256(helper) != helper_expected:
+            raise RuntimeError("DPort-Updater.exe SHA-256 驗證失敗。")
 
-if (Test-Path -LiteralPath $TargetExe) {
-    Remove-Item -LiteralPath $TargetExe -Force
-}
-
-$moveOk = $false
-for ($i = 0; $i -lt 40; $i++) {
-    try {
-        Move-Item -LiteralPath $NewExe -Destination $TargetExe -Force
-        $moveOk = $true
-        break
-    } catch {
-        Start-Sleep -Milliseconds 300
-    }
-}
-if (-not $moveOk -or -not (Test-Path -LiteralPath $TargetExe)) {
-    throw "Unable to place the new DPort executable."
-}
-
-$started = Start-Process -FilePath $TargetExe -PassThru
-Start-Sleep -Seconds 2
-if ($started.HasExited) {
-    throw "The updated DPort executable exited immediately with code $($started.ExitCode)."
-}
-
-if ((Test-Path -LiteralPath $OldExe) -and ($OldExe -ne $TargetExe)) {
-    Remove-Item -LiteralPath $OldExe -Force -ErrorAction SilentlyContinue
-}
-
-Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
-""",
-            encoding="utf-8",
+        # 4. Start standalone updater. It performs all post-EXIT file operations.
+        port = os.environ.get("DPORT_PORT") or "54321"
+        updater_args = [
+            str(helper),
+            "--pid", str(os.getpid()),
+            "--target", str(current_exe),
+            "--new-exe", str(new_exe),
+            "--version", latest,
+            "--port", str(port),
+            "--no-browser",
+        ]
+        flags = (
+            getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+            | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            | 0x01000000
         )
-
-        # Launch the updater as a truly detached Windows process. The main
-        # DPort process intentionally exits shortly after this call, so the
-        # updater must not depend on the console/CMD lifetime.
-        create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        detached_process = 0x00000008
-        new_process_group = 0x00000200
-        log_file = temp_dir / "DPort-update.log"
-        script.write_text(
-            script.read_text(encoding="utf-8")
-            + "\nAdd-Content -LiteralPath '"
-            + str(log_file).replace("'", "''")
-            + "' -Value ('Updater finished at ' + (Get-Date -Format s)) -ErrorAction SilentlyContinue\n",
-            encoding="utf-8",
-        )
-        with log_file.open("a", encoding="utf-8") as log:
-            log.write(f"Starting DPort update to {latest}\\n")
-            log.flush()
-
         subprocess.Popen(
-            [
-                "powershell.exe",
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", str(script),
-                "-Pid", str(os.getpid()),
-                "-NewExe", str(new_exe),
-                "-OldExe", str(current_exe),
-                "-TargetExe", str(target_exe),
-            ],
+            updater_args,
+            cwd=str(update_dir),
             stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            creationflags=create_no_window | detached_process | new_process_group,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=flags,
             close_fds=True,
         )
 
         _set_state(
             state="restarting",
-            message=f"Updating to DPort {latest}",
+            message=f"下載完成，正在關閉 DPort 並啟動 {latest}…",
             latest_version=latest,
             release_url=release_url,
             restart_required=True,
             updated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         )
-        threading.Timer(0.8, os._exit, args=(0,)).start()
         return {
             "ok": True,
             "state": "restarting",
             "version": latest,
-            "message": f"Updating to DPort {latest}",
+            "message": f"下載完成，正在關閉 DPort 並啟動 {latest}…",
         }
     except Exception as exc:
         LOGGER.exception("DPort update failed")
@@ -331,6 +367,16 @@ __all__ = [
     "_get_update_candidate",
 ]
 '''
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -537,8 +583,52 @@ UPDATE_UI = r'''
     var box=document.getElementById('dport-update-dialog');
     if(box) box.classList.remove('show');
   }
+  function parts(v){
+    return String(v||'0').replace(/^v/i,'').split('.').map(function(x){
+      var m=x.match(/^\d+/); return m ? parseInt(m[0],10) : 0;
+    });
+  }
+  function atLeast(a,b){
+    var A=parts(a), B=parts(b);
+    for(var i=0;i<3;i++){
+      if((A[i]||0)>(B[i]||0)) return true;
+      if((A[i]||0)<(B[i]||0)) return false;
+    }
+    return true;
+  }
+  function waitForRestart(expectedVersion){
+    var msg=document.getElementById('dport-update-message');
+    var attempts=0;
+    var timer=setInterval(function(){
+      attempts++;
+      fetch('/pymobiledevice3/status?ts='+Date.now(),{cache:'no-store'})
+        .then(function(r){
+          if(!r.ok) throw new Error('HTTP '+r.status);
+          return r.json();
+        })
+        .then(function(status){
+          var current=String(status && status.current_version || '');
+          // Do not reload merely because the old 6.9.0 server answered.
+          if(!current || !atLeast(current, expectedVersion)){
+            if(msg) msg.textContent='正在等待 DPort '+expectedVersion+' 啟動…';
+            throw new Error('old-version-server');
+          }
+          clearInterval(timer);
+          if(msg) msg.textContent='DPort '+expectedVersion+' 已啟動，正在重新載入…';
+          setTimeout(function(){ window.location.reload(); },500);
+        })
+        .catch(function(){
+          if(attempts>=180){
+            clearInterval(timer);
+            if(msg) msg.textContent='新版程式尚未連回，請確認 DPort-'+expectedVersion+'.exe 是否已啟動。';
+          }
+        });
+    },1000);
+  }
+
   function start(){
     var btn=document.getElementById('dport-update-now');
+    var title=document.querySelector('#dport-update-dialog h3');
     if(!btn) return;
     btn.disabled=true;
     btn.textContent='更新中…';
@@ -546,17 +636,24 @@ UPDATE_UI = r'''
       .then(function(r){return r.json();})
       .then(function(result){
         if(result && result.ok){
+          if(title) title.textContent='DPort 正在關閉';
           var msg=document.getElementById('dport-update-message');
-          if(msg) msg.textContent='正在更新到 DPort '+result.version+'，程式即將重新啟動…';
+          if(msg) msg.textContent='6.9.1 已下載並驗證，正在關閉 6.9.0…';
+          // The backend now shuts down DPort after the verified download.
+          waitForRestart(String(result.version || ''));
         }else{
+          if(title) title.textContent='DPort 更新失敗';
           btn.disabled=false;
-          btn.textContent='立即更新';
+          btn.textContent='立即重試';
           var msg=document.getElementById('dport-update-message');
           if(msg) msg.textContent=(result && result.message) ? result.message : '更新失敗，請稍後再試。';
         }
       }).catch(function(){
+        if(title) title.textContent='DPort 更新失敗';
         btn.disabled=false;
-        btn.textContent='立即更新';
+        btn.textContent='立即重試';
+        var msg=document.getElementById('dport-update-message');
+        if(msg) msg.textContent='無法完成更新，請再次嘗試。';
       });
   }
 
@@ -588,6 +685,52 @@ def get_good_zip() -> bytes:
 
 
 def patch_main(main_text: str) -> str:
+    # Detach any inherited Windows console in the frozen GUI release.
+    if "def _detach_console_if_needed():" not in main_text:
+        main_text = main_text.replace(
+            "import logging\n",
+            '''import logging
+def _detach_console_if_needed():
+    """Detach any inherited Windows console; GUI releases should never expose one."""
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return
+    try:
+        import ctypes
+        ctypes.windll.kernel32.FreeConsole()
+    except Exception:
+        pass
+
+''',
+            1,
+        )
+    # Force Windows UAC re-elevation through hidden ShellExecuteW.
+    # This replaces the legacy pyuac elevation path in generated releases so the GUI binary
+    # never flashes a console window while elevating.
+    admin_re = re.compile(
+        r'(?ms)^        if not pyuac\.isUserAdmin\(\):\n.*?(?=^    chosen_port\s*=)',
+    )
+    main_text = admin_re.sub(
+        '''        if not pyuac.isUserAdmin():
+            import ctypes
+            executable = str(Path(sys.executable).resolve())
+            params = subprocess.list2cmdline(sys.argv[1:])
+            result = ctypes.windll.shell32.ShellExecuteW(
+                None,
+                "runas",
+                executable,
+                params,
+                str(Path(executable).parent),
+                0,
+            )
+            if result <= 32:
+                raise RuntimeError(f"Hidden elevation failed: {result}")
+            raise SystemExit(0)
+
+''',
+        main_text,
+        count=1,
+    )
+
     # The updater exports bootstrap_dport_updater(). Older source referenced a
     # non-existent bootstrap symbol and caused immediate startup ImportError.
     main_text = re.sub(
@@ -596,7 +739,109 @@ def patch_main(main_text: str) -> str:
         main_text,
     )
 
+    # During update, shutdown_server() calls clear_geoport(). Preserve the
+    # standalone updater process so it can finish the replacement after EXIT.
+    legacy_admin_call = "pyuac." + "runAsAdmin()"
+    if legacy_admin_call in main_text:
+        main_text = main_text.replace(
+            "            " + legacy_admin_call,
+            "            raise RuntimeError('legacy admin elevation call must not be used in generated release builds')",
+            1,
+        )
+
+    if "def _is_dport_updater_process" not in main_text:
+        guard = '''
+def _is_dport_updater_process(name: str) -> bool:
+    normalized = str(name or "").lower()
+    return normalized in {
+        "dport-updater.exe",
+        "dport_updater_helper.exe",
+    } or "dport-updater" in normalized
+
+
+'''
+        main_text = main_text.replace("def clear_geoport():", guard + "def clear_geoport():", 1)
+
+    main_text = re.sub(
+        r'(?ms)(def clear_geoport\(\):\n.*?current_pid\s*=\s*os\.getpid\(\)\n)(.*?)(?=\n\ndef clear_old_geoport)',
+        r'''\1    for process in psutil.process_iter(["pid", "name"]):
+        try:
+            if int(process.info.get("pid") or 0) == current_pid:
+                continue
+            if _is_dport_updater_process(process.info.get("name")):
+                continue
+            if "dport" in str(process.info.get("name") or "").lower():
+                process.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+''',
+        main_text,
+        count=1,
+    )
+
+    # Update shutdown must preserve the standalone updater process.
+    if "def shutdown_server():" in main_text:
+        main_text = main_text.replace(
+            "def shutdown_server():",
+            "def shutdown_server(preserve_updater=False):",
+            1,
+        )
+        main_text = main_text.replace(
+            "    # Terminate the current process\n    clear_geoport()",
+            "    # During an update, the standalone updater must survive this shutdown.\n    if not preserve_updater:\n        clear_geoport()",
+            1,
+        )
+
+    # Make shutdown update-safe regardless of the baseline source shape.
+    if "def shutdown_server():" in main_text:
+        main_text = main_text.replace(
+            "def shutdown_server():",
+            "def shutdown_server(preserve_updater=False):",
+            1,
+        )
+        main_text = main_text.replace(
+            "    # Terminate the current process\n    clear_geoport()",
+            "    # During an update, the standalone updater must survive this shutdown.\n    if not preserve_updater:\n        clear_geoport()",
+            1,
+        )
+
     if "/dport/update" in main_text:
+        main_text = re.sub(
+            r'(?ms)^@app\.get\("/dport/update"\)\s*def _dport_user_confirmed_update\(\):.*?(?=^@app\.|^def |^if __name__ ==)',
+            '''@app.get("/dport/update")
+def _dport_user_confirmed_update():
+    try:
+        try:
+            os.environ["DPORT_PORT"] = str(chosen_port)
+        except Exception:
+            os.environ["DPORT_PORT"] = "54321"
+
+        result = dport_release_updater.request_update()
+        if isinstance(result, tuple):
+            payload = result[0]
+            status = result[1] if len(result) > 1 else 200
+        else:
+            payload = result
+            status = 200
+
+        if isinstance(payload, dict) and payload.get("ok"):
+            def delayed_update_shutdown():
+                time.sleep(0.8)
+                shutdown_server(preserve_updater=True)
+            threading.Thread(
+                target=delayed_update_shutdown,
+                name="DPort-update-shutdown",
+                daemon=True,
+            ).start()
+
+        return (jsonify(payload) if isinstance(payload, dict) else payload), status
+    except Exception as exc:
+        return {"ok": False, "state": "update_failed", "message": str(exc)}, 500
+
+''',
+            main_text,
+            count=1,
+        )
         return main_text
 
     match = re.search(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*Flask\(", main_text, flags=re.M)
@@ -604,7 +849,7 @@ def patch_main(main_text: str) -> str:
         raise RuntimeError("Could not find Flask app variable in main.py")
     app_name = match.group(1)
 
-    route = f'''\n\n# DPort user-confirmed updater endpoint: never called automatically.\n@{app_name}.get("/dport/update")\ndef _dport_user_confirmed_update():\n    try:\n        return dport_release_updater.request_update()\n    except Exception as exc:\n        return {{"ok": False, "state": "update_failed", "message": str(exc)}}, 500\n\n'''
+    route = f'''\n\n# DPort user-confirmed updater endpoint: never called automatically.\n@{app_name}.get("/dport/update")\ndef _dport_user_confirmed_update():\n    try:\n        try:\n            os.environ["DPORT_PORT"] = str(chosen_port)\n        except Exception:\n            os.environ["DPORT_PORT"] = "54321"\n\n        result = dport_release_updater.request_update()\n        if isinstance(result, tuple):\n            payload = result[0]\n            status = result[1] if len(result) > 1 else 200\n        else:\n            payload = result\n            status = 200\n\n        if isinstance(payload, dict) and payload.get("ok"):\n            def delayed_update_shutdown():\n                time.sleep(0.8)\n                shutdown_server(preserve_updater=True)\n            threading.Thread(\n                target=delayed_update_shutdown,\n                name="DPort-update-shutdown",\n                daemon=True,\n            ).start()\n\n        return (jsonify(payload) if isinstance(payload, dict) else payload), status\n    except Exception as exc:\n        return {{"ok": False, "state": "update_failed", "message": str(exc)}}, 500\n\n'''
 
     anchor = re.search(r"^\s*if\s+__name__\s*==\s*[\"']__main__[\"']\s*:", main_text, flags=re.M)
     if anchor:
@@ -619,7 +864,8 @@ def patch_main(main_text: str) -> str:
         main_text = "import dport_release_updater\n" + main_text
         insert_at += len("import dport_release_updater\n")
 
-    return main_text[:insert_at] + route + main_text[insert_at:]
+    result = main_text[:insert_at] + route + main_text[insert_at:]
+    return result
 
 
 def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
@@ -635,10 +881,11 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
         version_file = root / "src" / "dport_version.py"
         req_file = root / "requirements-build.txt"
         updater_file = root / "src" / "dport_release_updater.py"
+        helper_file = root / "src" / "dport_updater_helper.py"
         main_file = root / "src" / "main.py"
         map_file = root / "src" / "templates" / "map.html"
 
-        for required in (version_file, req_file, updater_file, main_file, map_file):
+        for required in (version_file, req_file, updater_file, helper_file, main_file, map_file):
             if not required.exists():
                 raise RuntimeError(f"Required source file missing: {required}")
 
@@ -658,10 +905,55 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
         compile(SAFE_UPDATER, "dport_release_updater.py", "exec")
         updater_file.write_text(SAFE_UPDATER, encoding="utf-8")
 
+        repo_helper = Path(__file__).resolve().parent.parent / "src" / "dport_updater_helper.py"
+        if not repo_helper.exists():
+            raise RuntimeError(f"Standalone updater helper source missing: {repo_helper}")
+        helper_text = repo_helper.read_text(encoding="utf-8", errors="replace")
+        compile(helper_text, "dport_updater_helper.py", "exec")
+        helper_file.write_text(helper_text, encoding="utf-8")
+
         main_text = main_file.read_text(encoding="utf-8", errors="replace")
         main_file.write_text(patch_main(main_text), encoding="utf-8")
 
         map_text = map_file.read_text(encoding="utf-8", errors="replace")
+
+        # Reuse the existing top-right Leave shutdown path for update.
+        map_text = re.sub(
+            r"""(?s)function exitApp\(\)\s*\{.*?\n\s*\}\n\n\s*function aboutApp""",
+            """function exitApp(forUpdate) {
+        console.log('Exit App function called');
+
+        try {
+            $('#aboutModal').modal('hide');
+            if (!forUpdate) {
+                $('#shutdownModal').modal('show');
+            }
+
+            const data = JSON.stringify({reason: forUpdate ? 'update' : 'user_exit'});
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon('/exit', data);
+            } else {
+                fetch('/exit', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:data,
+                    keepalive:true
+                }).catch(function(){});
+            }
+
+            window.open('', '_self', '');
+            window.close();
+        } catch (error) {
+            console.error('錯誤 during server shutdown:', error);
+        }
+        return false;
+    }
+
+    function aboutApp""",
+            map_text,
+            count=1,
+        )
+
         if "dport-user-update-dialog" not in map_text:
             if "</body>" in map_text:
                 map_text = map_text.replace("</body>", UPDATE_UI + "\n</body>", 1)
@@ -679,6 +971,7 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
             else:
                 map_text += BRAND_HEADER_HEIGHT_FIX
 
+        map_text = map_text.replace('onclick="exitApp()"', 'onclick="return exitApp(false)"')
         map_text = map_text.replace("（準備自動更新）", "（可手動更新）")
 
         manual_css = """
@@ -700,6 +993,21 @@ def patch_zip(source_zip: bytes, version: str, pm3: str, output: Path) -> None:
                 map_text += manual_css
 
         map_file.write_text(map_text, encoding="utf-8")
+
+        final_main = main_file.read_text(encoding="utf-8", errors="replace")
+        if "def shutdown_server(preserve_updater=False):" not in final_main:
+            raise RuntimeError("Generated main.py missing update-preserving shutdown.")
+        if "shutdown_server(preserve_updater=True)" not in final_main:
+            raise RuntimeError("Generated update route does not preserve updater.")
+        # Validate the final generated main.py, not the repair script itself.
+        if "pyuac.runAsAdmin()" in final_main:
+            raise RuntimeError("Generated DPort must not use the legacy visible UAC console path.")
+
+        final_helper = helper_file.read_text(encoding="utf-8", errors="replace")
+        if 'parser.add_argument("--new-exe")' not in final_helper:
+            raise RuntimeError("Generated updater helper is not the current deterministic helper.")
+        if "def _wait_for_new_version" not in final_helper:
+            raise RuntimeError("Generated updater helper is missing new-version verification.")
 
         if output.exists():
             output.unlink()
