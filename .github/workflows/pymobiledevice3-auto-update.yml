@@ -1,0 +1,145 @@
+name: DPort pymobiledevice3 Auto Update
+run-name: DPort pymobiledevice3 Auto Update
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - 'main'
+
+permissions:
+  contents: read
+
+jobs:
+  check-and-open-update-pr:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Find latest stable pymobiledevice3
+        id: latest
+        shell: pwsh
+        run: |
+          $headers = @{
+            Accept = 'application/vnd.github+json'
+            'User-Agent' = 'DPort-pymobiledevice3-updater'
+          }
+          $releases = Invoke-RestMethod -Headers $headers -Uri 'https://api.github.com/repos/doronz88/pymobiledevice3/releases?per_page=100'
+          $stable = @(
+            $releases | Where-Object {
+              -not $_.draft -and
+              -not $_.prerelease -and
+              $_.tag_name -match '^v\d+\.\d+\.\d+$'
+            } | ForEach-Object {
+              [pscustomobject]@{
+                Tag = $_.tag_name
+                Version = [version]($_.tag_name.TrimStart('v'))
+              }
+            }
+          )
+          if ($stable.Count -eq 0) { throw 'No stable pymobiledevice3 release found.' }
+          $latest = $stable | Sort-Object Version -Descending | Select-Object -First 1
+          $currentLine = Get-Content requirements-build.txt | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1
+          if (-not $currentLine) { throw 'requirements-build.txt does not pin pymobiledevice3.' }
+          $current = $currentLine.Trim().Substring('pymobiledevice3=='.Length).Trim()
+          "current=$current" >> $env:GITHUB_OUTPUT
+          "latest=$($latest.Version)" >> $env:GITHUB_OUTPUT
+          "tag=$($latest.Tag)" >> $env:GITHUB_OUTPUT
+          if ([version]$latest.Version -gt [version]$current) {
+            "update=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Update available: $current -> $($latest.Version)"
+          } else {
+            "update=false" >> $env:GITHUB_OUTPUT
+            Write-Host "Already current: $current"
+          }
+
+      - name: Update pinned dependency
+        if: steps.latest.outputs.update == 'true'
+        shell: pwsh
+        run: |
+          $version = '${{ steps.latest.outputs.latest }'
+          (Get-Content requirements-build.txt -Raw) -replace '(?m)^pymobiledevice3==.*$', "pymobiledevice3==$version" | Set-Content requirements-build.txt -Encoding utf8
+
+      - name: Create pull request
+        if: steps.latest.outputs.update == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }
+          base: main
+          branch: automation/pymobiledevice3-${{ steps.latest.outputs.latest }
+          delete-branch: false
+          title: "Update pymobiledevice3 to v${{ steps.latest.outputs.latest }"
+          commit-message: "chore: update pymobiledevice3 to v${{ steps.latest.outputs.latest }"
+          body: |
+            ## pymobiledevice3 update
+
+            Automated update detected upstream pymobiledevice3 ${{ steps.latest.outputs.tag }.
+
+            Current DPort pin: ${{ steps.latest.outputs.current }
+            New pin: ${{ steps.latest.outputs.latest }
+
+            This PR only changes requirements-build.txt.
+
+            The PR must be reviewed and merged manually. No release is created automatically.
+
+  validate-update-pr:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/pymobiledevice3-')
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.7'
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade "lzfse==0.4.2"
+          python -m pip install -r requirements-build.txt
+
+      - name: Verify pymobiledevice3 version
+        shell: pwsh
+        run: |
+          $expected = (Get-Content requirements-build.txt | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1).Trim().Substring('pymobiledevice3=='.Length)
+          $actual = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
+          if ($actual -ne $expected) { throw "Expected pymobiledevice3 $expected, got $actual." }
+          Write-Host "pymobiledevice3 $actual verified."
+
+      - name: Validate Python source
+        shell: pwsh
+        run: |
+          python -m py_compile src/main.py
+          python -m py_compile src/dport_version.py
+          python -m py_compile src/dport_release_updater.py
+          python -m py_compile src/dport_updater_helper.py
+          python -m compileall -q src scripts
+
+      - name: Build validation executable
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'DPort-6.9.0.ico')) { throw 'DPort icon file is missing.' }
+          $v = (Get-Content src/dport_version.py | Where-Object { $_.Trim().StartsWith('DPORT_VERSION=') } | Select-Object -First 1).Split('=')[1].Trim().Trim('"').Trim("'")
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name "DPort-$v-PM3-VALIDATION" --icon "DPort-6.9.0.ico" --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import "pymobiledevice3.remote.userspace_tunnel" --hidden-import "pymobiledevice3.services.dvt.instruments.dvt_provider" --hidden-import "pymobiledevice3.services.dvt.instruments.location_simulation" --hidden-import "pymobiledevice3.usbmux" --hidden-import "dport_release_updater" --hidden-import "dport_version" --add-data "src\templates;templates" --version-file "version_info.txt" "src\main.py"
+          if ($LASTEXITCODE -ne 0) { throw 'pymobiledevice3 update validation build failed.' }
+          if (-not (Test-Path "dist\DPort-$v-PM3-VALIDATION.exe")) { throw 'Validation executable was not produced.' }
