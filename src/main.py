@@ -1525,7 +1525,6 @@ def usb_presence():
 
 
 @app.route('/list_devices')
-@app.route('/list_devices')
 def py_list_devices():
     force_refresh = request.args.get('force', '') == '1'
     """List both USB and Wi-Fi/Network devices.
