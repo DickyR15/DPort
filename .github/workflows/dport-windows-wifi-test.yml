@@ -2,18 +2,6 @@ name: DPort Windows WiFi Test
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'scripts/build_dport_windows_wifi_clean_691.ps1'
-      - '.github/workflows/dport-windows-wifi-test.yml'
-  push:
-    branches:
-      - main
-    paths:
-      - 'scripts/build_dport_windows_wifi_clean_691.ps1'
-      - '.github/workflows/dport-windows-wifi-test.yml'
 
 permissions:
   contents: read
