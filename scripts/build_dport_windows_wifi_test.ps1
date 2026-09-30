@@ -4,6 +4,8 @@ $ErrorActionPreference = 'Stop'
 $root = $PWD
 $tag = 'v6.9.1'
 $version = '6.9.1'
+$expectedTagCommit = '2cd4812868ac5893eb87dbf00b3edc77c0d3beb2'
+$releaseUrl = 'https://github.com/DickyR15/DPort/releases/tag/v6.9.1'
 $srcRoot = Join-Path $env:RUNNER_TEMP 'dport-windows-wifi-test-source'
 $archive = Join-Path $env:RUNNER_TEMP 'dport-6.9.1.tar'
 $buildRoot = Join-Path $env:RUNNER_TEMP 'dport-windows-wifi-build'
@@ -27,6 +29,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Failed to fetch Git tags.' }
 
 git rev-parse --verify $tag
 if ($LASTEXITCODE -ne 0) { throw "$tag was not found." }
+
+$actualTagCommit = (git rev-list -n 1 $tag).Trim()
+if ($actualTagCommit -ne $expectedTagCommit) {
+    throw "Release v6.9.1 commit mismatch. Expected $expectedTagCommit, got $actualTagCommit"
+}
+
+Write-Host "Release base: $releaseUrl"
+Write-Host "Release tag commit: $actualTagCommit"
 
 foreach ($path in @($srcRoot, $buildRoot)) {
     if (Test-Path $path) { Remove-Item $path -Recurse -Force }
