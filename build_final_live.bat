@@ -172,6 +172,14 @@ echo.
 echo [4/6] Checking source...
 python -m py_compile "src\main.py"
 if errorlevel 1 goto fail
+python -m py_compile "src\dport_version.py"
+if errorlevel 1 goto fail
+python -m py_compile "src\dport_release_updater.py"
+if errorlevel 1 goto fail
+python -m py_compile "src\dport_updater_helper.py"
+if errorlevel 1 goto fail
+python -m compileall -q src scripts
+if errorlevel 1 goto fail
 
 if exist "build" rmdir /s /q "build"
 if exist "dist" rmdir /s /q "dist"
