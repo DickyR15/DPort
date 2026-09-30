@@ -278,33 +278,8 @@ $Main = $Main.Replace($UsbOnlyDiscovery,$WifiDiscovery)
 # default pairing-record search on Windows.
 $Main = [regex]::Replace(
     $Main,
-    '(?m)^(\s*)pair_records\s*=\s*(?:get_home_folder\(\)|home),\s*
-#    The actual v6.9.1 connect path has multiple mobdev2 calls. Remove the
-#    hard-coded user-home pairing override so Windows system pairing records
-#    can also be discovered.
-# ---------------------------------------------------------------------------
-$Main = $Main.Replace(
-'                    pair_records=home,
-',
-''
-)
-
-$Main = $Main.Replace(
-'            pair_records=get_home_folder(),
-',
-''
-)
-
-$Main = $Main.Replace(
-'                    pair_records = home,
-',
-''
-)
-
-$Main = $Main.Replace(
-'            pair_records = get_home_folder(),
-',
-''
+    '(?m)^\\s*pair_records\\s*=\\s*(?:get_home_folder\\(\\)|home),\\s*$',
+    ''
 )
 
 # Fix v6.9.1 get_wifi_with_retry(): the outer loop no longer has
