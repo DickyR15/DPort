@@ -72,30 +72,6 @@ DPort 是一個以 Windows 為主要使用環境的 iPhone 裝置工具，提供
 
 ---
 
-## 🔐 MOENV API Key
-
-若功能需要使用環境資料 API，請使用 GitHub Actions Secret 提供 API Key。
-
-### GitHub 設定方式
-
-進入：
-
-**Repository → Settings → Secrets and variables → Actions**
-
-建立 Repository Secret：
-
-`MOENV_API_KEY`
-
-真正的 API Key **不要直接提交到公開 Repository**。
-
-本專案提供：
-
-[`moenv_api_key.txt.example`](moenv_api_key.txt.example)
-
-供設定格式參考。
-
----
-
 ## 🔄 使用者自動更新機制
 
 DPort 內建更新流程會檢查本專案的正式 GitHub Release。
@@ -139,7 +115,6 @@ DPort/
 ├─ source/
 ├─ src/
 ├─ requirements-build.txt
-├─ moenv_api_key.txt.example
 ├─ GITHUB_AUTO_BUILD.md
 ├─ README.md
 └─ .gitignore
