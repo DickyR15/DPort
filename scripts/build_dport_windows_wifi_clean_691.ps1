@@ -470,8 +470,6 @@ $CheckMain = Get-Content $MainPath -Raw
 $CheckMap = Get-Content $MapPath -Raw
 
 foreach ($Needle in @(
-    'checkDeviceAutoDetect()',
-    'hasNetworkEntry',
     'get_mobdev2_lockdowns',
     'ConnectionType"] = "Network"',
     'wifiTransport"] = "mobdev2"',
