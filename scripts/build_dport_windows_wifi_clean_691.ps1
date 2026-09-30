@@ -57,6 +57,20 @@ if ($VersionSource -notmatch 'DPORT_VERSION\s*=\s*["'']6\.9\.1["'']') {
 $Main = Get-Content $MainPath -Raw
 $Map = Get-Content $MapPath -Raw
 
+# ---- Open the v6.9.1 Network/WiFi connection entry point ----
+$UsbOnlyConnectGate = @'
+    if connection_type != "USB":
+        logger.warning(f"USB-ONLY build: rejecting non-USB connection type: {connection_type}")
+        return jsonify({"error": "USB-only mode: please connect the Apple device by USB."}), 400
+
+'@
+
+if (-not $Main.Contains($UsbOnlyConnectGate)) {
+    throw 'The v6.9.1 USB-only connect gate was not found.'
+}
+
+$Main = $Main.Replace($UsbOnlyConnectGate, '')
+
 # ---- Enable WiFi discovery in the clean v6.9.1 source ----
 $UsbOnly = @'
             # USB-ONLY: Wi-Fi / Network discovery intentionally disabled.
@@ -278,7 +292,8 @@ foreach ($Needle in @(
     'ConnectionType"] = "Network"',
     'wifiTransport"] = "mobdev2"',
     'start_wifi_tcp_tunnel',
-    'CoreDeviceTunnelProxy'
+    'CoreDeviceTunnelProxy',
+    'if connection_type == "Network":'
 )) {
     if ($CheckMain -notlike "*$Needle*") {
         throw "WiFi verification failed: $Needle"
@@ -287,6 +302,10 @@ foreach ($Needle in @(
 
 if ($CheckMain -like '*USB-ONLY: Wi-Fi / Network discovery intentionally disabled*') {
     throw 'USB-only discovery block still exists.'
+}
+
+if ($CheckMain -like '*USB-ONLY build: rejecting non-USB connection type*') {
+    throw 'USB-only Network connection gate still exists.'
 }
 
 python -m py_compile src\main.py
