@@ -1357,9 +1357,11 @@ async def start_wifi_tcp_tunnel() -> None:
 
     logger.warning("Start Wi-Fi TCP tunnel via mobdev2 + CoreDeviceProxy")
 
-    # Use the no-root userspace tunnel backend on Windows.
+    # Use the normal CoreDeviceProxy TCP tunnel on Windows. This keeps the
+    # resulting TUN interface kernel-routable so the location worker can open
+    # a second RSD connection over the active WiFi tunnel.
     import pymobiledevice3.remote.tunnel_service as tunnel_service
-    tunnel_service.USE_USERSPACE_TUNNEL = True
+    tunnel_service.USE_USERSPACE_TUNNEL = False
 
     stop_remoted_if_required()
 
