@@ -18,6 +18,7 @@ $stage = Join-Path $root "DPort-WiFi-Test-$version"
 $zip = Join-Path $root "DPort-WiFi-Test-$version.zip"
 
 Write-Host "=== DPort Windows WiFi Test ==="
+# Research build baseline: Release v6.9.1 only.
 Write-Host "Base: DPort $version"
 
 if ([string]::IsNullOrWhiteSpace($env:MOENV_API_KEY)) {
