@@ -245,9 +245,6 @@ $TimeoutCheckOld = @'
             else:
                 rsd_data = rsd_host, rsd_port
                 logger.info(f"RSD Data: {rsd_data}")
-
-            rsd_data_map.setdefault(udid, {})[connection_type] = {"host": rsd_host, "port": rsd_port}
-            return jsonify({'rsd_data': rsd_data})
 '@
 
 $TimeoutCheckNew = @'
@@ -271,6 +268,36 @@ if (-not $Main.Contains($TimeoutCheckOld)) {
     throw 'v6.9.1 WiFi connection result block not found.'
 }
 $Main = $Main.Replace($TimeoutCheckOld,$TimeoutCheckNew)
+
+# The v6.9.1 connect_wifi() block can be located by the unique timeout check.
+# Replace that small portion without depending on surrounding whitespace.
+if ($Main.Contains("if not check_rsd_data():
+                logger.error("RSD Data is None, Perhaps the tunnel isn't established")")) {
+    $Main = $Main.Replace(
+@'
+            if not check_rsd_data():
+                logger.error("RSD Data is None, Perhaps the tunnel isn't established")
+            else:
+                rsd_data = rsd_host, rsd_port
+                logger.info(f"RSD Data: {rsd_data}")
+'@,
+@'
+            if not check_rsd_data():
+                detail = wifi_tunnel_error or "WiFi tunnel did not produce RSD host/port."
+                logger.error(f"WiFi tunnel failed: {detail}")
+                return jsonify({
+                    'error': 'WiFi Tunnel Failed',
+                    'details': detail,
+                    'stage': 'WiFi lockdown / CoreDeviceProxy / TCP tunnel'
+                }), 504
+
+            rsd_data = rsd_host, rsd_port
+            logger.info(f"RSD Data: {rsd_data}")
+'@
+    )
+} else {
+    throw 'The v6.9.1 WiFi timeout check was not found.'
+}
 
 # ---------------------------------------------------------------------------
 # 6. Track exact tunnel stage and preserve the real exception.
