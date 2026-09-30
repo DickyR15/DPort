@@ -57,6 +57,187 @@ if ($VersionSource -notmatch 'DPORT_VERSION\s*=\s*["'']6\.9\.1["'']') {
 $Main = Get-Content $MainPath -Raw
 $Map = Get-Content $MapPath -Raw
 
+# ---- Add detailed WiFi tunnel diagnostics to the clean v6.9.1 source ----
+$Main = $Main.Replace(
+'rsd_port = None
+connection_type = None',
+'rsd_port = None
+wifi_tunnel_error = None
+connection_type = None'
+)
+
+$WifiConnectOld = @'
+            rsd_host = None
+            rsd_port = None
+
+            # Run tun(devices) as a background task
+            #asyncio.create_task(tun(devices))
+            #await tun(devices)
+            #start_wifi_tunnel_thread(devices)
+            start_wifi_tunnel_thread()
+
+            if not check_rsd_data():
+                logger.error("RSD Data is None, Perhaps the tunnel isn't established")
+            else:
+                rsd_data = rsd_host, rsd_port
+                logger.info(f"RSD Data: {rsd_data}")
+
+            rsd_data_map.setdefault(udid, {})[connection_type] = {"host": rsd_host, "port": rsd_port}
+            return jsonify({'rsd_data': rsd_data})
+'@
+
+$WifiConnectNew = @'
+            rsd_host = None
+            rsd_port = None
+            wifi_tunnel_error = None
+
+            # Start the WiFi tunnel and keep the first concrete error so the
+            # caller does not have to wait for a blind 60-second timeout.
+            start_wifi_tunnel_thread()
+
+            if not check_rsd_data():
+                detail = wifi_tunnel_error or (
+                    "WiFi tunnel did not provide RSD host/port within the "
+                    "connection window."
+                )
+                logger.error(f"WiFi tunnel failed: {detail}")
+                return jsonify({
+                    'error': 'WiFi Tunnel Failed',
+                    'details': detail,
+                    'stage': 'CoreDeviceProxy/TCP Tunnel'
+                }), 504
+
+            rsd_data = rsd_host, rsd_port
+            logger.info(f"RSD Data: {rsd_data}")
+
+            rsd_data_map.setdefault(udid, {})[connection_type] = {"host": rsd_host, "port": rsd_port}
+            return jsonify({'rsd_data': rsd_data})
+'@
+
+if (-not $Main.Contains($WifiConnectOld)) {
+    throw 'WiFi connect response block was not found in clean v6.9.1 source.'
+}
+$Main = $Main.Replace($WifiConnectOld,$WifiConnectNew)
+
+# Make the WiFi tunnel expose concrete stage failures.
+$TunnelStartOld = @'
+async def start_wifi_tcp_tunnel() -> None:
+    """Start the official iOS 17.4+ CoreDeviceProxy TCP tunnel over mobdev2 Wi-Fi."""
+    logger.warning("Start Wi-Fi TCP tunnel via mobdev2 + CoreDeviceProxy")
+    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_address
+
+    lockdown = None
+    service = None
+    try:
+'@
+
+$TunnelStartNew = @'
+async def start_wifi_tcp_tunnel() -> None:
+    """Start the official iOS 17.4+ CoreDeviceProxy TCP tunnel over mobdev2 Wi-Fi."""
+    logger.warning("Start Wi-Fi TCP tunnel via mobdev2 + CoreDeviceProxy")
+    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_address, wifi_tunnel_error
+
+    lockdown = None
+    service = None
+    stage = "mobdev2 discovery"
+    try:
+'@
+
+if (-not $Main.Contains($TunnelStartOld)) {
+    throw 'WiFi TCP tunnel function header was not found.'
+}
+$Main = $Main.Replace($TunnelStartOld,$TunnelStartNew)
+
+$TunnelBodyOld = @'
+        if lockdown is None:
+            raise RuntimeError(
+                f"mobdev2 could not reconnect to the paired Apple device {udid} over Wi-Fi"
+            )
+
+        # iOS 17.4+ exposes CoreDeviceProxy through the normal lockdown service.
+        # This is the correct Wi-Fi tunnel path for ordinary iPhones; RemotePairing
+        # is not required for this path.
+        service = await CoreDeviceTunnelProxy.create(lockdown)
+
+        async with service.start_tcp_tunnel() as tunnel_result:
+'@
+
+$TunnelBodyNew = @'
+        if lockdown is None:
+            stage = "mobdev2 lockdown"
+            raise RuntimeError(
+                f"mobdev2 could not reconnect to the paired Apple device {udid} over Wi-Fi"
+            )
+
+        # iOS 17.4+ exposes CoreDeviceProxy through the normal lockdown service.
+        # This is the correct Wi-Fi tunnel path for ordinary iPhones; RemotePairing
+        # is not required for this path.
+        stage = "CoreDeviceProxy.create"
+        service = await CoreDeviceTunnelProxy.create(lockdown)
+
+        stage = "CoreDeviceProxy.start_tcp_tunnel"
+        async with service.start_tcp_tunnel() as tunnel_result:
+'@
+
+if (-not $Main.Contains($TunnelBodyOld)) {
+    throw 'WiFi TCP tunnel body anchor was not found.'
+}
+$Main = $Main.Replace($TunnelBodyOld,$TunnelBodyNew)
+
+$TunnelCatchMarker = @'
+    finally:
+        resume_remoted_if_required()
+'@
+
+$TunnelCatch = @'
+    except Exception as exc:
+        wifi_tunnel_error = f"{stage}: {type(exc).__name__}: {exc}"
+        logger.exception(f"WiFi tunnel failed at {wifi_tunnel_error}")
+        raise
+    finally:
+        resume_remoted_if_required()
+'@
+
+if (-not $Main.Contains($TunnelCatchMarker)) {
+    throw 'WiFi tunnel finally block was not found.'
+}
+$Main = $Main.Replace($TunnelCatchMarker,$TunnelCatch,1)
+
+# run_wifi_tunnel must preserve the exact exception instead of swallowing it.
+$RunWifiOld = @'
+def run_wifi_tunnel():
+    try:
+        if is_major_version_17_or_greater(ios_version) and not version_check(ios_version):
+'@
+
+$RunWifiNew = @'
+def run_wifi_tunnel():
+    global wifi_tunnel_error
+    try:
+        if is_major_version_17_or_greater(ios_version) and not version_check(ios_version):
+'@
+
+if (-not $Main.Contains($RunWifiOld)) {
+    throw 'run_wifi_tunnel header was not found.'
+}
+$Main = $Main.Replace($RunWifiOld,$RunWifiNew)
+
+$RunWifiCatchOld = @'
+    except Exception as e:
+        logger.error(f"Error in run_wifi_tunnel: {e}")
+'@
+
+$RunWifiCatchNew = @'
+    except Exception as e:
+        wifi_tunnel_error = f"{type(e).__name__}: {e}"
+        logger.exception(f"Error in run_wifi_tunnel: {wifi_tunnel_error}")
+'@
+
+if (-not $Main.Contains($RunWifiCatchOld)) {
+    throw 'run_wifi_tunnel exception handler was not found.'
+}
+$Main = $Main.Replace($RunWifiCatchOld,$RunWifiCatchNew,1)
+
 # ---- Open the v6.9.1 Network/WiFi connection entry point ----
 $UsbOnlyConnectGate = @'
     if connection_type != "USB":
