@@ -1,0 +1,258 @@
+from __future__ import annotations
+
+import ast
+import compileall
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.request
+from collections import Counter
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+TAGS = ("v6.9.0", "v6.9.1")
+INJECTED_IDS = (
+    "dport-final-ui-polish-v8",
+    "dport-final-favorites-render-v8",
+    "dport-map-status-overlay-script",
+    "dport-header-brand-version-final",
+    "dport-exact-copy-button-appearance",
+    "dport-copy-button-style-sync",
+    "dport-usb-manual-refresh-status",
+    "dport-usb-manual-refresh-only",
+    "dport-unified-status-final",
+    "dport-unified-status-final-script",
+    "dport-location-gpx-interaction-final",
+    "dport-location-gpx-interaction-final-script",
+    "dport-definitive-location-gpx-fix",
+    "dport-definitive-location-gpx-fix-script",
+)
+FORBIDDEN = ("moenv_api_key", "MOENV", "public_toilet", "PUBLIC_TOILET", "公共廁所")
+
+
+def run(*args: str) -> None:
+    print("+", " ".join(args))
+    subprocess.run(args, cwd=ROOT, check=True)
+
+
+def read_text(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8", errors="replace")
+
+
+def extract_script_blocks(html: str) -> list[str]:
+    blocks: list[str] = []
+    pos = 0
+    while True:
+        start = html.find("<script", pos)
+        if start < 0:
+            break
+        gt = html.find(">", start)
+        if gt < 0:
+            raise RuntimeError("Unclosed <script> tag.")
+        end = html.find("</script>", gt + 1)
+        if end < 0:
+            raise RuntimeError("Missing </script> tag.")
+        code = html[gt + 1:end]
+        if code.strip():
+            blocks.append(code)
+        pos = end + len("</script>")
+    return blocks
+
+
+def audit_tag(ref: str) -> list[str]:
+    failures: list[str] = []
+    print("=" * 70)
+    print("AUDIT", ref)
+
+    run("git", "fetch", "origin", f"refs/tags/{ref}:refs/tags/{ref}")
+    run("git", "switch", "--detach", "--force", ref)
+
+    version_line = next(
+        (line.strip() for line in read_text("src/dport_version.py").splitlines()
+         if line.strip().startswith("DPORT_VERSION=")),
+        None,
+    )
+    if not version_line:
+        failures.append("DPORT_VERSION is missing.")
+    else:
+        version = version_line.split("=", 1)[1].strip().strip("\"'")
+        if f"v{version}" != ref:
+            failures.append(f"Source version mismatch: {version} != {ref}")
+    version = ref[1:]
+
+    required = (
+        "src/main.py",
+        "src/dport_version.py",
+        "src/dport_release_updater.py",
+        "src/dport_updater_helper.py",
+        "src/templates/map.html",
+        "requirements-build.txt",
+        "build_final_live.bat",
+        "version_info.txt",
+    )
+    for item in required:
+        if not (ROOT / item).exists():
+            failures.append(f"Missing required file: {item}")
+
+    if not compileall.compile_dir(str(ROOT / "src"), quiet=1):
+        failures.append("compileall failed for src/")
+    if not compileall.compile_dir(str(ROOT / "scripts"), quiet=1):
+        failures.append("compileall failed for scripts/")
+
+    req_lines = read_text("requirements-build.txt").splitlines()
+    pm3 = next((x.split("==", 1)[1].strip() for x in req_lines if x.strip().startswith("pymobiledevice3==")), None)
+    if not pm3:
+        failures.append("pymobiledevice3 pin missing.")
+    else:
+        print("pymobiledevice3:", pm3)
+
+    html = read_text("src/templates/map.html")
+    try:
+        blocks = extract_script_blocks(html)
+        node = shutil.which("node")
+        if not node:
+            failures.append("Node.js is not installed.")
+        else:
+            with tempfile.TemporaryDirectory() as td:
+                for i, code in enumerate(blocks):
+                    js = Path(td) / f"block-{i}.js"
+                    js.write_text(code, encoding="utf-8")
+                    result = subprocess.run([node, "--check", str(js)], cwd=ROOT)
+                    if result.returncode != 0:
+                        failures.append(f"JavaScript syntax error in inline script #{i}.")
+    except Exception as exc:
+        failures.append(f"JavaScript extraction failed: {exc}")
+
+    for block_id in INJECTED_IDS:
+        count = html.count(f'id="{block_id}"') + html.count(f"id='{block_id}'")
+        if count != 1:
+            failures.append(f"Injected block ID {block_id!r} appears {count} times.")
+
+    try:
+        tree = ast.parse(read_text("src/main.py"))
+        routes: Counter[str] = Counter()
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for dec in node.decorator_list:
+                if (
+                    isinstance(dec, ast.Call)
+                    and isinstance(dec.func, ast.Attribute)
+                    and isinstance(dec.func.value, ast.Name)
+                    and dec.func.value.id == "app"
+                    and dec.func.attr == "route"
+                    and dec.args
+                    and isinstance(dec.args[0], ast.Constant)
+                    and isinstance(dec.args[0].value, str)
+                ):
+                    routes[dec.args[0].value] += 1
+        for route, count in routes.items():
+            if count > 1:
+                failures.append(f"Duplicate Flask route {route!r} appears {count} times.")
+    except Exception as exc:
+        failures.append(f"AST route audit failed: {exc}")
+
+    bat = read_text("build_final_live.bat")
+    if "DPort-6.9.0.exe" in bat:
+        failures.append("build_final_live.bat hardcodes DPort-6.9.0.exe.")
+    if "generate_version_info.py" not in bat:
+        failures.append("build_final_live.bat lacks dynamic version metadata generation.")
+    if "version_info.generated.txt" not in bat:
+        failures.append("build_final_live.bat does not use generated version metadata.")
+
+    version_info = read_text("version_info.txt")
+    if not re.search(r"FileVersion'\s*,\s*'" + re.escape(version) + r"'", version_info):
+        failures.append("version_info.txt FileVersion mismatch.")
+    if not re.search(r"ProductVersion'\s*,\s*'" + re.escape(version) + r"'", version_info):
+        failures.append("version_info.txt ProductVersion mismatch.")
+
+    updater = read_text("src/dport_release_updater.py")
+    for needle in ("RELEASES_API", "_get_latest_stable_release", "_is_newer"):
+        if needle not in updater:
+            failures.append(f"Updater missing {needle}.")
+
+    for path in ROOT.rglob("*"):
+        if not path.is_file() or ".git" in path.parts:
+            continue
+        if path.suffix.lower() not in {".py", ".bat", ".txt", ".md", ".yml", ".yaml", ".html", ".js", ".json"}:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        for token in FORBIDDEN:
+            if token in text:
+                failures.append(f"Legacy forbidden text {token!r} remains in {path.relative_to(ROOT)}.")
+
+    print(ref, "FAIL" if failures else "PASS")
+    for item in failures:
+        print(" -", item)
+    return failures
+
+
+def audit_live_releases() -> list[str]:
+    failures: list[str] = []
+    url = "https://api.github.com/repos/DickyR15/DPort/releases?per_page=100"
+    request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "DPort-Full-Audit"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        releases = json.load(response)
+
+    stable = [r for r in releases if not r.get("draft") and not r.get("prerelease") and re.fullmatch(r"v\d+\.\d+\.\d+", str(r.get("tag_name", "")))]
+    stable.sort(key=lambda r: tuple(int(x) for x in r["tag_name"][1:].split(".")), reverse=True)
+
+    if not stable:
+        return ["No stable releases found."]
+    latest = stable[0]["tag_name"]
+    print("GitHub highest stable release:", latest)
+
+    if latest != "v6.9.1":
+        failures.append(f"Expected current highest stable release to be v6.9.1, got {latest}.")
+
+    for tag in TAGS:
+        release = next((r for r in stable if r.get("tag_name") == tag), None)
+        if not release:
+            failures.append(f"Release {tag} is missing.")
+            continue
+        assets = {str(a.get("name")) for a in release.get("assets", [])}
+        expected = {f"DPort-{tag[1:]}.exe", f"DPort-{tag[1:]}.exe.sha256", "DPort-Updater.exe", "DPort-Updater.exe.sha256"}
+        missing = expected - assets
+        if missing:
+            failures.append(f"{tag} missing assets: {sorted(missing)}")
+
+    return failures
+
+
+def main() -> int:
+    failures: list[str] = []
+    original_ref = subprocess.run(
+        ["git", "branch", "--show-current"], cwd=ROOT, text=True, capture_output=True, check=True
+    ).stdout.strip()
+
+    try:
+        for tag in TAGS:
+            failures.extend(audit_tag(tag))
+        try:
+            failures.extend(audit_live_releases())
+        except Exception as exc:
+            failures.append(f"Live GitHub release audit failed: {exc}")
+    finally:
+        if original_ref:
+            subprocess.run(["git", "switch", original_ref], cwd=ROOT, check=False)
+
+    print("=" * 70)
+    if failures:
+        print("FULL AUDIT FAILED")
+        for item in failures:
+            print(" -", item)
+        return 1
+
+    print("FULL AUDIT PASSED")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
