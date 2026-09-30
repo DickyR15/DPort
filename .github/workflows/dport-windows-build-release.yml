@@ -1,5 +1,5 @@
-name: "DPort Windows Build & Release"
-run-name: "DPort Windows Build & Release"
+name: DPort Windows Build & Release
+run-name: DPort Windows Build & Release
 
 
 on:
