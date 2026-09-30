@@ -507,8 +507,6 @@ DPort-WiFi-Test-6.9.1.log
 Research build only.
 "@ | Set-Content $Readme -Encoding utf8
 
-Copy-Item (Join-Path $Out 'DPort-WiFi-Test-6.9.1.exe') (Join-Path $Out 'DPort-WiFi-Test-6.9.1.exe') -Force
-
 Write-Host '=== BUILD SUCCESS ==='
 Write-Host "EXE: $Exe"
 Write-Host "SHA: $Sha"
