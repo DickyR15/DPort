@@ -1872,10 +1872,12 @@ def device_disconnected():
         )
 
     # 6) Static verification of the two user-visible fixes.
-    if "currentSelectionIsNetwork" not in page:
-        raise RuntimeError("FIX4 WiFi selection guard missing")
-    if "Restore the transport the user had selected" not in page:
-        raise RuntimeError("FIX4 selection persistence missing")
+    if "FIX4 populateDeviceList selection wrapper" not in page:
+        raise RuntimeError("FIX4 WiFi selection wrapper missing")
+    if "IMPORTANT:" not in page or "Do not assign deviceDropdown.value here." not in page:
+        raise RuntimeError("FIX4 auto USB selection guard missing")
+    if "populateDeviceList = async function(options)" not in page:
+        raise RuntimeError("FIX4 populateDeviceList wrapper missing")
     if "get_remote_pairing_tunnel_services(udid=udid)" not in main:
         raise RuntimeError("FIX4 official WiFi RemotePairing path missing")
     if "service.start_tcp_tunnel()" not in main:
