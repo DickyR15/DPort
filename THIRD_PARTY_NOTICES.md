@@ -110,7 +110,6 @@ the authoritative record of the source used to create that release.
 
 The repository must not contain:
 
-- API keys
 - passwords
 - access tokens
 - private keys
@@ -118,7 +117,6 @@ The repository must not contain:
 - Apple Developer secrets
 - other confidential credentials
 
-The repository contains only example configuration such as `moenv_api_key.txt.example`.
 Actual credentials must remain in local configuration or GitHub Secrets.
 
 ## 8. Trademarks
