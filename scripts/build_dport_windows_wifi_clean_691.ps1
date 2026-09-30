@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 # ============================================================================
 # DPort WiFi Research Build
+# Build trigger: persistent WiFi device-list test
 # BASE = Release v6.9.1
 # No previous WiFi test source is used.
 # ============================================================================
