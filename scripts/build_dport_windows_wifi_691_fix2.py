@@ -35,11 +35,14 @@ def run(cmd: list[str], cwd: Path | None = None) -> str:
     return p.stdout
 
 
-def replace_function(text: str, start_pattern: str, end_pattern: str, replacement: str, label: str) -> str:
-    m = re.search(start_pattern + r".*?(?=" + end_pattern + r")", text, re.S)
-    if not m:
-        raise RuntimeError(f"Could not locate {label}")
-    return text[: m.start()] + replacement + text[m.end() :]
+def replace_function(text: str, start_marker: str, end_marker: str, replacement: str, label: str) -> str:
+    start = text.find(start_marker)
+    if start < 0:
+        raise RuntimeError(f"Could not locate start of {label}")
+    end = text.find(end_marker, start)
+    if end < 0:
+        raise RuntimeError(f"Could not locate end of {label}")
+    return text[:start] + replacement + text[end:]
 
 
 def build_source() -> None:
@@ -978,7 +981,7 @@ def build_source() -> None:
     page = replace_function(
         page,
         r"function handleUsbCableRemoved()",
-        r"var appVersionNum =",
+        "var appVersionNum =",
         remove_function,
         "handleUsbCableRemoved()",
     )
