@@ -136,7 +136,7 @@ def build_source() -> None:
     # The old sequential collect_devices() made WiFi appear only after all USB
     # work completed (and force-refresh could retry USB several times first).
     # Run the two discovery paths concurrently.
-    parallel_collect_function = '''async def collect_devices():
+    parallel_collect_function = '''        async def collect_devices():
             async def collect_usb_devices():
                 try:
                     usb_devices = []
@@ -234,10 +234,7 @@ def build_source() -> None:
                 collect_wifi_devices(),
             )
 '''
-    parallel_collect_function = "\n".join(
-        line[8:] if line.startswith("        ") else line
-        for line in parallel_collect_function.splitlines()
-    )
+    # Keep the nested function indentation required by /list_devices().
     main = replace_function(
         main,
         r"async def collect_devices():",
