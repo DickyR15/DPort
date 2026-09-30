@@ -270,9 +270,6 @@ $AutoDetectGuard = @'
             }
         });
 
-        if (hasNetworkEntry) {
-            return;
-        }
 '@
 
 if (-not $Map.Contains('hasNetworkEntry')) {
@@ -317,6 +314,80 @@ if (-not $Map.Contains('usbDefault')) {
     }
     $Map = $Map.Replace($DefaultAnchor,$DefaultPatch,1)
 }
+
+$Map = $Map.Replace(
+@'
+        if (rawIds.length === 0) {
+            // Only a successful, error-free empty snapshot may clear stale
+            // device entries.
+            deviceReinsertRetryCount = 0;
+            deviceReinsertRetryUntil = 0;
+            deviceAutoRefreshSignature = '';
+            deviceAutoRefreshScheduled = false;
+
+            if (deviceDropdown.options.length > 0) {
+                deviceDropdown.innerHTML = '';
+                deviceDropdown.value = '';
+            }
+
+            var connectionDropdown = document.getElementById('connection');
+            if (connectionDropdown) {
+                connectionDropdown.innerHTML = '';
+                connectionDropdown.value = '';
+            }
+            return;
+        }
+'@,
+@'
+        if (rawIds.length === 0) {
+            // USB presence is independent from Network/WiFi presence.
+            // Keep WiFi visible while continuing to poll for a later USB replug.
+            deviceReinsertRetryCount = 0;
+            deviceReinsertRetryUntil = 0;
+            deviceAutoRefreshSignature = '';
+            deviceAutoRefreshScheduled = false;
+
+            const hasNetworkEntryNow = Array.from(deviceDropdown.options).some(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    const type = String(
+                        info.ConnectionType ||
+                        info.connectionType ||
+                        info.wifiTransport ||
+                        ''
+                    ).toUpperCase();
+
+                    return (
+                        type === 'NETWORK' ||
+                        type === 'WIFI' ||
+                        !!info.wifiAddress ||
+                        !!info.wifiPort ||
+                        !!info.wifiTransport
+                    );
+                } catch (e) {
+                    return false;
+                }
+            });
+
+            if (hasNetworkEntryNow) {
+                return;
+            }
+
+            if (deviceDropdown.options.length > 0) {
+                deviceDropdown.innerHTML = '';
+                deviceDropdown.value = '';
+            }
+
+            var connectionDropdown = document.getElementById('connection');
+            if (connectionDropdown) {
+                connectionDropdown.innerHTML = '';
+                connectionDropdown.value = '';
+            }
+            return;
+        }
+'@,
+1
+)
 
 # ---------------------------------------------------------------------------
 # 8. Timeout modal close must not reload the page
@@ -396,8 +467,20 @@ if ($CheckMap -notlike '*usbDefault*') {
     throw 'USB default selector patch is missing.'
 }
 
+if ($CheckMap -like '*if (hasNetworkEntry) { return; }*') {
+    throw 'USB auto-detect is incorrectly stopped by a WiFi entry.'
+}
+
+if ($CheckMap -notlike '*hasNetworkEntryNow*') {
+    throw 'USB/WiFi coexistence preservation patch is missing.'
+}
+
 if ($CheckMap -notlike '*hasNetworkEntry*') {
     throw 'WiFi persistence frontend patch is missing.'
+}
+
+if (-not (Test-Path (Join-Path $Build 'DPort-6.9.0.ico'))) {
+    throw 'DPort icon file DPort-6.9.0.ico is missing from the v6.9.1 source.'
 }
 
 python -m py_compile src\main.py
@@ -429,6 +512,7 @@ $PyInstallerArgs = @(
     '--onefile',
     '--windowed',
     '--name',"DPort-WiFi-Test-$Version",
+    '--icon',(Join-Path $Build 'DPort-6.9.0.ico'),
     '--collect-all','pymobiledevice3',
     '--collect-all','pytun_pmd3',
     '--collect-all','pyimg4',
