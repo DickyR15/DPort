@@ -234,6 +234,10 @@ def build_source() -> None:
                 collect_wifi_devices(),
             )
 '''
+    parallel_collect_function = "\n".join(
+        ("        " + line) if line.strip() else ""
+        for line in parallel_collect_function.splitlines()
+    )
     main = replace_function(
         main,
         r"async def collect_devices():",
@@ -242,7 +246,8 @@ def build_source() -> None:
         "parallel USB/WiFi device discovery",
     )
 
-    # Robust WiFi discovery parser.    wifi_function = '''def get_wifi_with_retry(max_attempts=10):
+    # Robust WiFi discovery parser.
+    wifi_function = '''def get_wifi_with_retry(max_attempts=10):
     global udid, wifi_address, wifi_port, ios_version
 
     logger.info("Wi-Fi discovery: using Apple mobdev2 Bonjour (_apple-mobdev2._tcp)")
