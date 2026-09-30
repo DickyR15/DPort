@@ -452,7 +452,7 @@ def get_wifi_with_retry(max_attempts=10):
 
     iTunes Wi-Fi Sync advertises _apple-mobdev2._tcp.  This is a different
     discovery path from RemotePairing (_remotepairing._tcp), which FIX4 used.
-    Normal iPhones on iOS 17.4+ should use mobdev2 + CoreDeviceProxy for the
+    Normal Apple devices on iOS 17.4+ should use mobdev2 + CoreDeviceProxy for the
     Wi-Fi lockdown tunnel.
     """
     global udid, wifi_address, wifi_port, ios_version
@@ -551,7 +551,7 @@ def get_wifi_with_retry(max_attempts=10):
 
     raise RuntimeError(
         "No Wi-Fi device found. iTunes Wi-Fi Sync uses mobdev2 (_apple-mobdev2._tcp), "
-        "not RemotePairing. Verify the iPhone was paired by USB, Wi-Fi management is enabled, "
+        "not RemotePairing. Verify the Apple device was paired by USB, Wi-Fi management is enabled, "
         "the PC and iPhone are on the same LAN, and Windows Firewall allows mDNS/Bonjour."
     )
 
@@ -799,7 +799,7 @@ def enable_developer_mode_route():
 
         if connection_type == "Network":
             return jsonify({
-                'error': 'Developer Mode must be enabled once over USB. Reconnect the iPhone by USB, enable Developer Mode, then use Wi-Fi.'
+                'error': 'Developer Mode must be enabled once over USB. Reconnect the Apple device by USB, enable Developer Mode, then use Wi-Fi.'
             })
         success, error_message = enable_developer_mode(udid, connection_type)
 
@@ -853,7 +853,7 @@ def connect_device():
 
     if connection_type != "USB":
         logger.warning(f"USB-ONLY build: rejecting non-USB connection type: {connection_type}")
-        return jsonify({"error": "USB-only mode: please connect the iPhone by USB."}), 400
+        return jsonify({"error": "USB-only mode: please connect the Apple device by USB."}), 400
 
     # Reuse an already-established connection when valid.
     if connection_type != "USB" and udid in rsd_data_map:
@@ -1041,7 +1041,7 @@ async def start_wifi_tcp_tunnel() -> None:
 
         if lockdown is None:
             raise RuntimeError(
-                f"mobdev2 could not reconnect to paired iPhone {udid} over Wi-Fi"
+                f"mobdev2 could not reconnect to the paired Apple device {udid} over Wi-Fi"
             )
 
         # iOS 17.4+ exposes CoreDeviceProxy through the normal lockdown service.
@@ -1569,8 +1569,8 @@ def py_list_devices():
                         fallback_info = {
                             "Identifier": getattr(device, "serial", None),
                             "ConnectionType": getattr(device, "connection_type", "USB") or "USB",
-                            "DeviceName": "iPhone",
-                            "DeviceClass": "iPhone",
+                            "DeviceName": "Apple 裝置",
+                            "DeviceClass": "Apple 裝置",
                             "ProductVersion": "?",
                             "wifiAddress": None,
                             "wifiPort": None,
