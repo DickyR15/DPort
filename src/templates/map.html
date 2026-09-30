@@ -889,14 +889,7 @@ body:not(.dport-layout-ultrawide) .dport-control-card .dport-connection-body #di
 }
 </style>
 
-<style id="public-toilet-performance-v5">
-.public-toilet-marker {
-  width: 22px !important;
-  height: 22px !important;
-  line-height: 22px !important;
-  font-size: 14px !important;
-}
-
+<style id="dport-notification-layout">
 /* DPort — notification placement only, based on the known-good FIX35 build. */
 .dport-hero-notifications{
   flex:0 1 520px;
@@ -1353,20 +1346,6 @@ body.dport-layout-ultrawide .dport-brand-icon{width:86px!important;height:86px!i
   .dport-brand-icon{width:66px!important;height:66px!important}
 }
 </style>
-
-
-<script id="public-toilet-v5-helper">
-function toiletDebounceV5(fn, wait) {
-  let timer = null;
-  return function() {
-    const ctx = this, args = arguments;
-    clearTimeout(timer);
-    timer = setTimeout(function() {
-      fn.apply(ctx, args);
-    }, wait);
-  };
-}
-</script>
 
 
 <style id="dport-69-map-speed-layout">
