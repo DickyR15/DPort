@@ -174,11 +174,10 @@ jobs:
           # Write one clean, stable release-notes layout.
           # Do not append to the existing body, otherwise reruns would duplicate sections.
           $notes = @"
-          # DPort v$v
 
           ## ✨ 版本內容
 
-          - DPort Windows $v
+          - DPort Windows
           - iPhone GPS 位置模擬與定位更新
           - USB 裝置連線與裝置狀態管理
           - 地圖定位與座標操作
@@ -204,7 +203,7 @@ jobs:
 
           ## 📚 原始碼
 
-          本 Release 的 Windows 執行檔對應 Git Tag `$tag`。
+          本 Release 的 Windows 執行檔對應本次發布的 Git Tag。
 
           GitHub Repository：
 
