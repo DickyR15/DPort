@@ -71,7 +71,6 @@ $WifiDiscovery = @'
 
                 async for ip, network_device in get_mobdev2_lockdowns(
                     udid=None,
-                    pair_records=get_home_folder(),
                     only_paired=True,
                     timeout=timeout,
                 ):
@@ -243,6 +242,29 @@ $TimeoutNew = '<button type="button" class="btn btn-secondary" data-bs-dismiss="
 if ($Map.Contains($TimeoutOld)) {
     $Map = $Map.Replace($TimeoutOld,$TimeoutNew)
 }
+
+# The clean v6.9.1 get_wifi_with_retry() also hardcodes the user cache path.
+# Remove that restriction so pymobiledevice3 11.19.4 can find the Windows
+# system pairing records as well.
+$Main = $Main.Replace(
+@'
+for ip, device in get_mobdev2_lockdowns(
+                    udid=udid,
+                    pair_records=home,
+                    only_paired=True,
+                    timeout=timeout,
+                ):
+'@,
+@'
+for ip, device in get_mobdev2_lockdowns(
+                    udid=udid,
+                    only_paired=True,
+                    timeout=timeout,
+                ):
+'@
+)
+
+Write-Host "WiFi discovery: mobdev2 default pairing-record search"
 
 Set-Content -LiteralPath $MainPath -Value $Main -Encoding utf8
 Set-Content -LiteralPath $MapPath -Value $Map -Encoding utf8
