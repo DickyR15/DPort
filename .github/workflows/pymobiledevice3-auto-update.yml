@@ -5,10 +5,9 @@ on:
   schedule:
     - cron: '0 */6 * * *'
   workflow_dispatch:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  push:
     branches:
-      - 'main'
+      - 'automation/pymobiledevice3-*'
 
 permissions:
   contents: read
@@ -95,7 +94,7 @@ jobs:
             The PR must be reviewed and merged manually. No release is created automatically.
 
   validate-update-pr:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/pymobiledevice3-')
+    if: github.event_name == 'push' && startsWith(github.ref_name, 'automation/pymobiledevice3-')
     runs-on: windows-latest
     permissions:
       contents: read
