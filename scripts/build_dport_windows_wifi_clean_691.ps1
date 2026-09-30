@@ -304,6 +304,7 @@ $args = @(
     '--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider',
     '--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation',
     '--hidden-import','pymobiledevice3.usbmux',
+    '--add-data','src/templates;templates',
     'src/main.py'
 )
 
