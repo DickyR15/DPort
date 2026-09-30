@@ -1505,10 +1505,19 @@ def device_disconnected():
     # 1) Device selector remembers the user's explicit transport selection.
     #    USB remains the initial default, but WiFi is never overwritten just
     #    because USB is present.
-    populate_anchor = "        deviceDropdown.innerHTML = '';\\n        connectionDropdown.innerHTML = '';"
+
+    pop_start = page.find("async function populateDeviceList(options) {")
+    if pop_start < 0:
+        raise RuntimeError("FIX4 cannot locate populateDeviceList()")
+
+    pop_clear = page.find("deviceDropdown.innerHTML = '';", pop_start)
+    if pop_clear < 0:
+        raise RuntimeError("FIX4 cannot locate device list clear point")
+
     selection_capture = """        var __dportSelectedConnectionType = '';
         var __dportSelectedIdentifier = '';
         var __dportSelectedOption = deviceDropdown.options[deviceDropdown.selectedIndex];
+
         if (__dportSelectedOption) {
             try {
                 var __dportSelectedInfo = JSON.parse(__dportSelectedOption.value || '{}');
@@ -1527,17 +1536,29 @@ def device_disconnected():
         }
 
 """
-    if populate_anchor not in page:
-        raise RuntimeError("FIX4 cannot locate device list clear point")
-    page = page.replace(populate_anchor, selection_capture + populate_anchor, 1)
 
-    selection_restore_anchor = """        // USB is the default when present.
-        if (!isDeviceConnected) {
-            var usbDefault = Array.from(deviceDropdown.options).find(function(option) {"""
-    selection_restore = """        // Restore the transport the user had selected before the scan.
-        // This is the key rule: USB is the startup default only; it must not
-        // overwrite an explicit WiFi selection.
+    page = page[:pop_clear] + selection_capture + page[pop_clear:]
+
+    # Locate the default-selection block inside the same populate function.
+    pop_end = page.find("/* Manual device-list refresh:", pop_start)
+    if pop_end < 0:
+        raise RuntimeError("FIX4 cannot locate populateDeviceList() end")
+
+    default_pos = page.find("        // USB is the default when present.", pop_start, pop_end)
+    if default_pos < 0:
+        raise RuntimeError("FIX4 cannot locate USB default block")
+
+    default_end = page.find("        if (!deviceDropdown.dataset.geoportHandlersBound)", default_pos, pop_end)
+    if default_end < 0:
+        raise RuntimeError("FIX4 cannot locate USB default block end")
+
+    default_block = page[default_pos:default_end]
+
+    # Preserve an explicit Network/WiFi selection. Only use USB as a fallback
+    # when no previous user choice can be restored.
+    new_default_block = """        // Restore the transport the user had selected before this refresh.
         var __dportRestoredSelection = false;
+
         if (__dportSelectedConnectionType && __dportSelectedIdentifier) {
             var __dportSelectedAfterRefresh = Array.from(deviceDropdown.options).find(function(option) {
                 try {
@@ -1548,11 +1569,13 @@ def device_disconnected():
                         info.wifiTransport ||
                         ''
                     ).toUpperCase();
+
                     var identifier = String(
                         info.Identifier ||
                         info.UniqueDeviceID ||
                         ''
                     );
+
                     return type === __dportSelectedConnectionType &&
                         identifier === __dportSelectedIdentifier;
                 } catch (e) {
@@ -1566,33 +1589,208 @@ def device_disconnected():
             }
         }
 
-        // USB is the default only when there was no valid user selection to restore.
+        // USB is the initial default only when there is no explicit selection.
         if (!__dportRestoredSelection && !isDeviceConnected) {
-            var usbDefault = Array.from(deviceDropdown.options).find(function(option) {"""
-    if selection_restore_anchor not in page:
-        raise RuntimeError("FIX4 cannot locate USB default block")
-    page=page.replace(selection_restore_anchor,selection_restore,1)
+            var usbDefault = Array.from(deviceDropdown.options).find(function(option) {
+                try {
+                    var info = JSON.parse(option.value || '{}');
+                    return String(
+                        info.ConnectionType ||
+                        info.connectionType ||
+                        ''
+                    ).toUpperCase() === 'USB';
+                } catch (e) {
+                    return false;
+                }
+            });
 
-    usb_default_guard = """            if (usbDefault) {
+            if (usbDefault) {
                 deviceDropdown.value = usbDefault.value;
             }
+        }
 
-            deviceAutoRefreshSignature = rawIds.join('|');"""
-    usb_default_guard_new = """            if (
-                usbDefault &&
-                !__dportSelectedConnectionType ||
-                (
-                    usbDefault &&
-                    __dportSelectedConnectionType === 'USB' &&
-                    __dportSelectedIdentifier
-                )
+"""
+    page=page[:default_pos]+new_default_block+page[default_end:]
+
+    # 2) Auto detection must not force USB over an explicitly selected WiFi.
+    ad_start=page.find("async function checkDeviceAutoDetect() {")
+    ad_end=page.find("function startDeviceAutoDetect()",ad_start)
+    if ad_start<0 or ad_end<0:
+        raise RuntimeError("FIX4 cannot locate checkDeviceAutoDetect()")
+
+    auto_fix=page[ad_start:ad_end]
+    auto_usb_start=auto_fix.find("            // USB becomes the default")
+    auto_usb_end=auto_fix.find("\n            deviceAutoRefreshSignature = rawIds.join('|');", auto_usb_start)
+    if auto_usb_start<0 or auto_usb_end<0:
+        raise RuntimeError("FIX4 cannot locate auto USB selection block")
+
+    auto_block="""            // USB is the initial default only. Once the user selects WiFi,
+            // periodic USB detection must leave that selection untouched.
+            var currentSelectionIsNetwork = false;
+            var currentSelection = deviceDropdown.options[deviceDropdown.selectedIndex];
+
+            if (currentSelection) {
+                try {
+                    var currentInfo = JSON.parse(currentSelection.value || '{}');
+                    var currentType = String(
+                        currentInfo.ConnectionType ||
+                        currentInfo.connectionType ||
+                        currentInfo.wifiTransport ||
+                        ''
+                    ).toUpperCase();
+
+                    currentSelectionIsNetwork =
+                        currentType === 'NETWORK' ||
+                        currentType === 'WIFI' ||
+                        !!currentInfo.wifiAddress ||
+                        !!currentInfo.wifiPort ||
+                        !!currentInfo.wifiTransport;
+                } catch (e) {}
+            }
+
+            if (
+                !currentSelectionIsNetwork &&
+                !dportConnectionInProgress &&
+                !isDeviceConnected
             ) {
-                deviceDropdown.value = usbDefault.value;
-            }
+                var usbDefault = Array.from(deviceDropdown.options).find(function(option) {
+                    try {
+                        var info = JSON.parse(option.value || '{}');
+                        return String(
+                            info.ConnectionType ||
+                            info.connectionType ||
+                            ''
+                        ).toUpperCase() === 'USB';
+                    } catch (e) {
+                        return false;
+                    }
+                });
 
-            deviceAutoRefreshSignature = rawIds.join('|');"""
-    if usb_default_guard in page:
-        page=page.replace(usb_default_guard,usb_default_guard_new,1)
+                if (usbDefault) {
+                    deviceDropdown.value = usbDefault.value;
+                }
+            }"""
+    page=page[:ad_start]+auto_fix[:auto_usb_start]+auto_block+auto_fix[auto_usb_end:]+page[ad_end:]
+
+    # 3) Use the official upstream WiFi RemotePairing TCP tunnel path.
+    #    CoreDeviceTunnelProxy is the USB lockdown service; WiFi uses the
+    #    RemotePairing service returned by get_remote_pairing_tunnel_services().
+    tunnel_start=main.find("async def start_wifi_tcp_tunnel() -> None:")
+    tunnel_end=main.find("async def start_wifi_quic_tunnel()",tunnel_start)
+    if tunnel_start<0 or tunnel_end<0:
+        raise RuntimeError("FIX4 cannot locate start_wifi_tcp_tunnel()")
+
+    official_wifi_tunnel=r'''async def start_wifi_tcp_tunnel() -> None:
+    """Establish the official pymobiledevice3 WiFi RemotePairing TCP tunnel."""
+    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_address
+
+    logger.warning(
+        "Starting WiFi tunnel via RemotePairing Bonjour "
+        "(official pymobiledevice3 WiFi path)"
+    )
+
+    tunnel_service.USE_USERSPACE_TUNNEL = False
+    stop_remoted_if_required()
+
+    last_error = None
+
+    for discovery_attempt in range(1, 4):
+        services = []
+        try:
+            services = await get_remote_pairing_tunnel_services(udid=udid)
+            logger.info(
+                f"RemotePairing WiFi services discovered: "
+                f"{len(services)} (attempt {discovery_attempt}/3)"
+            )
+
+            if services:
+                break
+
+        except Exception as exc:
+            last_error = exc
+            logger.exception(
+                f"RemotePairing WiFi discovery attempt "
+                f"{discovery_attempt}/3 failed: {type(exc).__name__}: {exc}"
+            )
+
+        if discovery_attempt < 3:
+            await asyncio.sleep(1.0)
+
+    if not services:
+        raise RuntimeError(
+            "No paired RemotePairing WiFi tunnel service was discovered. "
+            f"Last error: {last_error}"
+        )
+
+    for index, service in enumerate(services, start=1):
+        try:
+            logger.info(
+                f"RemotePairing WiFi TCP tunnel attempt "
+                f"{index}/{len(services)}: {service}"
+            )
+
+            async with service.start_tcp_tunnel() as tunnel_result:
+                resume_remoted_if_required()
+
+                rsd_host = str(tunnel_result.address)
+                rsd_port = int(tunnel_result.port)
+                wifi_address = rsd_host
+
+                logger.info(
+                    f"RemotePairing WiFi TCP tunnel established: "
+                    f"RSD={rsd_host}:{rsd_port}"
+                )
+
+                while not terminate_tunnel_thread:
+                    await asyncio.sleep(0.5)
+
+                return
+
+        except Exception as exc:
+            last_error = exc
+            logger.exception(
+                f"RemotePairing WiFi TCP tunnel attempt "
+                f"{index}/{len(services)} failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+        finally:
+            try:
+                await service.close()
+            except Exception:
+                pass
+
+    raise RuntimeError(
+        "All RemotePairing WiFi TCP tunnel attempts failed. "
+        f"Last error: {last_error}"
+    )
+
+
+'''
+    main=main[:tunnel_start]+official_wifi_tunnel+main[tunnel_end:]
+
+    # 4) Never report WiFi connected until a real RSD endpoint is ready.
+    main=main.replace(
+        "def check_rsd_data():\n    max_attempts = 30",
+        "def check_rsd_data():\n    max_attempts = 60",
+        1,
+    )
+
+    # 5) Keep WiFi connection alive if USB is inserted/removed while it is active.
+    if "preserving WiFi RSD state" not in main:
+        logger.warning(
+            "FIX4 did not find the existing Network disconnect preservation block; "
+            "the clean v6.9.1 disconnect path will be left unchanged."
+        )
+
+    # 6) Static verification of the two user-visible fixes.
+    if "currentSelectionIsNetwork" not in page:
+        raise RuntimeError("FIX4 WiFi selection guard missing")
+    if "Restore the transport the user had selected" not in page:
+        raise RuntimeError("FIX4 selection persistence missing")
+    if "get_remote_pairing_tunnel_services(udid=udid)" not in main:
+        raise RuntimeError("FIX4 official WiFi RemotePairing path missing")
+    if "service.start_tcp_tunnel()" not in main:
+        raise RuntimeError("FIX4 WiFi TCP tunnel call missing")
 
     # 2) Auto detection may refresh while a WiFi selection is visible, but it
     #    cannot force-select USB over that explicit choice.
