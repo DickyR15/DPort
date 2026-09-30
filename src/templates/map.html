@@ -4597,57 +4597,8 @@ async function initializeMap(userLocale) {
     });
     openStreetMapTileLayer.addTo(map);
 
-    // Create Leaflet control WITHOUT overlays. We add our own overlay row first.
     var layerControl = L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
     localizeMapControlText();
-    var layerControlContainer = layerControl.getContainer();
-    var baseContainer = layerControlContainer.querySelector('.leaflet-control-layers-base');
-    if (baseContainer) {
-        var toiletRow = document.createElement('label');
-        toiletRow.className = 'geoport-toilet-layer-row';
-        toiletRow.innerHTML = '<input type="checkbox" class="leaflet-control-layers-selector"> <span>🚻 公共廁所</span>';
-        var toiletCheckbox = toiletRow.querySelector('input');
-        toiletCheckbox.addEventListener('change', function(){
-            if (this.checked) {
-                if (!map.hasLayer(publicToiletLayer)) publicToiletLayer.addTo(map);
-                loadPublicToilets();
-                publicToiletLayer.bringToFront();
-            } else {
-                if (map.hasLayer(publicToiletLayer)) map.removeLayer(publicToiletLayer);
-            }
-        });
-        baseContainer.parentNode.insertBefore(toiletRow, baseContainer);
-    }
-
-    // Keep the toilet overlay state independent from base-map switching.
-    // 公共廁所 is OFF by default and must never be re-enabled automatically.
-    map.on('baselayerchange', function(){
-        const cb = layerControlContainer.querySelector('.geoport-toilet-layer-row input');
-        if (cb && cb.checked) {
-            if (!map.hasLayer(publicToiletLayer)) publicToiletLayer.addTo(map);
-            publicToiletLayer.bringToFront();
-        }
-    });
-
-    // Default: OpenStreetMap + 公共廁所 OFF.
-    // Do not request or render toilet data until the user explicitly enables it.
-    if (map.hasLayer(publicToiletLayer)) map.removeLayer(publicToiletLayer);
-    setToiletStatus("🚻 公共廁所：未啟用", true);
-
-    // Refresh the toilet data after map movement so the OSM fallback follows the current view.
-    let toiletReloadTimer = null;
-    map.on('moveend zoomend', function(){
-        const cb = layerControlContainer.querySelector('.geoport-toilet-layer-row input');
-        if (!cb || !cb.checked) return;
-        clearTimeout(toiletReloadTimer);
-        toiletReloadTimer = setTimeout(function(){
-            publicToiletsLoaded = false;
-            loadPublicToilets(true);
-            publicToiletLayer.bringToFront();
-        }, 800);
-    });
-
-
     //-----------------
    // Leaflet.FileLayer
 // Load GPX/KML/GeoJSON files by drag and drop, or file open
