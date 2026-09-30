@@ -69,6 +69,19 @@ if (-not (Test-Path $mapPath)) { throw 'map.html is missing from v6.9.1 source.'
 $map = Get-Content -LiteralPath $mapPath -Raw
 
 # ---------------------------------------------------------------------------
+# WiFi test UI: closing the connection-timeout modal must NOT reload the page.
+# The reload caused a visible flash and unnecessarily restarted the DPort UI.
+# ---------------------------------------------------------------------------
+$timeoutCloseOld = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = ''/''">關閉</button>'
+$timeoutCloseNew = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>'
+
+if ($map.Contains($timeoutCloseOld)) {
+    $map = $map.Replace($timeoutCloseOld, $timeoutCloseNew)
+} else {
+    throw 'Connection-timeout close button was not found in v6.9.1 map.html.'
+}
+
+# ---------------------------------------------------------------------------
 # Enable WiFi device discovery in the v6.9.1 test build.
 # The production v6.9.1 source intentionally leaves /list_devices in USB-only
 # mode. The WiFi test build enables Apple's paired mobdev2 Bonjour discovery.
