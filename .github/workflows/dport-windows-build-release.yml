@@ -1,0 +1,448 @@
+name: "DPort Windows Build & Release"
+run-name: "DPort Windows Build & Release"
+
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build, e.g. v6.9.2'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dport-release-${{ github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Resolve release tag and version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.tag }}'.Trim() } else { '${{ github.ref_name }}'.Trim() }
+          if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw "Invalid release tag: $tag" }
+          $version = $tag.Substring(1)
+          $raw = Get-Content -LiteralPath 'src\dport_version.py' -Raw
+          if ($raw -notmatch 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') { throw 'DPORT_VERSION not found.' }
+          $sourceVersion = $Matches[1]
+          if ($sourceVersion -ne $version) { throw "Tag $tag does not match source version $sourceVersion." }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.7'
+ 
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements-build.txt
+          python -m pip install lzfse==0.4.2
+          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
+          $expected = (Get-Content requirements-build.txt | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1).Trim().Substring('pymobiledevice3=='.Length).Trim()
+          if ($pm3 -ne $expected) { throw "Expected pymobiledevice3 $expected, got $pm3" }
+
+      - name: Validate tagged source
+        shell: pwsh
+        run: |
+          foreach ($required in @('src\main.py','src\dport_version.py','src\dport_release_updater.py','src\dport_updater_helper.py','requirements-build.txt','src\templates\map.html')) {
+            if (-not (Test-Path $required)) { throw "Tagged source is missing: $required" }
+          }
+          python -m py_compile src/main.py
+          python -m py_compile src/dport_version.py
+          python -m py_compile src/dport_release_updater.py
+          python -m py_compile src/dport_updater_helper.py
+          python -m compileall -q src scripts
+
+      - name: Validate embedded JavaScript
+        shell: pwsh
+        run: |
+          $html = Get-Content -LiteralPath 'src\templates\map.html' -Raw
+          $matches = [regex]::Matches($html, '<script\b([^>]*)>([\s\S]*?)</script>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+          $checked = 0
+          $index = 0
+          foreach ($match in $matches) {
+            $attrs = $match.Groups[1].Value
+            if ($attrs -match 'type\s*=\s*["''](?!text/javascript|application/javascript)["'']') { continue }
+            $code = $match.Groups[2].Value
+            if ([string]::IsNullOrWhiteSpace($code)) { continue }
+            $tmp = Join-Path $env:RUNNER_TEMP ("dport-inline-$index.js")
+            Set-Content -LiteralPath $tmp -Value $code -Encoding utf8
+            node --check $tmp
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: block $index" }
+            $checked++
+            $index++
+          }
+          if ($checked -lt 1) { throw 'No JavaScript blocks were checked.' }
+
+      - name: Check duplicate injected block IDs
+        shell: pwsh
+        run: |
+          $html = Get-Content -LiteralPath 'src\templates\map.html' -Raw
+          $ids = @('dport-final-ui-polish-v8','dport-final-favorites-render-v8','dport-map-status-overlay-script','dport-header-brand-version-final','dport-exact-copy-button-appearance','dport-copy-button-style-sync','dport-usb-manual-refresh-status','dport-usb-manual-refresh-only','dport-unified-status-final','dport-unified-status-final-script','dport-location-gpx-interaction-final','dport-location-gpx-interaction-final-script','dport-definitive-location-gpx-fix','dport-definitive-location-gpx-fix-script')
+          foreach ($id in $ids) {
+            $pattern = 'id=["'']' + [regex]::Escape($id) + '["'']'
+            $count = ([regex]::Matches($html, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count
+            if ($count -ne 1) { throw "Injected block ID '$id' appears $count times; expected exactly once." }
+          }
+
+      - name: Build standalone updater
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'DPort-6.9.0.ico')) { throw 'DPort icon file is missing.' }
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name DPort-Updater --icon DPort-6.9.0.ico --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to build DPort-Updater.exe.' }
+          if (-not (Test-Path 'dist\DPort-Updater.exe')) { throw 'DPort-Updater.exe missing.' }
+
+      - name: Generate Windows version metadata
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $p = $v.Split('.') | ForEach-Object { [int]$_ }
+          @(
+            '# UTF-8',
+            'VSVersionInfo(',
+            '  ffi=FixedFileInfo(',
+            "    filevers=($($p[0]),$($p[1]),$($p[2]),0),",
+            "    prodvers=($($p[0]),$($p[1]),$($p[2]),0),",
+            '    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)',
+            '  ),',
+            "  kids=[StringFileInfo([StringTable('040404B0',[",
+            "    StringStruct('CompanyName','Dicky'),",
+            "    StringStruct('FileDescription','DPort'),",
+            "    StringStruct('FileVersion','$v'),",
+            "    StringStruct('InternalName','DPort-$v'),",
+            "    StringStruct('LegalCopyright','Dicky'),",
+            "    StringStruct('OriginalFilename','DPort-$v.exe'),",
+            "    StringStruct('ProductName','DPort'),",
+            "    StringStruct('ProductVersion','$v'),",
+            "    StringStruct('Comments','Dicky')])]),",
+            '    VarFileInfo([VarStruct(''Translation'',[0x0404,1200])])]',
+            ')'
+          ) -join [Environment]::NewLine | Set-Content version_info.generated.txt -Encoding utf8
+
+      - name: Build DPort
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          if (Test-Path dist\DPort-$v.exe) { Remove-Item dist\DPort-$v.exe -Force }
+          $args = @('--noconfirm','--clean','--onefile','--windowed','--name',("DPort-$v"),'--icon','DPort-6.9.0.ico','--collect-all','pymobiledevice3','--collect-all','pytun_pmd3','--collect-all','pyimg4','--collect-all','inquirer3','--copy-metadata','pymobiledevice3','--copy-metadata','pyimg4','--copy-metadata','readchar','--hidden-import','pymobiledevice3.remote.userspace_tunnel','--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider','--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation','--hidden-import','pymobiledevice3.usbmux','--hidden-import','dport_release_updater','--hidden-import','dport_version','--add-data','src/templates;templates','--add-binary','dist/DPort-Updater.exe;dport_updater','--version-file','version_info.generated.txt','src/main.py')
+          python -m PyInstaller @args
+          if ($LASTEXITCODE -ne 0) { throw "Failed to build DPort-$v.exe." }
+          if (-not (Test-Path "dist\DPort-$v.exe")) { throw "DPort-$v.exe missing." }
+
+      - name: Verify Windows GUI executables
+        shell: pwsh
+        run: |
+          python -m pip install pefile
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install pefile.' }
+          foreach ($file in @('dist\DPort-Updater.exe',"dist\DPort-${{ steps.version.outputs.version }}.exe")) {
+            if (-not (Test-Path $file)) { throw "Missing executable: $file" }
+            python -c "import pefile,sys; p=pefile.PE(sys.argv[1]); sys.exit(0 if p.OPTIONAL_HEADER.Subsystem==2 else 1)" $file
+            if ($LASTEXITCODE -ne 0) { throw "$file is not a Windows GUI executable." }
+          }
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $p = Start-Process -FilePath "dist\DPort-$v.exe" -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 15
+          if ($p.HasExited -and $p.ExitCode -ne 0) { throw "DPort-$v.exe exited with code $($p.ExitCode)" }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+
+      - name: Generate SHA-256
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          (Get-FileHash "dist\DPort-$v.exe" -Algorithm SHA256).Hash.ToLower() | Set-Content "dist\DPort-$v.exe.sha256" -Encoding ascii
+          (Get-FileHash 'dist\DPort-Updater.exe' -Algorithm SHA256).Hash.ToLower() | Set-Content 'dist\DPort-Updater.exe.sha256' -Encoding ascii
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-${{ steps.version.outputs.version }}-windows
+          path: |
+            dist/DPort-${{ steps.version.outputs.version }}.exe
+            dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
+            dist/DPort-Updater.exe
+            dist/DPort-Updater.exe.sha256
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
+          $v = '${{ steps.version.outputs.version }}'
+          gh release view $tag --repo '${{ github.repository }}' *> $null
+          $exists = ($LASTEXITCODE -eq 0)
+          if (-not $exists) {
+            gh release create $tag "dist/DPort-$v.exe" "dist/DPort-$v.exe.sha256" 'dist/DPort-Updater.exe' 'dist/DPort-Updater.exe.sha256' --repo '${{ github.repository }}' --title "DPort v$v" --generate-notes
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag." }
+          } else {
+            gh release upload $tag "dist/DPort-$v.exe" "dist/DPort-$v.exe.sha256" 'dist/DPort-Updater.exe' 'dist/DPort-Updater.exe.sha256' --repo '${{ github.repository }}' --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to update release $tag." }
+          }
+
+          # Write version-specific release notes without repeating the version in every section.
+          switch ($v) {
+            '6.9.0' {
+              $notes = @"
+## ✨ 版本內容
+
+- iPhone / iPad GPS 位置模擬
+- USB 裝置連線與裝置狀態管理
+- 地圖定位、我的最愛與最近使用位置
+- GPX 軌跡匯入與播放
+- Windows 自動更新
+- SHA-256 完整性驗證
+
+## 🔧 本版本更新
+
+- 初始 DPort 6.9.x 正式 Windows 版本
+- pymobiledevice3 11.19.1
+- 移除公共廁所相關功能與介面
+- 移除 MOENV API Key 相關功能、設定與文件
+- 改善裝置狀態與 USB 重新連線處理
+
+## 📦 下載
+
+- `DPort-$v.exe`
+- `DPort-$v.exe.sha256`
+- `DPort-Updater.exe`
+- `DPort-Updater.exe.sha256`
+
+## 📚 原始碼
+
+本 Release 的 Windows 執行檔對應本次發布的 Git Tag。
+
+GitHub Repository：
+
+https://github.com/DickyR15/DPort
+
+GitHub 同時提供此 Tag 對應的 Source Code ZIP / TAR.GZ。
+
+## 🧩 上游與第三方元件
+
+DPort Windows 基於開源專案 **GeoPort** 進行修改與再開發。
+
+GeoPort：
+https://github.com/davesc63/GeoPort
+
+完整第三方授權與來源：
+
+https://github.com/DickyR15/DPort/blob/$tag/THIRD_PARTY_NOTICES.md
+
+## ⚖️ 授權
+
+DPort Windows 使用 **GNU General Public License v3.0 (GPL-3.0)**。
+
+完整授權：
+
+https://github.com/DickyR15/DPort/blob/$tag/LICENSE
+
+## 🏷️ 商標與 Apple 聲明
+
+DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或官方合作。
+
+Apple、iPhone、iPad、iOS、iPadOS 及相關商標屬 Apple Inc. 或相關權利人所有。
+
+## ⚠️ 免責聲明
+
+DPort 依「現況」提供，不保證所有 Windows、iOS 版本、裝置型號或第三方服務均可正常運作。
+
+© 2026 DickyR15 / DPort
+"@
+            }
+            '6.9.1' {
+              $notes = @"
+## ✨ 版本內容
+
+- iPhone / iPad GPS 位置模擬
+- USB 裝置連線與裝置狀態管理
+- 地圖定位、我的最愛與最近使用位置
+- GPX 軌跡匯入與播放
+- Windows 自動更新
+- SHA-256 完整性驗證
+
+## 🔧 本版本更新
+
+- pymobiledevice3 更新至 11.19.4
+- 改善 iPhone / iPad 鎖定狀態的定位訊息與處理
+- 改善裝置狀態與 USB 重新連線處理
+- 修正 Windows 建置與版本資訊流程
+- 持續移除公共廁所與 MOENV 相關舊功能
+
+## 📦 下載
+
+- `DPort-$v.exe`
+- `DPort-$v.exe.sha256`
+- `DPort-Updater.exe`
+- `DPort-Updater.exe.sha256`
+
+## 📚 原始碼
+
+本 Release 的 Windows 執行檔對應本次發布的 Git Tag。
+
+GitHub Repository：
+
+https://github.com/DickyR15/DPort
+
+GitHub 同時提供此 Tag 對應的 Source Code ZIP / TAR.GZ。
+
+## 🧩 上游與第三方元件
+
+DPort Windows 基於開源專案 **GeoPort** 進行修改與再開發。
+
+GeoPort：
+https://github.com/davesc63/GeoPort
+
+完整第三方授權與來源：
+
+https://github.com/DickyR15/DPort/blob/$tag/THIRD_PARTY_NOTICES.md
+
+## ⚖️ 授權
+
+DPort Windows 使用 **GNU General Public License v3.0 (GPL-3.0)**。
+
+完整授權：
+
+https://github.com/DickyR15/DPort/blob/$tag/LICENSE
+
+## 🏷️ 商標與 Apple 聲明
+
+DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或官方合作。
+
+Apple、iPhone、iPad、iOS、iPadOS 及相關商標屬 Apple Inc. 或相關權利人所有。
+
+## ⚠️ 免責聲明
+
+DPort 依「現況」提供，不保證所有 Windows、iOS 版本、裝置型號或第三方服務均可正常運作。
+
+© 2026 DickyR15 / DPort
+"@
+            }
+            default {
+              $notes = @"
+## ✨ 版本內容
+
+- iPhone / iPad GPS 位置模擬
+- USB 裝置連線與裝置狀態管理
+- 地圖定位與座標操作
+- 我的最愛與最近使用位置
+- GPX 軌跡匯入與播放
+- Windows 自動更新
+- SHA-256 完整性驗證
+
+## 🔧 本次更新
+
+- 請依本次版本實際變更補充更新內容
+
+## 📦 下載
+
+- `DPort-$v.exe`
+- `DPort-$v.exe.sha256`
+- `DPort-Updater.exe`
+- `DPort-Updater.exe.sha256`
+
+## 📚 原始碼
+
+本 Release 的 Windows 執行檔對應本次發布的 Git Tag。
+
+GitHub Repository：
+
+https://github.com/DickyR15/DPort
+
+GitHub 同時提供此 Tag 對應的 Source Code ZIP / TAR.GZ。
+
+## 🧩 上游與第三方元件
+
+DPort Windows 基於開源專案 **GeoPort** 進行修改與再開發。
+
+GeoPort：
+https://github.com/davesc63/GeoPort
+
+完整第三方授權與來源：
+
+https://github.com/DickyR15/DPort/blob/$tag/THIRD_PARTY_NOTICES.md
+
+## ⚖️ 授權
+
+DPort Windows 使用 **GNU General Public License v3.0 (GPL-3.0)**。
+
+完整授權：
+
+https://github.com/DickyR15/DPort/blob/$tag/LICENSE
+
+## 🏷️ 商標與 Apple 聲明
+
+DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或官方合作。
+
+Apple、iPhone、iPad、iOS、iPadOS 及相關商標屬 Apple Inc. 或相關權利人所有。
+
+## ⚠️ 免責聲明
+
+DPort 依「現況」提供，不保證所有 Windows、iOS 版本、裝置型號或第三方服務均可正常運作。
+
+© 2026 DickyR15 / DPort
+"@
+            }
+          }
+
+          $notesPath = Join-Path $PWD 'dport-release-notes.md'
+          Set-Content -LiteralPath $notesPath -Value $notes.Trim() -Encoding utf8
+
+          gh release edit $tag --repo '${{ github.repository }}' --title "DPort v$v" --notes-file $notesPath
+          if ($LASTEXITCODE -ne 0) { throw "Failed to apply standardized release notes to $tag." }
+
+          $releases = gh api --paginate "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json
+          $stable = @(
+            $releases | Where-Object {
+              -not $_.draft -and -not $_.prerelease -and $_.tag_name -match '^v[0-9]+\.[0-9]+\.[0-9]+$'
+            } | ForEach-Object {
+              $parts = $_.tag_name.Substring(1).Split('.')
+              [pscustomobject]@{
+                Tag = $_.tag_name
+                Id = $_.id
+                Version = [version]::Parse("$($parts[0]).$($parts[1]).$($parts[2])")
+              }
+            }
+          )
+          $latestStable = $stable | Sort-Object Version -Descending | Select-Object -First 1
+          $currentRelease = $stable | Where-Object { $_.Tag -eq $tag } | Select-Object -First 1
+          if ($null -eq $currentRelease -or $null -eq $latestStable) {
+            throw "Unable to determine stable release for Latest marker."
+          }
+          $makeLatest = ($latestStable.Tag -eq $tag).ToString().ToLowerInvariant()
+          gh api --method PATCH "repos/${{ github.repository }}/releases/$($currentRelease.Id)" -f "make_latest=$makeLatest" | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to update Latest marker."
+          }
+
+          Write-Host "Published DPort release $tag with clean standardized release notes."
+          # Release policy:
+          # - Release builds run only from version tags or an explicit existing tag.
+          # - The checkout is the exact tag; no generated source package is used.
+          # - GitHub's automatic Source code (zip/tar.gz) is the canonical source distribution.
+          # - Release assets contain only the DPort executable, updater, and SHA-256 files.
