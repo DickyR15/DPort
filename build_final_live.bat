@@ -202,13 +202,12 @@ echo Embedded updater helper ready.
 
 echo.
 echo [5/6] Building DPort-6.9.0.exe...
-python -m PyInstaller --noconfirm --clean --onefile --name "DPort-6.9.0" --icon "DPort-6.9.0.ico" --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import "pymobiledevice3.remote.userspace_tunnel" --hidden-import "dport_version" --hidden-import "dport_release_updater" --hidden-import "pymobiledevice3.services.dvt.instruments.dvt_provider" --hidden-import "pymobiledevice3.services.dvt.instruments.location_simulation" --hidden-import "pymobiledevice3.usbmux" --add-data "src\templates;templates" --add-data "moenv_api_key.txt;." --add-data "python_runtime.txt;." --add-binary "build\updater\DPortUpdater.exe;dport_updater" --version-file "version_info.txt" "src\main.py"
+python -m PyInstaller --noconfirm --clean --onefile --name "DPort-6.9.0" --icon "DPort-6.9.0.ico" --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import "pymobiledevice3.remote.userspace_tunnel" --hidden-import "dport_version" --hidden-import "dport_release_updater" --hidden-import "pymobiledevice3.services.dvt.instruments.dvt_provider" --hidden-import "pymobiledevice3.services.dvt.instruments.location_simulation" --hidden-import "pymobiledevice3.usbmux" --add-data "src\templates;templates" --add-data "python_runtime.txt;." --add-binary "build\updater\DPortUpdater.exe;dport_updater" --version-file "version_info.txt" "src\main.py"
 if errorlevel 1 goto fail
 
 echo.
 echo [6/6] BUILD SUCCESSFUL
 echo EXE: %CD%\dist\DPort-6.9.0.exe
-echo API KEY: embedded in DPort-6.9.0.exe
 echo Updater: embedded in DPort-6.9.0.exe
 if exist "dist\DPortUpdater.exe" del /q "dist\DPortUpdater.exe"
 if exist "build\updater" rmdir /s /q "build\updater"
