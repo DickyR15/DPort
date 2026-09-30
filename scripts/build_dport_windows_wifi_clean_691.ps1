@@ -950,11 +950,7 @@ async function populateDeviceList(options) {
         return false;
     }
 }
-
-
-
 '@;
-
 $Map = $Map.Substring(0,$PopulateStart) + $PopulateFunction + $Map.Substring($PopulateEnd)
 
 # --- Frontend: replace USB auto detector -----------------------------------
