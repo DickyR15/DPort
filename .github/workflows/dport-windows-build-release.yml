@@ -197,7 +197,7 @@ jobs:
           gh release view $tag --repo '${{ github.repository }}' *> $null
           $exists = ($LASTEXITCODE -eq 0)
           if (-not $exists) {
-            gh release create $tag "dist/DPort-$v.exe" "dist/DPort-$v.exe.sha256" 'dist/DPort-Updater.exe' 'dist/DPort-Updater.exe.sha256' --repo '${{ github.repository }}' --title "DPort v$v" --latest=false --generate-notes
+            gh release create $tag "dist/DPort-$v.exe" "dist/DPort-$v.exe.sha256" 'dist/DPort-Updater.exe' 'dist/DPort-Updater.exe.sha256' --repo '${{ github.repository }}' --title "DPort v$v" --generate-notes
             if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag." }
           } else {
             gh release upload $tag "dist/DPort-$v.exe" "dist/DPort-$v.exe.sha256" 'dist/DPort-Updater.exe' 'dist/DPort-Updater.exe.sha256' --repo '${{ github.repository }}' --clobber
@@ -282,37 +282,28 @@ jobs:
           gh release edit $tag --repo '${{ github.repository }}' --title "DPort v$v" --notes-file $notesPath
           if ($LASTEXITCODE -ne 0) { throw "Failed to apply standardized release notes to $tag." }
 
-          # Set GitHub's Latest marker to the highest stable semantic version.
           $releases = gh api --paginate "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json
           $stable = @(
             $releases | Where-Object {
-              -not $_.draft -and -not $_.prerelease -and $_.tag_name -match '^v[0-9]+\.[0-9]+\.[0-9]+
-          # Release policy:
-          # - Release builds run only from version tags or an explicit existing tag.
-          # - The checkout is the exact tag; no generated source package is used.
-          # - GitHub's automatic Source code (zip/tar.gz) is the canonical source distribution.
-          # - Release assets contain only the DPort executable, updater, and SHA-256 files.
-
+              -not $_.draft -and -not $_.prerelease -and $_.tag_name -match '^v[0-9]+\.[0-9]+\.[0-9]+$'
             } | ForEach-Object {
               $parts = $_.tag_name.Substring(1).Split('.')
               [pscustomobject]@{
                 Tag = $_.tag_name
                 Id = $_.id
-                Version = [version]::new([int]$parts[0], [int]$parts[1], [int]$parts[2])
+                Version = [version]::Parse("$($parts[0]).$($parts[1]).$($parts[2])")
               }
             }
           )
-          if ($stable.Count -gt 0) {
-            $latestStable = $stable | Sort-Object Version -Descending | Select-Object -First 1
-            $currentRelease = $stable | Where-Object { $_.Tag -eq $tag } | Select-Object -First 1
-            if ($null -eq $currentRelease) { throw "Unable to locate release $tag." }
-
-            if ($latestStable.Tag -eq $tag) {
-              gh api --method PATCH "repos/${{ github.repository }}/releases/$($currentRelease.Id)" -F make_latest=true | Out-Null
-            } else {
-              gh api --method PATCH "repos/${{ github.repository }}/releases/$($currentRelease.Id)" -F make_latest=false | Out-Null
-            }
-            if ($LASTEXITCODE -ne 0) { throw "Failed to update Latest marker for $tag." }
+          $latestStable = $stable | Sort-Object Version -Descending | Select-Object -First 1
+          $currentRelease = $stable | Where-Object { $_.Tag -eq $tag } | Select-Object -First 1
+          if ($null -eq $currentRelease -or $null -eq $latestStable) {
+            throw "Unable to determine stable release for Latest marker."
+          }
+          $makeLatest = ($latestStable.Tag -eq $tag).ToString().ToLowerInvariant()
+          gh api --method PATCH "repos/${{ github.repository }}/releases/$($currentRelease.Id)" -f "make_latest=$makeLatest" | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to update Latest marker."
           }
 
           Write-Host "Published DPort release $tag with clean standardized release notes."
