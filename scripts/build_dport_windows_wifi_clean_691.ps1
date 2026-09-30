@@ -702,6 +702,1040 @@ $Exe = Join-Path $Out ($FinalExeName + '.exe')
 $Sha = $Exe + '.sha256'
 
 # ---------------------------------------------------------------------------
+
+# ===========================================================================
+# FINAL VERIFIED TRANSPORT/UI PATCHES
+# These replacements are applied to the freshly extracted v6.9.1 source
+# immediately before verification and PyInstaller.
+# ===========================================================================
+
+# --- Frontend: replace populateDeviceList ---------------------------------
+$PopulateStart = $Map.IndexOf('async function populateDeviceList(options) {')
+$PopulateEnd = $Map.IndexOf('/* Manual device-list refresh:', $PopulateStart)
+if ($PopulateStart -lt 0 -or $PopulateEnd -lt 0) {
+    throw 'Unable to locate v6.9.1 populateDeviceList().'
+}
+
+$PopulateFunction = @'
+async function populateDeviceList(options) {
+    options = options || {};
+    var silent = !!options.silent;
+    var requestSerial = ++deviceListRequestSerial;
+
+    var deviceDropdown = document.getElementById('device');
+    var connectionDropdown = document.getElementById('connection');
+    if (!deviceDropdown || !connectionDropdown) return false;
+
+    // Preserve a known Network/Wi-Fi option during USB re-enumeration.
+    var preservedNetwork = [];
+    Array.from(deviceDropdown.options).forEach(function(option) {
+        try {
+            var info = JSON.parse(option.value || '{}');
+            var type = String(
+                info.ConnectionType ||
+                info.connectionType ||
+                info.wifiTransport ||
+                ''
+            ).toUpperCase();
+
+            if (
+                type === 'NETWORK' ||
+                type === 'WIFI' ||
+                !!info.wifiAddress ||
+                !!info.wifiPort ||
+                !!info.wifiTransport
+            ) {
+                preservedNetwork.push(info);
+            }
+        } catch (e) {}
+    });
+
+    var devicesInfo = {};
+    var sudo_message = "{{ sudo_message }}";
+
+    try {
+        const listUrl = options.forceFresh
+            ? '/list_devices?force=1&_=' + Date.now()
+            : '/list_devices?_=' + Date.now();
+
+        const data = await fetchJsonWithTimeout(
+            listUrl,
+            options.forceFresh ? 9000 : 7000
+        );
+
+        if (!data || requestSerial !== deviceListRequestSerial) {
+            return false;
+        }
+
+        deviceDropdown.innerHTML = '';
+        connectionDropdown.innerHTML = '';
+
+        const seenDeviceOptions = new Set();
+
+        Object.keys(data).forEach(function(udid) {
+            var connections = data[udid];
+            if (!connections || typeof connections !== 'object') return;
+
+            Object.keys(connections).forEach(function(connectionType) {
+                var deviceInfoArray = connections[connectionType];
+                if (!Array.isArray(deviceInfoArray)) return;
+
+                deviceInfoArray.forEach(function(deviceInfo) {
+                    if (!deviceInfo || typeof deviceInfo !== 'object') return;
+
+                    var key =
+                        String(udid) + '|' +
+                        String(connectionType) + '|' +
+                        String(deviceInfo.Identifier || '') + '|' +
+                        String(deviceInfo.wifiAddress || '');
+
+                    if (seenDeviceOptions.has(key)) return;
+                    seenDeviceOptions.add(key);
+
+                    var option = document.createElement('option');
+                    var displayType =
+                        connectionType === 'Network' ? 'Wi-Fi' : connectionType;
+
+                    option.text =
+                        displayType + ': ' +
+                        (deviceInfo.DeviceName || 'Apple 裝置') +
+                        ' - (' +
+                        (deviceInfo.DeviceClass || 'Apple 裝置') +
+                        ' - iOS: ' +
+                        (deviceInfo.ProductVersion || '?') +
+                        ')';
+
+                    option.value = JSON.stringify(deviceInfo);
+                    devicesInfo[udid] = devicesInfo[udid] || {};
+                    devicesInfo[udid][connectionType] = deviceInfo;
+                    deviceDropdown.add(option);
+                });
+            });
+        });
+
+        // If this refresh returned only USB, restore the last known Wi-Fi row.
+        preservedNetwork.forEach(function(info) {
+            try {
+                var networkUdid = String(
+                    info.Identifier ||
+                    info.UniqueDeviceID ||
+                    ''
+                );
+                if (!networkUdid) return;
+
+                var alreadyThere = Array.from(deviceDropdown.options).some(function(option) {
+                    try {
+                        var current = JSON.parse(option.value || '{}');
+                        var currentType = String(
+                            current.ConnectionType ||
+                            current.connectionType ||
+                            current.wifiTransport ||
+                            ''
+                        ).toUpperCase();
+
+                        return (
+                            (
+                                currentType === 'NETWORK' ||
+                                currentType === 'WIFI' ||
+                                !!current.wifiAddress ||
+                                !!current.wifiPort ||
+                                !!current.wifiTransport
+                            ) &&
+                            String(
+                                current.Identifier ||
+                                current.UniqueDeviceID ||
+                                ''
+                            ) === networkUdid
+                        );
+                    } catch (e) {
+                        return false;
+                    }
+                });
+
+                if (alreadyThere) return;
+
+                var networkOption = document.createElement('option');
+                networkOption.text =
+                    'Wi-Fi: ' +
+                    (info.DeviceName || 'Apple 裝置') +
+                    ' - (' +
+                    (info.DeviceClass || 'Apple 裝置') +
+                    ' - iOS: ' +
+                    (info.ProductVersion || '?') +
+                    ')';
+
+                networkOption.value = JSON.stringify(info);
+                deviceDropdown.add(networkOption);
+
+                devicesInfo[networkUdid] = devicesInfo[networkUdid] || {};
+                devicesInfo[networkUdid].Network = info;
+            } catch (e) {
+                console.debug('保留 WiFi 裝置略過:', e);
+            }
+        });
+
+        if (requestSerial !== deviceListRequestSerial) return false;
+        deviceDropdown.devicesInfo = devicesInfo;
+
+        // USB is always the default selection when available.
+        if (!isDeviceConnected) {
+            var usbDefault = Array.from(deviceDropdown.options).find(function(option) {
+                try {
+                    var info = JSON.parse(option.value || '{}');
+                    return String(
+                        info.ConnectionType ||
+                        info.connectionType ||
+                        ''
+                    ).toUpperCase() === 'USB';
+                } catch (e) {
+                    return false;
+                }
+            });
+
+            if (usbDefault) {
+                deviceDropdown.value = usbDefault.value;
+            }
+        }
+
+        if (!deviceDropdown.dataset.geoportHandlersBound) {
+            deviceDropdown.addEventListener('change', function() {
+                var selectedOption = deviceDropdown.options[deviceDropdown.selectedIndex];
+                if (!selectedOption) return;
+
+                try {
+                    var info = JSON.parse(selectedOption.value || '{}');
+                    selectedOption.value = JSON.stringify(info);
+                } catch (e) {
+                    console.debug('裝置選項資料解析失敗:', e);
+                }
+            });
+
+            deviceDropdown.addEventListener('change', function() {
+                var connectTextElement = document.getElementById('connectText');
+                var connectButton = document.getElementById('connect');
+
+                if (connectButton && connectTextElement) {
+                    if (
+                        connectTextElement.innerText === "Connected" ||
+                        connectTextElement.innerText === "Connect" ||
+                        connectTextElement.innerText === "連接裝置"
+                    ) {
+                        connectButton.disabled = false;
+                    }
+                }
+            });
+
+            deviceDropdown.dataset.geoportHandlersBound = '1';
+        }
+
+        if (!isDeviceConnected) {
+            if (!deviceAutoDetectTimer) {
+                startDeviceAutoDetect();
+            }
+        } else {
+            stopDeviceAutoDetect();
+        }
+
+        if (sudo_message && !silent) {
+            displayToast(sudo_message);
+        }
+
+        return deviceDropdown.options.length > 0;
+    } catch (error) {
+        if (!silent) {
+            console.error('錯誤 fetching device list:', error);
+        } else if (!error || error.name !== 'AbortError') {
+            console.debug('自動偵測裝置清單暫時無法取得:', error);
+        }
+        return false;
+    }
+}
+
+
+
+'@;
+
+$Map = $Map.Substring(0,$PopulateStart) + $PopulateFunction + $Map.Substring($PopulateEnd)
+
+# --- Frontend: replace USB auto detector -----------------------------------
+$AutoStart = $Map.IndexOf('async function checkDeviceAutoDetect() {')
+$AutoEnd = $Map.IndexOf('function startDeviceAutoDetect()', $AutoStart)
+if ($AutoStart -lt 0 -or $AutoEnd -lt 0) {
+    throw 'Unable to locate v6.9.1 checkDeviceAutoDetect().'
+}
+
+$AutoFunction = @'
+async function checkDeviceAutoDetect() {
+    if (isDeviceConnected || deviceAutoDetectBusy || deviceListManualRefreshInFlight) {
+        return;
+    }
+
+    var deviceDropdown = document.getElementById('device');
+    if (!deviceDropdown) return;
+
+    deviceAutoDetectBusy = true;
+
+    try {
+        const presence = await fetchJsonWithTimeout(
+            '/usb_presence?_=' + Date.now(),
+            1500
+        );
+
+        if (!presence || presence.error) {
+            if (Date.now() >= deviceFallbackFullScanNext) {
+                deviceFallbackFullScanNext = Date.now() + 1200;
+                await populateDeviceList({
+                    silent: true,
+                    autoDetect: true,
+                    forceFresh: true
+                });
+            }
+            return;
+        }
+
+        const usbDevices = Array.isArray(presence.devices)
+            ? presence.devices
+            : [];
+
+        const rawIds = usbDevices
+            .map(function(device) {
+                return String(device.Identifier || '');
+            })
+            .filter(Boolean)
+            .sort();
+
+        const displayedUsbIds = Array.from(deviceDropdown.options)
+            .map(function(option) {
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    const type = String(
+                        info.ConnectionType ||
+                        info.connectionType ||
+                        ''
+                    ).toUpperCase();
+
+                    if (type !== 'USB') return '';
+                    return String(
+                        info.Identifier ||
+                        info.UniqueDeviceID ||
+                        ''
+                    );
+                } catch (e) {
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .sort();
+
+        if (rawIds.length > 0) {
+            var usbMatches =
+                rawIds.length === displayedUsbIds.length &&
+                rawIds.every(function(id, index) {
+                    return id === displayedUsbIds[index];
+                });
+
+            // Do NOT build a fake "iOS: ?" option from /usb_presence.
+            // Always use the full /list_devices result for complete USB metadata.
+            if (!usbMatches && Date.now() >= deviceFallbackFullScanNext) {
+                deviceFallbackFullScanNext = Date.now() + 700;
+
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    const found = await populateDeviceList({
+                        silent: true,
+                        autoDetect: true,
+                        usbRetry: attempt + 1,
+                        forceFresh: true
+                    });
+
+                    if (found) {
+                        const nowDisplayedUsb = Array.from(deviceDropdown.options)
+                            .map(function(option) {
+                                try {
+                                    const info = JSON.parse(option.value || '{}');
+                                    const type = String(
+                                        info.ConnectionType ||
+                                        info.connectionType ||
+                                        ''
+                                    ).toUpperCase();
+
+                                    if (type !== 'USB') return '';
+                                    return String(
+                                        info.Identifier ||
+                                        info.UniqueDeviceID ||
+                                        ''
+                                    );
+                                } catch (e) {
+                                    return '';
+                                }
+                            })
+                            .filter(Boolean);
+
+                        if (rawIds.every(function(id) {
+                            return nowDisplayedUsb.indexOf(id) !== -1;
+                        })) {
+                            break;
+                        }
+                    }
+
+                    if (attempt === 0) {
+                        await new Promise(function(resolve) {
+                            setTimeout(resolve, 250);
+                        });
+                    }
+                }
+            }
+
+            // Whenever USB is present, make USB the default. WiFi remains a
+            // separate selectable option and is never counted in USB presence.
+            var usbDefault = Array.from(deviceDropdown.options).find(function(option) {
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    return String(
+                        info.ConnectionType ||
+                        info.connectionType ||
+                        ''
+                    ).toUpperCase() === 'USB';
+                } catch (e) {
+                    return false;
+                }
+            });
+
+            if (usbDefault) {
+                deviceDropdown.value = usbDefault.value;
+            }
+
+            deviceAutoRefreshSignature = rawIds.join('|');
+            return;
+        }
+
+        // No USB: remove only USB options. Keep Network/WiFi visible.
+        Array.from(deviceDropdown.options).forEach(function(option) {
+            try {
+                const info = JSON.parse(option.value || '{}');
+                const type = String(
+                    info.ConnectionType ||
+                    info.connectionType ||
+                    ''
+                ).toUpperCase();
+
+                if (type === 'USB') {
+                    option.remove();
+                }
+            } catch (e) {}
+        });
+
+        // If no Network option remains, the list really is empty.
+        if (deviceDropdown.options.length === 0) {
+            connectionDropdown = document.getElementById('connection');
+            if (connectionDropdown) {
+                connectionDropdown.innerHTML = '';
+                connectionDropdown.value = '';
+            }
+        }
+
+        deviceAutoRefreshSignature = '';
+    } catch (e) {
+        if (!e || e.name !== 'AbortError') {
+            console.debug('自動偵測 USB 裝置略過一次檢查:', e);
+        }
+    } finally {
+        deviceAutoDetectBusy = false;
+    }
+}
+
+
+
+'@;
+
+$Map = $Map.Substring(0,$AutoStart) + $AutoFunction + $Map.Substring($AutoEnd)
+
+# --- Frontend: replace USB cable removal handler ----------------------------
+$RemoveStart = $Map.IndexOf('function handleUsbCableRemoved() {')
+$RemoveEnd = $Map.IndexOf('var appVersionNum = "{{ app_version_num }}";', $RemoveStart)
+if ($RemoveStart -lt 0 -or $RemoveEnd -lt 0) {
+    throw 'Unable to locate v6.9.1 handleUsbCableRemoved().'
+}
+
+$RemoveFunction = @'
+function handleUsbCableRemoved() {
+    stopUsbPresenceMonitor();
+    activeUsbUDID = null;
+    isDeviceConnected = false;
+
+    if (typeof stopGPXPlaybackForReason === 'function') {
+        stopGPXPlaybackForReason("裝置已中斷連接，GPX 軌跡播放已停止。");
+    }
+
+    var connectButton = document.getElementById('connect');
+    var connectTextElement = document.getElementById('connectText');
+    var disconnectButton = document.getElementById('disconnect');
+    var deviceDropdown = document.getElementById('device');
+    var connectionDropdown = document.getElementById('connection');
+    var spinnerElement = document.getElementById('spinner');
+
+    // Remove only USB entries. WiFi remains valid and selectable.
+    if (deviceDropdown) {
+        Array.from(deviceDropdown.options).forEach(function(option) {
+            try {
+                var info = JSON.parse(option.value || '{}');
+                var type = String(
+                    info.ConnectionType ||
+                    info.connectionType ||
+                    ''
+                ).toUpperCase();
+
+                if (type === 'USB') {
+                    option.remove();
+                }
+            } catch (e) {}
+        });
+    }
+
+    if (connectTextElement) {
+        connectTextElement.innerText = "連接裝置";
+        connectTextElement.style.display = 'inline-block';
+    }
+
+    if (connectButton) connectButton.disabled = false;
+
+    if (disconnectButton) {
+        disconnectButton.style.display = 'none';
+        disconnectButton.disabled = false;
+        disconnectButton.innerText = "中斷連接";
+    }
+
+    if (deviceDropdown) deviceDropdown.disabled = false;
+    if (spinnerElement) spinnerElement.style.display = 'none';
+
+    var refreshButtonAfterUsbRemoval = document.getElementById('refresh-device');
+    if (refreshButtonAfterUsbRemoval) {
+        refreshButtonAfterUsbRemoval.disabled = false;
+        refreshButtonAfterUsbRemoval.removeAttribute('aria-disabled');
+    }
+
+    // WiFi remains in the selector. Restart USB polling so a later cable
+    // replug causes a complete /list_devices scan and restores USB metadata.
+    startDeviceAutoDetect();
+
+    fetch('/device_disconnected', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({})
+    }).catch(function(error) {
+        console.debug('USB disconnect cleanup skipped:', error);
+    });
+
+    displayToast("裝置已中斷連接，WiFi 仍可使用；重新插入 USB 後會自動恢復 USB。");
+}
+
+    '@;
+
+$Map = $Map.Substring(0,$RemoveStart) + $RemoveFunction + $Map.Substring($RemoveEnd)
+
+# --- Backend: robust WiFi discovery parser ---------------------------------
+$WifiFuncStart = $Main.IndexOf('def get_wifi_with_retry(max_attempts=10):')
+$WifiFuncEnd = $Main.IndexOf("@app.route('/stop_tunnel'", $WifiFuncStart)
+if ($WifiFuncStart -lt 0 -or $WifiFuncEnd -lt 0) {
+    throw 'Unable to locate v6.9.1 get_wifi_with_retry().'
+}
+
+$WifiFunction = @'
+def get_wifi_with_retry(max_attempts=10):
+    """Discover a paired iOS device over Apple mobdev2 Bonjour."""
+    global udid, wifi_address, wifi_port, ios_version
+
+    logger.info(
+        "Wi-Fi discovery: using Apple mobdev2 Bonjour "
+        "(_apple-mobdev2._tcp)"
+    )
+
+    for attempt in range(1, max_attempts + 1):
+        found = False
+        try:
+            async def discover():
+                results = []
+
+                async for ip, device in get_mobdev2_lockdowns(
+                    udid=udid,
+                    only_paired=True,
+                    timeout=timeout,
+                ):
+                    try:
+                        short = dict(device.short_info)
+                        short["_DeviceUDID"] = (
+                            getattr(device, "udid", None)
+                            or short.get("UniqueDeviceID")
+                        )
+                        short["_Paired"] = bool(
+                            getattr(device, "paired", False)
+                        )
+                        results.append((ip, short))
+                    finally:
+                        try:
+                            await device.close()
+                        except Exception:
+                            pass
+
+                return results
+
+            devices = asyncio.run(discover())
+            logger.info(f"mobdev2 Wi-Fi devices found: {len(devices)}")
+
+            for ip, short in devices:
+                device_udid = (
+                    short.get("_DeviceUDID")
+                    or short.get("UniqueDeviceID")
+                    or udid
+                )
+                product = short.get("ProductVersion")
+
+                logger.info(
+                    f"mobdev2 device: ip={ip}, udid={device_udid}, "
+                    f"iOS={product}, paired={short.get('_Paired')}"
+                )
+
+                if udid and device_udid and device_udid != udid:
+                    continue
+
+                udid = device_udid or udid
+                ios_version = product or ios_version
+                wifi_address = str(ip)
+                wifi_port = 62078
+                found = True
+
+                logger.info(
+                    f"Wi-Fi device selected via mobdev2: "
+                    f"udid={udid}, host={wifi_address}, port={wifi_port}"
+                )
+
+                return {
+                    "udid": udid,
+                    "hostname": wifi_address,
+                    "port": wifi_port,
+                }
+
+        except Exception as e:
+            logger.warning(
+                f"Attempt {attempt}: mobdev2 Wi-Fi discovery error - {e}"
+            )
+
+        if not found:
+            logger.warning(
+                f"Attempt {attempt}: no paired mobdev2 Wi-Fi device found."
+            )
+
+        time.sleep(0.5)
+
+    raise RuntimeError(
+        "No Wi-Fi device found. Verify Apple Mobile Device Service, "
+        "Wi-Fi sync, pairing, same LAN, and Windows Firewall/mDNS."
+    )
+
+
+'@;
+
+$Main = $Main.Substring(0,$WifiFuncStart) + $WifiFunction + $Main.Substring($WifiFuncEnd)
+
+# --- Backend: CoreDeviceProxy WiFi tunnel + RemotePairing fallback ----------
+$TunnelStart = $Main.IndexOf('async def start_wifi_tcp_tunnel() -> None:')
+$TunnelEnd = $Main.IndexOf('async def start_wifi_quic_tunnel()', $TunnelStart)
+if ($TunnelStart -lt 0 -or $TunnelEnd -lt 0) {
+    throw 'Unable to locate v6.9.1 start_wifi_tcp_tunnel().'
+}
+
+$TunnelFunction = @'
+async def start_wifi_tcp_tunnel() -> None:
+    """Establish the iOS 17.4+ WiFi RSD tunnel.
+
+    Primary path:
+        mobdev2 WiFi lockdown -> CoreDeviceProxy TCP tunnel
+
+    Fallback:
+        RemotePairing Bonjour -> TCP tunnel
+    """
+    global terminate_tunnel_thread, rsd_port, rsd_host, wifi_address
+
+    logger.warning("Start Wi-Fi TCP tunnel via mobdev2 + CoreDeviceProxy")
+
+    # Use the no-root userspace tunnel backend on Windows.
+    import pymobiledevice3.remote.tunnel_service as tunnel_service
+    tunnel_service.USE_USERSPACE_TUNNEL = True
+
+    stop_remoted_if_required()
+
+    primary_error = None
+
+    # Primary: normal paired lockdown over mobdev2.
+    for attempt in range(1, 3):
+        lockdown = None
+        service = None
+
+        try:
+            async for ip, candidate in get_mobdev2_lockdowns(
+                udid=udid,
+                only_paired=True,
+                timeout=timeout,
+            ):
+                logger.info(
+                    f"mobdev2 tunnel candidate: {ip}, udid={candidate.udid}"
+                )
+                wifi_address = str(ip)
+                lockdown = candidate
+                break
+
+            if lockdown is None:
+                raise RuntimeError(
+                    f"mobdev2 could not find paired device {udid}"
+                )
+
+            logger.info(
+                f"WiFi CoreDeviceProxy attempt {attempt}/2: creating service"
+            )
+
+            service = await CoreDeviceTunnelProxy.create(lockdown)
+
+            async with service.start_tcp_tunnel() as tunnel_result:
+                resume_remoted_if_required()
+
+                logger.info(
+                    f"WiFi CoreDeviceProxy TCP tunnel established: "
+                    f"RSD={tunnel_result.address}:{tunnel_result.port}"
+                )
+
+                rsd_host = tunnel_result.address
+                rsd_port = str(tunnel_result.port)
+
+                while not terminate_tunnel_thread:
+                    await asyncio.sleep(0.5)
+
+                return
+
+        except Exception as e:
+            primary_error = e
+            logger.exception(
+                f"WiFi CoreDeviceProxy attempt {attempt}/2 failed: {type(e).__name__}: {e}"
+            )
+
+        finally:
+            if service is not None:
+                try:
+                    await service.close()
+                except Exception:
+                    pass
+
+            if lockdown is not None:
+                try:
+                    await lockdown.close()
+                except Exception:
+                    pass
+
+        if attempt == 1:
+            await asyncio.sleep(1.0)
+
+    # Fallback: RemotePairing over Bonjour.
+    logger.warning(
+        "CoreDeviceProxy WiFi tunnel failed; trying RemotePairing fallback."
+    )
+
+    services = []
+    try:
+        services = await get_remote_pairing_tunnel_services(udid=udid)
+
+        if not services:
+            raise RuntimeError(
+                "RemotePairing Bonjour found no matching WiFi tunnel service."
+            )
+
+        for index, service in enumerate(services, start=1):
+            try:
+                logger.info(
+                    f"RemotePairing WiFi tunnel attempt {index}/{len(services)}"
+                )
+
+                async with service.start_tcp_tunnel() as tunnel_result:
+                    resume_remoted_if_required()
+
+                    logger.info(
+                        f"RemotePairing WiFi TCP tunnel established: "
+                        f"RSD={tunnel_result.address}:{tunnel_result.port}"
+                    )
+
+                    rsd_host = tunnel_result.address
+                    rsd_port = str(tunnel_result.port)
+
+                    while not terminate_tunnel_thread:
+                        await asyncio.sleep(0.5)
+
+                    return
+
+            except Exception as fallback_error:
+                logger.exception(
+                    f"RemotePairing WiFi tunnel attempt failed: "
+                    f"{type(fallback_error).__name__}: {fallback_error}"
+                )
+            finally:
+                try:
+                    await service.close()
+                except Exception:
+                    pass
+
+    except Exception as e:
+        logger.exception(
+            f"RemotePairing WiFi fallback discovery failed: "
+            f"{type(e).__name__}: {e}"
+        )
+
+    raise RuntimeError(
+        "WiFi tunnel could not be established. "
+        f"CoreDeviceProxy error: {type(primary_error).__name__ if primary_error else 'unknown'}: "
+        f"{primary_error}"
+    )
+
+
+'@;
+
+$Main = $Main.Substring(0,$TunnelStart) + $TunnelFunction + $Main.Substring($TunnelEnd)
+
+# --- Backend: use the already-established WiFi RSD for location ------------
+$LocStart = $Main.IndexOf('async def _geoport_location_worker():')
+$LocEnd = $Main.IndexOf('def _geoport_location_worker_entry():', $LocStart)
+if ($LocStart -lt 0 -or $LocEnd -lt 0) {
+    throw 'Unable to locate v6.9.1 location worker.'
+}
+
+$LocationFunction = @'
+async def _geoport_location_worker():
+    global location_worker_stop, location_worker_ready, location_worker_error
+    logger.warning("Location worker starting")
+
+    try:
+        # WiFi connection already owns the RSD tunnel. Do not fall back to
+        # UserspaceRsdTunnel(serial=udid), because that implementation selects
+        # usbmux and fails as soon as the USB cable is removed.
+        if str(connection_type or '').upper() == 'NETWORK':
+            if not rsd_host or not rsd_port:
+                raise RuntimeError(
+                    "WiFi RSD tunnel is not established; cannot start location simulation."
+                )
+
+            logger.info(
+                f"Location worker using active WiFi RSD: {rsd_host}:{rsd_port}"
+            )
+
+            rsd = RemoteServiceDiscoveryService(
+                (str(rsd_host), int(rsd_port)),
+                name=f"DPort-WiFi-{udid or 'device'}"
+            )
+            await rsd.connect()
+
+            try:
+                async with DvtProvider(rsd) as dvt:
+                    async with LocationSimulation(dvt) as location_service:
+                        while not location_worker_stop.is_set():
+                            try:
+                                command = location_command_queue.get_nowait()
+                            except queue.Empty:
+                                await asyncio.sleep(0.05)
+                                continue
+
+                            if command == "STOP":
+                                break
+
+                            command_event = None
+                            result_box = None
+
+                            if isinstance(command, tuple) and len(command) == 4:
+                                latitude, longitude, command_event, result_box = command
+                            else:
+                                latitude, longitude = command
+
+                            try:
+                                await location_service.set(
+                                    float(latitude),
+                                    float(longitude)
+                                )
+                                logger.warning(
+                                    f"Location Set Successfully: "
+                                    f"{latitude}, {longitude}"
+                                )
+
+                                if result_box is not None:
+                                    result_box["success"] = True
+
+                                if not location_worker_ready.is_set():
+                                    location_worker_ready.set()
+
+                            except Exception as set_error:
+                                if is_device_locked_error(set_error):
+                                    location_worker_error = PASSWORD_PROTECTED_LOCATION_MESSAGE
+                                else:
+                                    location_worker_error = str(set_error)
+
+                                logger.exception(
+                                    f"Location set failed: {location_worker_error}"
+                                )
+
+                                if result_box is not None:
+                                    result_box["success"] = False
+                                    result_box["error"] = location_worker_error
+
+                                if not location_worker_ready.is_set():
+                                    location_worker_ready.set()
+                            finally:
+                                if command_event is not None:
+                                    command_event.set()
+
+                        try:
+                            await location_service.clear()
+                            logger.warning("Location Cleared Successfully")
+                            await asyncio.sleep(1.0)
+                        except Exception as clear_error:
+                            location_worker_error = (
+                                PASSWORD_PROTECTED_LOCATION_MESSAGE
+                                if is_device_locked_error(clear_error)
+                                else str(clear_error)
+                            )
+                            logger.warning(
+                                f"Location clear failed: {location_worker_error}"
+                            )
+            finally:
+                await rsd.close()
+
+        else:
+            # Original USB path remains unchanged.
+            async with UserspaceRsdTunnel(
+                serial=udid,
+                autopair=True
+            ) as rsd:
+                logger.info("Userspace RSD tunnel established (USB)")
+                async with DvtProvider(rsd) as dvt:
+                    async with LocationSimulation(dvt) as location_service:
+                        while not location_worker_stop.is_set():
+                            try:
+                                command = location_command_queue.get_nowait()
+                            except queue.Empty:
+                                await asyncio.sleep(0.05)
+                                continue
+
+                            if command == "STOP":
+                                break
+
+                            command_event = None
+                            result_box = None
+
+                            if isinstance(command, tuple) and len(command) == 4:
+                                latitude, longitude, command_event, result_box = command
+                            else:
+                                latitude, longitude = command
+
+                            try:
+                                await location_service.set(
+                                    float(latitude),
+                                    float(longitude)
+                                )
+                                logger.warning(
+                                    f"Location Set Successfully: "
+                                    f"{latitude}, {longitude}"
+                                )
+
+                                if result_box is not None:
+                                    result_box["success"] = True
+
+                                if not location_worker_ready.is_set():
+                                    location_worker_ready.set()
+
+                            except Exception as set_error:
+                                if is_device_locked_error(set_error):
+                                    location_worker_error = PASSWORD_PROTECTED_LOCATION_MESSAGE
+                                else:
+                                    location_worker_error = str(set_error)
+
+                                logger.exception(
+                                    f"Location set failed: {location_worker_error}"
+                                )
+
+                                if result_box is not None:
+                                    result_box["success"] = False
+                                    result_box["error"] = location_worker_error
+
+                                if not location_worker_ready.is_set():
+                                    location_worker_ready.set()
+                            finally:
+                                if command_event is not None:
+                                    command_event.set()
+
+                        try:
+                            await location_service.clear()
+                            logger.warning("Location Cleared Successfully")
+                            await asyncio.sleep(1.0)
+                        except Exception as clear_error:
+                            location_worker_error = (
+                                PASSWORD_PROTECTED_LOCATION_MESSAGE
+                                if is_device_locked_error(clear_error)
+                                else str(clear_error)
+                            )
+                            logger.warning(
+                                f"Location clear failed: {location_worker_error}"
+                            )
+
+    except asyncio.CancelledError:
+        logger.info("Location worker cancelled")
+        if not location_worker_ready.is_set():
+            location_worker_error = "Location worker cancelled during initialization"
+            location_worker_ready.set()
+
+    except Exception as e:
+        error_text = str(e)
+
+        if is_device_locked_error(e):
+            location_worker_error = PASSWORD_PROTECTED_LOCATION_MESSAGE
+        else:
+            location_worker_error = error_text
+
+        logger.exception(
+            f"Location worker failed: {location_worker_error}"
+        )
+
+        if not location_worker_ready.is_set():
+            location_worker_ready.set()
+
+    finally:
+        logger.warning("Location worker terminated")
+
+
+'@;
+
+$Main = $Main.Substring(0,$LocStart) + $LocationFunction + $Main.Substring($LocEnd)
+
+# Finalize globals/imports required by the network tunnel path.
+if (-not $Main.Contains('import pymobiledevice3.remote.tunnel_service as tunnel_service')) {
+    $ImportAnchor = 'from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel'
+    if (-not $Main.Contains($ImportAnchor)) {
+        throw 'UserspaceRsdTunnel import anchor not found.'
+    }
+    $Main = $Main.Replace(
+        $ImportAnchor,
+        $ImportAnchor + [Environment]::NewLine +
+        'import pymobiledevice3.remote.tunnel_service as tunnel_service',
+        1
+    )
+}
+
+# New executable name prevents Windows from showing the previously cached
+# generic icon. Explicitly embed the DPort icon from the v6.9.1 tag.
+$FinalExeName = 'DPort-WiFi-Test-6.9.1-USBWiFi-FIX'
+$BuildIcon = Join-Path $Build 'DPort-6.9.0.ico'
+$FinalIcon = Join-Path $Build 'DPort-WiFi-Test-USBWiFi-FIX.ico'
+
+if (-not (Test-Path $BuildIcon)) {
+    throw 'DPort-6.9.0.ico is missing from Release v6.9.1.'
+}
+
+Copy-Item $BuildIcon $FinalIcon -Force
+
+$Exe = Join-Path $Out ($FinalExeName + '.exe')
+$Sha = $Exe + '.sha256'
+
 # 10. Verify source AFTER every patch and BEFORE PyInstaller
 # ---------------------------------------------------------------------------
 Set-Content -LiteralPath $MainPath -Value $Main -Encoding utf8
