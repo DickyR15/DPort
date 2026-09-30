@@ -1258,11 +1258,25 @@ def device_disconnected():
         ("WiFi TCP tunnel call", "service.start_tcp_tunnel()"),
         ("WiFi RSD location", "Location worker using WiFi RSD"),
         ("WiFi selection persistence", "selectedKey = null"),
-        ("No forced USB in auto detector", "USB is already the initial default"),
     ]
     for label, needle in checks:
         if needle not in (main + page):
             raise RuntimeError(f"FIX5 static check failed: {label}")
+
+    # The automatic USB detector may refresh the combined list, but it must
+    # never assign the USB option itself. USB is selected only by the initial
+    # populateDeviceList() fallback, or by the user's explicit choice.
+    auto_start = page.find("async function checkDeviceAutoDetect() {")
+    auto_end = page.find("function startDeviceAutoDetect()", auto_start)
+    if auto_start < 0 or auto_end < 0:
+        raise RuntimeError("FIX5 static check failed: auto detector not found")
+
+    auto_body = page[auto_start:auto_end]
+    if "deviceDropdown.value = usbDefault.value" in auto_body:
+        raise RuntimeError("FIX5 static check failed: auto detector still forces USB")
+
+    if "var usbDefault = Array.from(deviceDropdown.options)" not in page:
+        raise RuntimeError("FIX5 static check failed: USB startup default missing")
 
     main_path.write_text(main, encoding="utf-8")
     map_path.write_text(page, encoding="utf-8")
