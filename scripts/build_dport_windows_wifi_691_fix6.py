@@ -234,7 +234,10 @@ def build_source() -> None:
                 collect_wifi_devices(),
             )
 '''
-    parallel_collect_function = "        " + parallel_collect_function
+    parallel_collect_function = "\n".join(
+        line[8:] if line.startswith("        ") else line
+        for line in parallel_collect_function.splitlines()
+    )
     main = replace_function(
         main,
         r"async def collect_devices():",
