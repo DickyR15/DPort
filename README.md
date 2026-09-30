@@ -22,8 +22,6 @@ DPort 是一個以 Windows 為主要使用環境的 iPhone 裝置工具，提供
 - 🔄 **自動更新**
   - 程式可檢查 GitHub Release。
   - 下載新版本後驗證 SHA-256，再進行程式替換與重新啟動。
-- 🌐 **環境資料功能**
-  - 部分功能可使用環境資料 API；API Key 應透過 GitHub Actions Secret 或本機設定提供，不應公開提交真正的金鑰。
 
 ---
 
@@ -205,7 +203,6 @@ DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或
 
 公開 Repository 不應包含：
 
-- API Key
 - 密碼
 - Access Token
 - 私鑰
@@ -213,8 +210,7 @@ DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或
 - 程式碼簽署憑證
 - 其他機密資訊
 
-本專案僅提供 `moenv_api_key.txt.example` 這類設定範例。真正的金鑰應保存在本機
-設定或 GitHub Secrets。
+機密資訊應保存在本機設定或 GitHub Secrets，不應提交到公開 Repository。
 
 ---
 
