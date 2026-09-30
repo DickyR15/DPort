@@ -382,7 +382,7 @@ if (-not (Test-Path $exePath)) {
 }
 
 python -c "import pefile,sys; p=pefile.PE(sys.argv[1]); sys.exit(0 if p.OPTIONAL_HEADER.Subsystem==2 else 1)" $exePath
-if ($LASTEXITCODE -ne 0 {
+if ($LASTEXITCODE -ne 0) {
     throw 'Final EXE is not a Windows GUI executable.'
 }
 
