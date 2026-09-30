@@ -650,7 +650,12 @@ def build_source() -> None:
     # The previous window.location.href='/' caused the one-frame flash.
     timeout_close_patch = '''<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>'''
     timeout_close_old = '''<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = '/'">關閉</button>'''
-    page = page.replace(timeout_close_old, timeout_close_patch, 1)
+    timeout_start = page.find('<div class="modal fade" id="modalTimeout"')
+    timeout_end = page.find('<div class="modal fade" id="developer錯誤"', timeout_start)
+    if timeout_start >= 0 and timeout_end > timeout_start:
+        timeout_block = page[timeout_start:timeout_end]
+        timeout_block = timeout_block.replace(timeout_close_old, timeout_close_patch, 1)
+        page = page[:timeout_start] + timeout_block + page[timeout_end:]
     populate_function = '''async function populateDeviceList(options) {
     options = options || {};
     var silent = !!options.silent;
