@@ -69,26 +69,26 @@ jobs:
         if: steps.latest.outputs.update == 'true'
         shell: pwsh
         run: |
-          $version = '${{ steps.latest.outputs.latest }'
+          $version = '${{ steps.latest.outputs.latest }}'
           (Get-Content requirements-build.txt -Raw) -replace '(?m)^pymobiledevice3==.*$', "pymobiledevice3==$version" | Set-Content requirements-build.txt -Encoding utf8
 
       - name: Create pull request
         if: steps.latest.outputs.update == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }
+          token: ${{ secrets.GITHUB_TOKEN }}
           base: main
-          branch: automation/pymobiledevice3-${{ steps.latest.outputs.latest }
+          branch: automation/pymobiledevice3-${{ steps.latest.outputs.latest }}
           delete-branch: false
-          title: "Update pymobiledevice3 to v${{ steps.latest.outputs.latest }"
-          commit-message: "chore: update pymobiledevice3 to v${{ steps.latest.outputs.latest }"
+          title: "Update pymobiledevice3 to v${{ steps.latest.outputs.latest }}"
+          commit-message: "chore: update pymobiledevice3 to v${{ steps.latest.outputs.latest }}"
           body: |
             ## pymobiledevice3 update
 
-            Automated update detected upstream pymobiledevice3 ${{ steps.latest.outputs.tag }.
+            Automated update detected upstream pymobiledevice3 ${{ steps.latest.outputs.tag }}.
 
-            Current DPort pin: ${{ steps.latest.outputs.current }
-            New pin: ${{ steps.latest.outputs.latest }
+            Current DPort pin: ${{ steps.latest.outputs.current }}
+            New pin: ${{ steps.latest.outputs.latest }}
 
             This PR only changes requirements-build.txt.
 
