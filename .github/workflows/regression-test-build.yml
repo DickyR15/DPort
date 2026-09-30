@@ -36,14 +36,6 @@ jobs:
         with:
           python-version: '3.14.7'
 
-      - name: Prepare MOENV API key
-        shell: pwsh
-        env:
-          MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:MOENV_API_KEY)) { throw 'Missing MOENV_API_KEY secret.' }
-          [IO.File]::WriteAllText((Join-Path $PWD 'moenv_api_key.txt'), $env:MOENV_API_KEY.Trim(), (New-Object Text.UTF8Encoding($false)))
-
       - name: Install build dependencies
         shell: pwsh
         run: |
@@ -124,7 +116,6 @@ jobs:
             '--hidden-import','dport_release_updater',
             '--hidden-import','dport_version',
             '--add-data','src/templates;templates',
-            '--add-data','moenv_api_key.txt;.',
             '--add-binary','dist/DPort-Updater.exe;dport_updater',
             '--version-file','version_info.generated.txt',
             '--icon','DPort-6.9.0.ico',
