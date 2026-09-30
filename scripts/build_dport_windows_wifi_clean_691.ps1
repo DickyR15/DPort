@@ -423,6 +423,285 @@ except Exception as _log_exc:
 }
 
 # ---------------------------------------------------------------------------
+# FINAL UI FIX: USB + WiFi coexistence across unplug/replug
+# ---------------------------------------------------------------------------
+
+# Preserve Network/WiFi entries when populateDeviceList replaces the selector.
+$Map = [regex]::Replace(
+    $Map,
+    '(?s)        deviceDropdown\.innerHTML = '''';\s*        connectionDropdown\.innerHTML = '''';\s*        const seenDeviceOptions = new Set\(\);',
+@'
+        const __dportPreservedNetwork = [];
+        Array.from(deviceDropdown.options).forEach(function(option){
+            try {
+                const info = JSON.parse(option.value || '{}');
+                const type = String(
+                    info.ConnectionType ||
+                    info.connectionType ||
+                    info.wifiTransport ||
+                    ''
+                ).toUpperCase();
+
+                if (
+                    type === 'NETWORK' ||
+                    type === 'WIFI' ||
+                    !!info.wifiAddress ||
+                    !!info.wifiPort ||
+                    !!info.wifiTransport
+                ) {
+                    __dportPreservedNetwork.push(info);
+                }
+            } catch (e) {}
+        });
+
+        deviceDropdown.innerHTML = '';
+        connectionDropdown.innerHTML = '';
+        const seenDeviceOptions = new Set();
+'@,
+    1
+)
+
+# Re-add preserved Network/WiFi options after a fresh USB scan.
+$Map = [regex]::Replace(
+    $Map,
+    '(?s)        if \(requestSerial !== deviceListRequestSerial\) return false;\s*        deviceDropdown\.devicesInfo = devicesInfo;',
+@'
+        __dportPreservedNetwork.forEach(function(info){
+            try {
+                const networkUdid = String(
+                    info.Identifier ||
+                    info.UniqueDeviceID ||
+                    ''
+                );
+                if (!networkUdid) return;
+
+                const alreadyShown = Array.from(deviceDropdown.options).some(function(option){
+                    try {
+                        const current = JSON.parse(option.value || '{}');
+                        const type = String(
+                            current.ConnectionType ||
+                            current.connectionType ||
+                            current.wifiTransport ||
+                            ''
+                        ).toUpperCase();
+
+                        return (
+                            (
+                                type === 'NETWORK' ||
+                                type === 'WIFI' ||
+                                !!current.wifiAddress ||
+                                !!current.wifiPort ||
+                                !!current.wifiTransport
+                            ) &&
+                            String(
+                                current.Identifier ||
+                                current.UniqueDeviceID ||
+                                ''
+                            ) === networkUdid
+                        );
+                    } catch (e) {
+                        return false;
+                    }
+                });
+
+                if (alreadyShown) return;
+
+                const option = document.createElement('option');
+                option.text =
+                    'Wi-Fi: ' + (info.DeviceName || 'Apple 裝置') +
+                    ' - (' + (info.DeviceClass || 'Apple 裝置') +
+                    ' - iOS: ' + (info.ProductVersion || '?') + ')';
+                option.value = JSON.stringify(info);
+                deviceDropdown.add(option);
+
+                devicesInfo[networkUdid] = devicesInfo[networkUdid] || {};
+                devicesInfo[networkUdid].Network = info;
+            } catch (e) {
+                console.debug('保留 WiFi 項目略過:', e);
+            }
+        });
+
+        if (requestSerial !== deviceListRequestSerial) return false;
+        deviceDropdown.devicesInfo = devicesInfo;
+'@,
+    1
+)
+
+# USB presence comparison must only compare USB entries.
+$Map = [regex]::Replace(
+    $Map,
+    '(?s)        const displayedIds = Array\.from\(deviceDropdown\.options\).*?\.sort\(\);',
+@'
+        const displayedIds = Array.from(deviceDropdown.options)
+            .map(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    const type = String(
+                        info.ConnectionType ||
+                        info.connectionType ||
+                        info.wifiTransport ||
+                        ''
+                    ).toUpperCase();
+
+                    if (type !== 'USB') return '';
+                    return String(
+                        info.Identifier ||
+                        info.UniqueDeviceID ||
+                        ''
+                    );
+                } catch (e) {
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .sort();
+'@,
+    1
+)
+
+# USB replug fallback: /usb_presence itself can immediately restore the USB
+# option even when the full /list_devices request is still racing usbmuxd.
+$Map = [regex]::Replace(
+    $Map,
+    '(?s)        const sameSet =',
+@'
+        if (rawIds.length > 0) {
+            rawIds.forEach(function(id){
+                const alreadyHasUsb = Array.from(deviceDropdown.options).some(function(option){
+                    try {
+                        const info = JSON.parse(option.value || '{}');
+                        return (
+                            String(
+                                info.ConnectionType ||
+                                info.connectionType ||
+                                ''
+                            ).toUpperCase() === 'USB' &&
+                            String(
+                                info.Identifier ||
+                                info.UniqueDeviceID ||
+                                ''
+                            ) === id
+                        );
+                    } catch (e) {
+                        return false;
+                    }
+                });
+
+                if (alreadyHasUsb) return;
+
+                const presenceDevice = usbDevices.find(function(device){
+                    return String(device.Identifier || '') === id;
+                });
+
+                if (!presenceDevice) return;
+
+                const info = Object.assign({}, presenceDevice, {
+                    Identifier: id,
+                    ConnectionType: 'USB'
+                });
+
+                const option = document.createElement('option');
+                option.text =
+                    'USB: ' + (info.DeviceName || 'Apple 裝置') +
+                    ' - (' + (info.DeviceClass || 'Apple 裝置') +
+                    ' - iOS: ' + (info.ProductVersion || '?') + ')';
+                option.value = JSON.stringify(info);
+                deviceDropdown.add(option);
+            });
+
+            if (!isDeviceConnected) {
+                const usbDefault = Array.from(deviceDropdown.options).find(function(option){
+                    try {
+                        const info = JSON.parse(option.value || '{}');
+                        return String(
+                            info.ConnectionType ||
+                            info.connectionType ||
+                            ''
+                        ).toUpperCase() === 'USB';
+                    } catch (e) {
+                        return false;
+                    }
+                });
+
+                if (usbDefault) {
+                    deviceDropdown.value = usbDefault.value;
+                }
+            }
+        }
+
+        const sameSet =
+'@,
+    1
+)
+
+# When USB disappears, keep WiFi but do not stop future USB polling.
+$Map = [regex]::Replace(
+    $Map,
+    '(?s)        if \(rawIds\.length === 0\) \{.*?^\s*return;\s*\n\s*\}',
+@'
+        if (rawIds.length === 0) {
+            deviceReinsertRetryCount = 0;
+            deviceReinsertRetryUntil = 0;
+            deviceAutoRefreshSignature = '';
+            deviceAutoRefreshScheduled = false;
+
+            const hasNetworkEntryNow = Array.from(deviceDropdown.options).some(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    const type = String(
+                        info.ConnectionType ||
+                        info.connectionType ||
+                        info.wifiTransport ||
+                        ''
+                    ).toUpperCase();
+
+                    return (
+                        type === 'NETWORK' ||
+                        type === 'WIFI' ||
+                        !!info.wifiAddress ||
+                        !!info.wifiPort ||
+                        !!info.wifiTransport
+                    );
+                } catch (e) {
+                    return false;
+                }
+            });
+
+            if (hasNetworkEntryNow) {
+                return;
+            }
+
+            if (deviceDropdown.options.length > 0) {
+                deviceDropdown.innerHTML = '';
+                deviceDropdown.value = '';
+            }
+
+            var connectionDropdown = document.getElementById('connection');
+            if (connectionDropdown) {
+                connectionDropdown.innerHTML = '';
+                connectionDropdown.value = '';
+            }
+            return;
+        }
+'@,
+    1
+)
+
+# ---------------------------------------------------------------------------
+# FINAL TEST EXE NAME / ICON
+# ---------------------------------------------------------------------------
+$FinalExeName = 'DPort-WiFi-Test-6.9.1-USBWiFi'
+$BuildIcon = Join-Path $Build 'DPort-6.9.0.ico'
+$FinalIcon = Join-Path $Build 'DPort-WiFi-Test.ico'
+if (-not (Test-Path $BuildIcon)) {
+    throw 'DPort icon source DPort-6.9.0.ico is missing.'
+}
+Copy-Item $BuildIcon $FinalIcon -Force
+
+$Exe = Join-Path $Out ($FinalExeName + '.exe')
+$Sha = $Exe + '.sha256'
+
+# ---------------------------------------------------------------------------
 # 10. Verify source AFTER every patch and BEFORE PyInstaller
 # ---------------------------------------------------------------------------
 Set-Content -LiteralPath $MainPath -Value $Main -Encoding utf8
@@ -511,8 +790,8 @@ $PyInstallerArgs = @(
     '--clean',
     '--onefile',
     '--windowed',
-    '--name',"DPort-WiFi-Test-$Version",
-    '--icon',(Join-Path $Build 'DPort-6.9.0.ico'),
+    '--name',$FinalExeName,
+    '--icon',$FinalIcon,
     '--collect-all','pymobiledevice3',
     '--collect-all','pytun_pmd3',
     '--collect-all','pyimg4',
@@ -533,7 +812,7 @@ if ($LASTEXITCODE -ne 0) {
     throw 'PyInstaller build failed.'
 }
 
-$Built = Get-ChildItem -Path $Build -Filter "DPort-WiFi-Test-$Version.exe" -File -Recurse |
+$Built = Get-ChildItem -Path $Build -Filter ($FinalExeName + '.exe') -File -Recurse |
     Select-Object -First 1
 
 if (-not $Built) {
@@ -554,7 +833,7 @@ if ($LASTEXITCODE -ne 0) {
     Set-Content $Sha -Encoding ascii
 
 @"
-DPort Windows WiFi Test 6.9.1
+DPort Windows WiFi Test 6.9.1 - USB + WiFi
 
 BASE RELEASE:
 DPort v6.9.1
