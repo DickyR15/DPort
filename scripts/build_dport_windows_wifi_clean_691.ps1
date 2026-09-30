@@ -61,6 +61,64 @@ $Main = Get-Content $MainPath -Raw
 $Map = Get-Content $MapPath -Raw
 
 # ---------------------------------------------------------------------------
+# Preserve WiFi options from the v6.9.1 USB auto-detector.
+# /usb_presence reports USB only; an empty USB snapshot must never erase a
+# Network/WiFi option that was just discovered by /list_devices.
+# ---------------------------------------------------------------------------
+$WifiAutoDetectGuard = @'
+    deviceAutoDetectBusy = true;
+    try {
+        const hasNetworkEntry = Array.from(deviceDropdown.options).some(function(option){
+            try {
+                const info = JSON.parse(option.value || '{}');
+                const type = String(
+                    info.ConnectionType ||
+                    info.connectionType ||
+                    info.wifiTransport ||
+                    ''
+                ).toUpperCase();
+
+                return (
+                    type === 'NETWORK' ||
+                    type === 'WIFI' ||
+                    !!info.wifiAddress ||
+                    !!info.wifiPort ||
+                    !!info.wifiTransport
+                );
+            } catch (e) {
+                return false;
+            }
+        });
+
+        if (hasNetworkEntry) {
+            return;
+        }
+'@
+
+$WifiAutoDetectTail = @'
+    } finally {
+        deviceAutoDetectBusy = false;
+    }
+}
+'@
+
+if (-not $Map.Contains('async function checkDeviceAutoDetect()')) {
+    throw 'v6.9.1 checkDeviceAutoDetect() was not found.'
+}
+
+$guardAnchor = @'
+    deviceAutoDetectBusy = true;
+    try {
+'@
+
+if (-not $Map.Contains($guardAnchor)) {
+    throw 'v6.9.1 checkDeviceAutoDetect() body anchor was not found.'
+}
+
+# Insert a WiFi-preservation guard once, before the USB-only presence call.
+$Map = $Map.Replace($guardAnchor, $WifiAutoDetectGuard, 1)
+
+# ---------------------------------------------------------------------------
 # 1. Open Network/WiFi connection path.
 # ---------------------------------------------------------------------------
 $UsbGate = @'
@@ -410,6 +468,8 @@ $CheckMain = Get-Content $MainPath -Raw
 $CheckMap = Get-Content $MapPath -Raw
 
 foreach ($Needle in @(
+    'checkDeviceAutoDetect()',
+    'hasNetworkEntry',
     'get_mobdev2_lockdowns',
     'ConnectionType"] = "Network"',
     'wifiTransport"] = "mobdev2"',
