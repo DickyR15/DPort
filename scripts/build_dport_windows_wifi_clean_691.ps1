@@ -121,6 +121,43 @@ if (-not $Map.Contains($guardAnchor)) {
 # This prevents WiFi entries from disappearing while USB polling is idle.
 $Map = $Map.Replace($guardAnchor, $WifiAutoDetectGuard, 1)
 
+# Default the device selector to USB when both USB and WiFi entries exist.
+# WiFi remains available as a selectable Network option.
+$DefaultUsbSelectionOld = @'
+        if (requestSerial !== deviceListRequestSerial) return false;
+        deviceDropdown.devicesInfo = devicesInfo;
+'@
+
+$DefaultUsbSelectionNew = @'
+        if (requestSerial !== deviceListRequestSerial) return false;
+        deviceDropdown.devicesInfo = devicesInfo;
+
+        if (!isDeviceConnected && deviceDropdown.options.length > 0) {
+            const defaultUsbOption = Array.from(deviceDropdown.options).find(function(option) {
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    return String(
+                        info.ConnectionType ||
+                        info.connectionType ||
+                        ''
+                    ).toUpperCase() === 'USB';
+                } catch (e) {
+                    return false;
+                }
+            });
+
+            if (defaultUsbOption) {
+                deviceDropdown.value = defaultUsbOption.value;
+            }
+        }
+'@
+
+if (-not $Map.Contains($DefaultUsbSelectionOld)) {
+    throw 'v6.9.1 device list default-selection anchor was not found.'
+}
+$Map = $Map.Replace($DefaultUsbSelectionOld, $DefaultUsbSelectionNew, 1)
+
+
 # ---------------------------------------------------------------------------
 # 1. Open Network/WiFi connection path.
 # ---------------------------------------------------------------------------
