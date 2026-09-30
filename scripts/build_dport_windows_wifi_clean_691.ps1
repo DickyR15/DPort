@@ -633,9 +633,6 @@ Research build only.
 Write-Host '=== BUILD SUCCESS ==='
 Write-Host "EXE: $Exe"
 Write-Host "SHA: $Sha"
-,
-    ''
-)
 
 # ---------------------------------------------------------------------------
 # 3. Use pymobiledevice3's normal pairing-record search for every WiFi path.
