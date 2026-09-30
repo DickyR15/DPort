@@ -1180,7 +1180,6 @@ def device_disconnected():
     auto_fix = r'''async function checkDeviceAutoDetect() {
     if (
         isDeviceConnected ||
-        dportConnectionInProgress ||
         deviceAutoDetectBusy ||
         deviceListManualRefreshInFlight
     ) {
@@ -1505,8 +1504,12 @@ def device_disconnected():
         raise RuntimeError("WiFi connection still has a hard-coded pairing override")
     if "usbDefault" not in page:
         raise RuntimeError("USB default selection patch missing")
-    if "Remove only USB. WiFi remains visible." not in page:
+    if "USB 已拔除，正在自動搜尋 WiFi 裝置。" not in page:
         raise RuntimeError("USB/WiFi coexistence patch missing")
+    if "dportConnectionInProgress" not in page:
+        raise RuntimeError("WiFi connection transaction lock missing")
+    if "WiFi tunnel did not become ready" not in main:
+        raise RuntimeError("WiFi tunnel readiness guard missing")
 
     run([sys.executable, "-m", "py_compile", str(MAIN)])
 
