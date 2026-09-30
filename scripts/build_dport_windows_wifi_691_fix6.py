@@ -132,117 +132,6 @@ def build_source() -> None:
         raise RuntimeError("v6.9.1 WiFi-disabled discovery block not found")
     main = main.replace(disabled, wifi_discovery, 1)
 
-    # WiFi discovery must not wait behind USB re-enumeration / Lockdown metadata.
-    # The old sequential collect_devices() made WiFi appear only after all USB
-    # work completed (and force-refresh could retry USB several times first).
-    # Run the two discovery paths concurrently.
-    parallel_collect_function = '''        async def collect_devices():
-            async def collect_usb_devices():
-                try:
-                    usb_devices = []
-                    attempts = 6 if force_refresh else 1
-                    for attempt in range(attempts):
-                        try:
-                            usb_devices = await list_devices()
-                            logger.info(f"Raw USB Devices (attempt {attempt + 1}/{attempts}): {usb_devices}")
-                        except Exception as exc:
-                            logger.warning(f"USB enumeration attempt {attempt + 1}/{attempts} failed: {exc}")
-                            usb_devices = []
-                        if usb_devices:
-                            break
-                        if attempt + 1 < attempts:
-                            await asyncio.sleep(0.35)
-
-                    for device in usb_devices:
-                        try:
-                            client = await create_using_usbmux(
-                                serial=device.serial,
-                                connection_type=device.connection_type,
-                                autopair=True,
-                            )
-                            try:
-                                info = dict(client.short_info)
-                                info["ConnectionType"] = device.connection_type
-                                info["Identifier"] = info.get("Identifier") or device.serial
-                                info["wifiAddress"] = None
-                                info["wifiPort"] = None
-                                try:
-                                    info["wifiState"] = await client.get_enable_wifi_connections()
-                                except Exception:
-                                    info["wifiState"] = False
-                                try:
-                                    info["userLocale"] = get_user_country()
-                                except Exception:
-                                    info["userLocale"] = None
-                                add_device(device.serial, device.connection_type, info)
-                            finally:
-                                await client.close()
-                        except Exception as exc:
-                            logger.warning(f"USB device info failed: {exc}")
-                            fallback_info = {
-                                "Identifier": getattr(device, "serial", None),
-                                "ConnectionType": getattr(device, "connection_type", "USB") or "USB",
-                                "DeviceName": "Apple 裝置",
-                                "DeviceClass": "Apple 裝置",
-                                "ProductVersion": "?",
-                                "wifiAddress": None,
-                                "wifiPort": None,
-                                "wifiState": False,
-                                "userLocale": None,
-                            }
-                            if fallback_info["Identifier"]:
-                                add_device(device.serial, device.connection_type, fallback_info)
-                except Exception as exc:
-                    logger.warning(f"USB enumeration failed: {exc}")
-
-            async def collect_wifi_devices():
-                try:
-                    wifi_count = 0
-                    async for ip, network_device in get_mobdev2_lockdowns(
-                        udid=None,
-                        only_paired=True,
-                        timeout=timeout,
-                    ):
-                        try:
-                            info = dict(network_device.short_info)
-                            network_udid = (
-                                getattr(network_device, "udid", None)
-                                or info.get("UniqueDeviceID")
-                                or info.get("Identifier")
-                            )
-                            if not network_udid:
-                                continue
-                            info["ConnectionType"] = "Network"
-                            info["Identifier"] = network_udid
-                            info["wifiAddress"] = str(ip)
-                            info["wifiPort"] = 62078
-                            info["wifiState"] = True
-                            info["wifiTransport"] = "mobdev2"
-                            add_device(network_udid, "Network", info)
-                            wifi_count += 1
-                        finally:
-                            try:
-                                await network_device.close()
-                            except Exception:
-                                pass
-                    logger.info(f"WiFi device-list count: {wifi_count}")
-                except Exception as exc:
-                    logger.exception(f"WiFi discovery failed: {exc}")
-
-            await asyncio.gather(
-                collect_usb_devices(),
-                collect_wifi_devices(),
-            )
-'''
-    # Keep the nested function indentation required by /list_devices().
-    main = replace_function(
-        main,
-        r"async def collect_devices():",
-        r"        asyncio.run(collect_devices())",
-        parallel_collect_function,
-        "parallel USB/WiFi device discovery",
-    )
-
     # Robust WiFi discovery parser.
     wifi_function = '''def get_wifi_with_retry(max_attempts=10):
     global udid, wifi_address, wifi_port, ios_version
@@ -643,16 +532,6 @@ def build_source() -> None:
     # ------------------------------------------------------------------
     # map.html - deterministic USB/WiFi coexistence
     # ------------------------------------------------------------------
-    # Timeout modal: do not navigate/reload the whole page when closing.
-    # The previous window.location.href='/' caused the one-frame flash.
-    timeout_close_patch = '''<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>'''
-    timeout_close_old = '''<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = '/'">關閉</button>'''
-    timeout_start = page.find('<div class="modal fade" id="modalTimeout"')
-    timeout_end = page.find('<div class="modal fade" id="developer錯誤"', timeout_start)
-    if timeout_start >= 0 and timeout_end > timeout_start:
-        timeout_block = page[timeout_start:timeout_end]
-        timeout_block = timeout_block.replace(timeout_close_old, timeout_close_patch, 1)
-        page = page[:timeout_start] + timeout_block + page[timeout_end:]
     populate_function = '''async function populateDeviceList(options) {
     options = options || {};
     var silent = !!options.silent;
@@ -1192,6 +1071,11 @@ def build_source() -> None:
     )
 
 
+    # Timeout modal: close in place instead of reloading the whole page.
+    # window.location.href='/' caused a visible one-frame flash.
+    timeout_close_old = '''<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = '/'">關閉</button>'''
+    timeout_close_new = '''<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>'''
+    page = page.replace(timeout_close_old, timeout_close_new, 1)
     # ========================================================================
     # FIX3 FINAL PASS
     # - WiFi auto-appears immediately after USB removal
