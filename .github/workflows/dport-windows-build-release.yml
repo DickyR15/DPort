@@ -47,14 +47,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.14.7'
-
-      - name: Prepare MOENV API key
-        shell: pwsh
-        env:
-          MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:MOENV_API_KEY)) { throw 'Missing MOENV_API_KEY secret.' }
-          [IO.File]::WriteAllText((Join-Path $PWD 'moenv_api_key.txt'), $env:MOENV_API_KEY.Trim(), (New-Object Text.UTF8Encoding($false)))
+ 
 
       - name: Install build dependencies
         shell: pwsh
@@ -118,7 +111,7 @@ jobs:
         run: |
           $v = '${{ steps.version.outputs.version }}'
           if (Test-Path dist\DPort-$v.exe) { Remove-Item dist\DPort-$v.exe -Force }
-          $args = @('--noconfirm','--clean','--onefile','--windowed','--name',("DPort-$v"),'--collect-all','pymobiledevice3','--collect-all','pytun_pmd3','--collect-all','pyimg4','--collect-all','inquirer3','--copy-metadata','pymobiledevice3','--copy-metadata','pyimg4','--copy-metadata','readchar','--hidden-import','pymobiledevice3.remote.userspace_tunnel','--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider','--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation','--hidden-import','pymobiledevice3.usbmux','--hidden-import','dport_release_updater','--hidden-import','dport_version','--add-data','src/templates;templates','--add-data','moenv_api_key.txt;.','--add-binary','dist/DPort-Updater.exe;dport_updater','--version-file','version_info.generated.txt','src/main.py')
+          $args = @('--noconfirm','--clean','--onefile','--windowed','--name',("DPort-$v"),'--collect-all','pymobiledevice3','--collect-all','pytun_pmd3','--collect-all','pyimg4','--collect-all','inquirer3','--copy-metadata','pymobiledevice3','--copy-metadata','pyimg4','--copy-metadata','readchar','--hidden-import','pymobiledevice3.remote.userspace_tunnel','--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider','--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation','--hidden-import','pymobiledevice3.usbmux','--hidden-import','dport_release_updater','--hidden-import','dport_version','--add-data','src/templates;templates','--add-binary','dist/DPort-Updater.exe;dport_updater','--version-file','version_info.generated.txt','src/main.py')
           python -m PyInstaller @args
           if ($LASTEXITCODE -ne 0) { throw "Failed to build DPort-$v.exe." }
           if (-not (Test-Path "dist\DPort-$v.exe")) { throw "DPort-$v.exe missing." }
