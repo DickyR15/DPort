@@ -2,6 +2,11 @@ name: DPort Windows WiFi Test
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/build_dport_windows_wifi_test.ps1'
 
 permissions:
   contents: read
