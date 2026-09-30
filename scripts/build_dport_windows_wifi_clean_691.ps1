@@ -197,48 +197,34 @@ if (-not $Main.Contains($UsbOnlyDiscovery)) {
 $Main = $Main.Replace($UsbOnlyDiscovery,$WifiDiscovery)
 
 # ---------------------------------------------------------------------------
-# 3. Use pymobiledevice3's normal pairing-record search for both discovery
-#    and tunnel reconnect. Do not hard-code the home folder.
+# 3. Use pymobiledevice3's normal pairing-record search for every WiFi path.
+#    The actual v6.9.1 connect path has multiple mobdev2 calls. Remove the
+#    hard-coded user-home pairing override so Windows system pairing records
+#    can also be discovered.
 # ---------------------------------------------------------------------------
-$DiscoveryPairOld = @'
-async for ip, device in get_mobdev2_lockdowns(
-                    udid=udid,
-                    pair_records=home,
-                    only_paired=True,
-                    timeout=timeout,
-                ):
-'@
-$DiscoveryPairNew = @'
-async for ip, device in get_mobdev2_lockdowns(
-                    udid=udid,
-                    only_paired=True,
-                    timeout=timeout,
-                ):
-'@
+$Main = $Main.Replace(
+'                    pair_records=home,
+',
+''
+)
 
-if ($Main.Contains($DiscoveryPairOld)) {
-    $Main = $Main.Replace($DiscoveryPairOld,$DiscoveryPairNew)
-}
+$Main = $Main.Replace(
+'            pair_records=get_home_folder(),
+',
+''
+)
 
-$TunnelPairOld = @'
-async for ip, candidate in get_mobdev2_lockdowns(
-            udid=udid,
-            pair_records=get_home_folder(),
-            only_paired=True,
-            timeout=timeout,
-        ):
-'@
-$TunnelPairNew = @'
-async for ip, candidate in get_mobdev2_lockdowns(
-            udid=udid,
-            only_paired=True,
-            timeout=timeout,
-        ):
-'@
+$Main = $Main.Replace(
+'                    pair_records = home,
+',
+''
+)
 
-if ($Main.Contains($TunnelPairOld)) {
-    $Main = $Main.Replace($TunnelPairOld,$TunnelPairNew)
-}
+$Main = $Main.Replace(
+'            pair_records = get_home_folder(),
+',
+''
+)
 
 # ---------------------------------------------------------------------------
 # 4. Add a concrete WiFi tunnel error state.
@@ -489,6 +475,14 @@ if ($CheckMain -like '*USB-ONLY: Wi-Fi / Network discovery intentionally disable
 
 if ($CheckMain -like '*USB-ONLY build: rejecting non-USB connection type*') {
     throw 'USB-only Network connection gate still remains.'
+}
+
+if ($CheckMain -match 'get_wifi_with_retry[\\s\\S]{0,14000}pair_records\\s*=') {
+    throw 'get_wifi_with_retry still contains an explicit pair_records override.'
+}
+
+if ($CheckMain -match 'start_wifi_tcp_tunnel[\\s\\S]{0,9000}pair_records\\s*=') {
+    throw 'start_wifi_tcp_tunnel still contains an explicit pair_records override.'
 }
 
 python -m py_compile src\main.py
