@@ -3471,7 +3471,7 @@ html, body{
           
         </div>
         <div class="dport-subtitle">Dicky－隨心定位，想去哪就去哪！</div>
-        <div class="dport-caption">iPhone 定位與 GPX 模擬工具</div>
+        <div class="dport-caption">iPhone / iPad 定位與 GPX 模擬工具</div>
         <div id="dport-pm3-status" class="dport-pm3-status">DPort：檢查更新中…</div>
       </div>
     </div>
@@ -4035,7 +4035,7 @@ async function checkDeviceAutoDetect() {
 
             if (!refreshed && deviceDropdown.options.length === 0) {
                 var pending = document.createElement('option');
-                pending.text = 'USB：iPhone－（正在重新連線與讀取裝置資訊…）';
+                pending.text = 'USB：Apple 裝置－（正在重新連線與讀取裝置資訊…）';
                 pending.value = '';
                 pending.disabled = true;
                 pending.selected = true;
@@ -7233,8 +7233,8 @@ async function populateDeviceList(options) {
                         (connectionType === 'Network') ? 'Wi-Fi' : connectionType;
 
                     option.text =
-                        `${displayConnectionType}: ${deviceInfo.DeviceName || 'iPhone'} - ` +
-                        `(${deviceInfo.DeviceClass || 'iPhone'} - iOS: ${deviceInfo.ProductVersion || '?'})`;
+                        `${displayConnectionType}: ${deviceInfo.DeviceName || 'Apple 裝置'} - ` +
+                        `(${deviceInfo.DeviceClass || 'Apple 裝置'} - iOS: ${deviceInfo.ProductVersion || '?'})`;
                     option.value = JSON.stringify(deviceInfo);
 
                     devicesInfo[udid] = devicesInfo[udid] || {};
@@ -9707,7 +9707,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
@@ -10223,7 +10223,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
@@ -10739,7 +10739,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
@@ -11255,7 +11255,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
@@ -11771,7 +11771,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
@@ -12720,7 +12720,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
   function arrangeBrandMeta(){
     var brand=document.querySelector('.dport-brand');
     var caption=document.querySelector('.dport-brand .dport-caption') ||
-                 findExactText(brand||document,'iPhone 定位與 GPX 模擬工具');
+                 findExactText(brand||document,'iPhone / iPad 定位與 GPX 模擬工具');
     var status=document.querySelector('.dport-brand #dport-pm3-status') ||
                 document.getElementById('dport-pm3-status');
     if(!brand || !caption || !status) return false;
