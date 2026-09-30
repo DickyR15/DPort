@@ -14,6 +14,10 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 TAGS = ("v6.9.0", "v6.9.1")
 INJECTED_IDS = (
     "dport-final-ui-polish-v8",
@@ -176,7 +180,7 @@ def audit_tag(ref: str) -> list[str]:
             failures.append(f"Updater missing {needle}.")
 
     for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts:
+        if not path.is_file() or ".git" in path.parts or ".github" in path.parts:
             continue
         if path.suffix.lower() not in {".py", ".bat", ".txt", ".md", ".yml", ".yaml", ".html", ".js", ".json"}:
             continue
