@@ -7978,6 +7978,8 @@ function setLocationArrows() {
             if (response.ok) {
                 geoportStatus('定位成功，可再次定位', true);
                 dportFollowCurrentLocation(c.lat,c.lng);
+            } else if (response.status === 423 || /PasswordProtected|已鎖定|password-protected|locked|passcode/i.test(message)) {
+                geoportStatus('iPhone 目前已鎖定，請先解鎖裝置後再進行模擬定位。', false);
             } else {
                 geoportStatus('定位套用失敗', false);
             }
