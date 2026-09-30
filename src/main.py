@@ -147,7 +147,7 @@ location_worker_stop = threading.Event()
 location_worker_ready = threading.Event()
 location_worker_error = None
 
-PASSWORD_PROTECTED_LOCATION_MESSAGE = "iPhone 目前已鎖定，請先解鎖裝置後再進行模擬定位。"
+PASSWORD_PROTECTED_LOCATION_MESSAGE = "裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。"
 timeout = DEFAULT_BONJOUR_TIMEOUT
 
 # Get the current platform using sys.platform
