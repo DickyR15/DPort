@@ -133,7 +133,8 @@ jobs:
           python -m py_compile src/dport_version.py
           python -m py_compile src/dport_release_updater.py
           python -m py_compile src/dport_updater_helper.py
-          python -m compileall -q src scripts
+          python -m compileall -q src
+          python -m py_compile scripts/generate_version_info.py
 
       - name: Build validation executable
         shell: pwsh
