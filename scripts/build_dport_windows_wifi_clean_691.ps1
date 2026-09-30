@@ -78,6 +78,7 @@ wifi_device_cache = {}
 }
 
 # ---------------------------------------------------------------------------
+# Final combined USB-default + WiFi connection test build.
 # Preserve WiFi options from the v6.9.1 USB auto-detector.
 # /usb_presence reports USB only; an empty USB snapshot must never erase a
 # Network/WiFi option that was just discovered by /list_devices.
