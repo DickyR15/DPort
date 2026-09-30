@@ -73,6 +73,7 @@ jobs:
       - name: Build standalone updater
         shell: pwsh
         run: |
+          if (-not (Test-Path 'DPort-6.9.0.ico')) { throw 'DPort icon file is missing.' }
           if (Test-Path dist) { Remove-Item dist -Recurse -Force }
           if (Test-Path build) { Remove-Item build -Recurse -Force }
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name DPort-Updater --icon DPort-6.9.0.ico --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
@@ -189,8 +190,10 @@ jobs:
 
           ## 🔧 本版本修正
 
-          - 保留 6.9.0 原有功能與修復內容
-          - 修正 Windows 應用程式圖示
+          - 改善 iPhone / iPad 裝置鎖定狀態的定位訊息與處理
+          - 改善裝置狀態與 USB 重新連線訊息
+          - 移除公共廁所相關功能與介面
+          - 移除 MOENV API Key 相關功能、設定與文件
 
           ## 📦 下載
 
