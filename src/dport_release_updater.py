@@ -20,7 +20,7 @@ except ImportError:
 
 LOGGER = logging.getLogger("DPort-Updater")
 REPO = "DickyR15/DPort"
-RELEASE_API = f"https://api.github.com/repos/{REPO}/releases/latest"
+RELEASES_API = f"https://api.github.com/repos/{REPO}/releases?per_page=100"
 VERSION = str(DPORT_VERSION)
 CHECK_INTERVAL = 1800.0
 
@@ -69,7 +69,7 @@ def _set_state(**values: Any) -> dict[str, Any]:
         return dict(_STATE)
 
 
-def _github_json(url: str) -> dict[str, Any]:
+def _github_json(url: str) -> Any:
     req = urllib.request.Request(
         url,
         headers={
@@ -83,9 +83,40 @@ def _github_json(url: str) -> dict[str, Any]:
         return json.loads(resp.read().decode("utf-8"))
 
 
+def _get_latest_stable_release() -> dict[str, Any] | None:
+    releases = _github_json(RELEASES_API)
+    if not isinstance(releases, list):
+        raise RuntimeError("GitHub releases API returned an unexpected response.")
+
+    candidates: list[dict[str, Any]] = []
+    for release in releases:
+        if not isinstance(release, dict):
+            continue
+        if release.get("draft") or release.get("prerelease"):
+            continue
+
+        tag = str(release.get("tag_name", "")).strip()
+        version = tag.lstrip("v")
+        if not tag or not _VERSION_RE.match(tag):
+            continue
+        if _version_key(version) == (0, 0, 0, ""):
+            continue
+        candidates.append(release)
+
+    if not candidates:
+        return None
+
+    return max(
+        candidates,
+        key=lambda release: _version_key(
+            str(release.get("tag_name", "")).lstrip("v")
+        ),
+    )
+
+
 def _get_update_candidate(current: str) -> tuple[str, str, str, str] | None:
-    release = _github_json(RELEASE_API)
-    if release.get("draft") or release.get("prerelease"):
+    release = _get_latest_stable_release()
+    if not release:
         return None
 
     tag = str(release.get("tag_name", "")).lstrip("v")
@@ -106,7 +137,6 @@ def _get_update_candidate(current: str) -> tuple[str, str, str, str] | None:
         str(exe.get("browser_download_url") or ""),
         str(sha.get("browser_download_url") or ""),
     )
-
 
 def _cleanup_restart_temp() -> None:
     if os.environ.get("DPORT_RESTARTED") != "1":
@@ -145,15 +175,19 @@ def check_now() -> dict[str, Any]:
                 restart_required=False,
             )
 
-        release = _github_json(RELEASE_API)
-        latest = str(release.get("tag_name", "")).lstrip("v") or VERSION
+        release = _get_latest_stable_release()
+        latest = (
+            str(release.get("tag_name", "")).lstrip("v")
+            if release
+            else VERSION
+        )
         return _set_state(
             state="idle",
             message="Up to date" if not _is_newer(VERSION, latest) else "Update unavailable",
             current_version=VERSION,
             latest_version=latest,
             latest_url="",
-            release_url=str(release.get("html_url") or ""),
+            release_url=str(release.get("html_url") or "") if release else "",
             checked_at=time.time(),
             restart_required=False,
         )
