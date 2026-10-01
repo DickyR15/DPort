@@ -37,7 +37,12 @@ from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
 from pymobiledevice3.services.dvt.instruments.location_simulation import LocationSimulation
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
 from pymobiledevice3.remote.utils import resume_remoted_if_required
-from pymobiledevice3.remote.tunnel_service import create_core_device_tunnel_service_using_rsd, get_remote_pairing_tunnel_services, create_core_device_tunnel_service_using_remotepairing, CoreDeviceTunnelProxy
+from pymobiledevice3.remote.tunnel_service import (
+    create_core_device_tunnel_service_using_rsd,
+    get_remote_pairing_tunnel_services,
+    create_core_device_tunnel_service_using_remotepairing,
+    CoreDeviceTunnelProxy,
+)
 from pymobiledevice3.bonjour import DEFAULT_BONJOUR_TIMEOUT
 from pymobiledevice3.pair_records import get_remote_pairing_record_filename, get_preferred_pair_record
 from pymobiledevice3.common import get_home_folder
@@ -309,7 +314,8 @@ def get_wifi_with_retry(max_attempts=10):
                     device_udid = short.get("_DeviceUDID") or short.get("UniqueDeviceID") or udid
                     product = short.get("ProductVersion")
                     logger.info(
-                        f"mobdev2 device: ip={ip}, udid={device_udid}, iOS={product}, paired={getattr(device, 'paired', None)}"
+                        f"mobdev2 device: ip={ip}, udid={device_udid}, "
+                        f"iOS={product}, paired={getattr(device, 'paired', None)}"
                     )
                     if udid and device_udid and device_udid != udid:
                         logger.warning(f"Skipping mobdev2 device with different UDID: {device_udid}")
@@ -354,7 +360,8 @@ def get_wifi_with_retry(max_attempts=10):
                     wifi_address = hostname or wifi_address
                     wifi_port = int(port or 62078)
                     logger.info(
-                        f"Wi-Fi device selected via RemotePairing fallback: udid={udid}, host={wifi_address}, port={wifi_port}"
+                        f"Wi-Fi device selected via RemotePairing fallback: udid={udid}, "
+                        f"host={wifi_address}, port={wifi_port}"
                     )
                     return {"udid": udid, "hostname": wifi_address, "port": wifi_port}
             finally:
