@@ -114,9 +114,6 @@ def _wait_for_new_version(version: str, port: int, timeout: int = 120) -> None:
 
     raise TimeoutError(f"DPort-{version} 啟動逾時：localhost:{port} 沒有回報新版本")
 
-
-
-
 def _start_detached(exe: Path, arguments: list[str], restarted: bool = False) -> subprocess.Popen:
     env = os.environ.copy()
     if restarted:
