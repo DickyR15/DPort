@@ -4172,33 +4172,6 @@ if (typeof stopGPXPlaybackForReason === 'function') {
     console.log("App Type: ", appVersionType);
     console.log("Platform: ", selectedDevicePlatform);
 
-      // Record app_visit when the page loads
-      //document.addEventListener('DOMContentLoaded', () => recordEvent('beta_visit'));
-
-      async function recordEvent(eventName) {
-        const apiUrl = 'https://api.geoport.me/';
-
-        try {
-          const response = await fetch(apiUrl + selectedDevicePlatform, {
-            mode: 'no-cors',
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              path: window.location.pathname,
-              [eventName]: true,
-            }),
-          });
-
-          if (!response.ok) {
-            console.error('Failed to record event:', response.status, response.statusText);
-          }
-        } catch (error) {
-          console.error('錯誤 recording event:', error.message);
-        }
-      }
-
     // Function to toggle Dark Mode
     function toggleDarkMode() {
     // DPort 6.9.0：固定深色模式，不提供切換。
@@ -4227,7 +4200,6 @@ var lineLatLngs = [];
 // Initialize gpxPlaybackInterval variable outside the function
 var gpxPlaybackInterval;
 // Initialize a flag variable to control the loop
-//let isPlaybackStopped = false;
 // Create a variable to keep track of playback status
 let isPlaybackInProgress = false;
 let isPlaybackStopped = true; // Flag to control playback status
@@ -7386,7 +7358,6 @@ async function connectDevice() {
     var selectedDeviceVersion = productVersion;
     var selectedDeviceConnType = selectedDeviceConnectionType;
     var selectedDeviceCountry = selectedOptionValue.userLocale;
-    //var selectedDeviceWifiAddress = wifiAddress;
     var selectedDevicePlatform = "{{ current_platform }}";
     var appVersionNum = "{{ app_version_num }}";
     var appType = "{{ app_version_type }}";
@@ -7521,7 +7492,6 @@ if (connectTextElement) {
             if (containerElement && rsdDataElement) {
                 try {
                     console.log('container data:', data);
-                    //var jsonData = JSON.parse(data);
 
 
                     if ('rsd_data' in data) {
@@ -7597,7 +7567,6 @@ function showModalWifiModeRequired() {
         stopLocation(true);
         // Use navigator.sendBeacon to make the POST request without waiting for a response
         const data = JSON.stringify({});
-        //navigator.sendBeacon('/stop_tunnel', data);
         console.log('中斷連線 - Clearing');
 
         var setLocationButton = document.getElementById('set-location');
@@ -7698,7 +7667,6 @@ function setLocationArrows() {
         })
             .then(response => response.text())
             .then(data => {
-                //displayToast(data); // Display response as a toast
                 console.log('set_location response:', data);
             })
             .catch(error => {
@@ -7982,14 +7950,12 @@ function continueAfterDeveloperModeRequired() {
             connectDevice();
         } else if (data.error) {
             // Handle the error, e.g., display an alert or take appropriate action
-            //dportUiAlert(data.error);
             showAlertOrModal(data.error);
         }
     })
     .catch(error => {
         console.error('錯誤 enabling developer mode:', error);
         // Handle the error, e.g., display an alert or take appropriate action
-        //dportUiAlert('錯誤 enabling developer mode.');
         showAlertOrModal('錯誤 enabling developer mode.');
     });
 }
