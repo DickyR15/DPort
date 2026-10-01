@@ -22,7 +22,6 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request
 from urllib3.exceptions import InsecureRequestWarning, ConnectionError
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
-from contextlib import asynccontextmanager
 
 # DPort pymobiledevice3 updater MUST bootstrap before the first pymobiledevice3 import.
 from dport_release_updater import bootstrap_dport_updater
@@ -68,86 +67,6 @@ OSUTILS = get_os_utils()
 
 
 import logging
-def _detach_console_if_needed():
-    """Detach any inherited Windows console; GUI releases should never expose one."""
-    if os.name != "nt" or not getattr(sys, "frozen", False):
-        return
-    try:
-        import ctypes
-        ctypes.windll.kernel32.FreeConsole()
-    except Exception:
-        pass
-
-
-
-# Get or create a logger instance named "GeoPort"
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()]
-)
-
-# Create a logger named "GeoPort"
-logger = logging.getLogger("DPort")
-logging.getLogger("urllib3").setLevel(logging.WARNING)
-
-try:
-    from dport_release_updater import start_background_update_check
-    start_background_update_check()
-except Exception as exc:
-    logging.getLogger("DPort").debug("pymobiledevice3 updater startup skipped: %s", exc)
-
-logging.getLogger('werkzeug').disabled = True
-#log.disabled = True
-
-app = Flask(__name__)
-
-# Define constants
-# Get the home directory of the current user
-home_dir = os.path.expanduser("~")
-is_windows = sys.platform == 'win32'
-base_directory = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(sys.argv[0])))
-# When packaged with PyInstaller --onefile, _MEIPASS is a temporary folder.
-app_directory = os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, 'frozen', False) else base_directory
-flask_port = 54321
-api_url = "https://projectzerothree.info/api.php?format=json"
-api_data = None
-user_locale = None
-location = None
-rsd_data = None
-rsd_host = None
-rsd_port = None
-rsd_data_map = {}
-userspace_location_tunnel = None
-wifi_address = None
-wifihost = args.wifihost
-wifi_port = None
-connection_type = None
-udid = None
-lockdown = None
-ios_version = None
-pair_record = None
-error_message = None
-sudo_message = ""
-captured_output = None
-GITHUB_REPO = 'DickyR15/DPort'
-CURRENT_VERSION_FILE = 'CURRENT_VERSION'
-BROADCAST_FILE = 'BROADCAST'
-from dport_version import DPORT_VERSION
-APP_VERSION_NUMBER = DPORT_VERSION
-DISPLAY_VERSION = DPORT_VERSION
-APP_VERSION_TYPE = "fuel"
-terminate_tunnel_thread = False
-terminate_location_thread = False
-location_threads = []
-location_command_queue = queue.Queue()
-location_worker_thread = None
-location_worker_stop = threading.Event()
-location_worker_ready = threading.Event()
-location_worker_error = None
-
-PASSWORD_PROTECTED_LOCATION_MESSAGE = "裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。"
-
 def is_device_locked_error(error: BaseException | str) -> bool:
     """Return True only when the location operation is blocked by a locked/password-protected device."""
     if isinstance(error, (PasscodeRequiredError, PasswordRequiredError)):
@@ -250,13 +169,6 @@ def run_tunnel(service_provider):
     #return
 
 # Define a function to start the tunnel thread
-def start_tunnel_thread(service_provider):
-    global terminate_tunnel_thread  # Declare the global variable
-    terminate_tunnel_thread = False  # Set the value of the global variable
-    thread = threading.Thread(target=run_tunnel, args=(service_provider,))
-    thread.start()
-    return
-
 async def start_quic_tunnel(service_provider: RemoteServiceDiscoveryService) -> None:
 
     logger.warning("Start USB QUIC tunnel")
@@ -310,13 +222,6 @@ def run_tcp_tunnel(service_provider):
     #return
 
 # Define a function to start the tunnel thread
-def start_tcp_tunnel_thread(service_provider):
-    global terminate_tunnel_thread  # Declare the global variable
-    terminate_tunnel_thread = False  # Set the value of the global variable
-    thread = threading.Thread(target=run_tcp_tunnel, args=(service_provider,))
-    thread.start()
-    return
-
 async def start_tcp_tunnel(service_provider: CoreDeviceTunnelProxy) -> None:
 
     logger.warning("Start USB TCP tunnel")
@@ -357,17 +262,6 @@ def is_major_version_17_or_greater(version_string):
     except (ValueError, IndexError):
         # Handle invalid version string or missing major version
         return False
-
-def is_major_version_less_than_16(version_string):
-    # Check if the major version in the given version string is 17 or greater.
-    try:
-        major_version = int(version_string.split('.')[0])
-        return major_version < 16
-    except (ValueError, IndexError):
-        # Handle invalid version string or missing major version
-        logger.error(f"Error: {ValueError}, {IndexError}")
-        return False
-
 
 def version_check(version_string):
     try:
@@ -443,29 +337,6 @@ def get_country_from_ip():
         logger.error(f"Error getting country from IP geolocation service: {e}")
         country_name = "Spain"
         return country_name
-def get_devices_with_retry(max_attempts=10):
-    if sys.platform == 'win32':
-        logger.info(f"iOS Version: {ios_version}")
-        if version_check(ios_version):
-            logger.info("Windows Driver Install Required")
-            cli_install_wetest_drivers()
-    for attempt in range(1, max_attempts + 1):
-        try:
-            devices = asyncio.run(get_rsds(timeout))
-            #dev1 = asyncio.run(get_rsds(timeout))
-            #devices = asyncio.run(get_core_device_tunnel_services(timeout))
-            #print("devices: ", devices)
-            #print("dev1: ", dev1)
-            if devices:
-                return devices  # Return devices if the list is not empty
-            else:
-                logger.warning(f"Attempt {attempt}: No devices found")
-        except Exception as e:
-            logger.warning(f"Attempt {attempt}: Error occurred - {e}")
-        time.sleep(1)  # Add a delay between attempts if needed
-    raise RuntimeError("No devices found after multiple attempts.\n Ensure you are running GeoPort as sudo / Administrator \n Please see the FAQ: https://github.com/DickyR15/DPort/blob/main/FAQ.md \n If you still have the error please raise an issue on github: https://github.com/DickyR15/DPort/issues ")
-
-
 def get_wifi_with_retry(max_attempts=10):
     """Discover normal iTunes/Apple Wi-Fi devices through mobdev2 Bonjour.
 
@@ -1451,55 +1322,6 @@ async def stop_location():
         return jsonify({'error':str(e)})
 
 
-def get_github_version():
-    try:
-        # Make a request to the GitHub API to get the content of CURRENT_VERSION file
-        url = f'https://raw.githubusercontent.com/{GITHUB_REPO}/main/{CURRENT_VERSION_FILE}'
-        response = requests.get(url)
-
-        response.raise_for_status()
-
-        # Parse the content of the file
-        github_version = response.text.strip()
-
-
-        return github_version
-    except requests.RequestException as e:
-
-        return None
-
-
-def get_github_broadcast():
-    try:
-        # Make a request to the GitHub API to get the content of CURRENT_VERSION file
-        url = f'https://raw.githubusercontent.com/{GITHUB_REPO}/main/{BROADCAST_FILE}'
-        logger.error(f"Github URL: {url}")
-
-        response = requests.get(url, verify=False)
-        logger.error(f"github response: {response}")
-        #response.raise_for_status()
-
-        # Parse the content of the file
-        github_broadcast = response.text.strip()
-        logger.error(f"GITHUB BROADCAST MESSAGE:")
-
-        return github_broadcast
-    except requests.RequestException as e:
-
-        return None
-
-
-def remove_ansi_escape_codes(text):
-    ansi_escape = re.compile(r'\x1b[^m]*m')
-    return ansi_escape.sub('', text)
-
-async def get_network_devices():
-    # Diagnostic helper for Apple's normal mobdev2 Wi-Fi Lockdown path.
-    # USB-ONLY: Wi-Fi mobdev2 discovery disabled.
-    for __usb_only_wifi_disabled in []:
-        print(ip, lockdown.udid, lockdown.short_info)
-        await lockdown.close()
-
 @app.route('/usb_presence')
 def usb_presence():
     """Lightweight USB presence check for automatic re-enumeration.
@@ -1624,14 +1446,6 @@ def py_list_devices():
 
 
 
-def _is_dport_updater_process(name: str) -> bool:
-    normalized = str(name or "").lower()
-    return normalized in {
-        "dport-updater.exe",
-        "dport_updater_helper.exe",
-    } or "dport-updater" in normalized
-
-
 def clear_geoport():
     logger.info("clear any DPort instances")
     substring = "DPort"
@@ -1644,20 +1458,6 @@ def clear_geoport():
             process.terminate()
     else:
         logger.warning("No GeoPort found")
-
-
-def clear_old_geoport():
-    logger.info("clear old DPort instances")
-    substring = "DPort"
-
-    current_pid = os.getpid()
-
-    for process in psutil.process_iter(['pid', 'name']):
-        if substring in process.info['name'] and process.info['pid'] != current_pid:
-            logger.info(f"Found process: {process.info['pid']} - {process.info['name']}")
-
-            # Terminate the process
-            process.terminate()
 
 
 def shutdown_server(preserve_updater=False):
