@@ -4,8 +4,8 @@ import hashlib
 import json
 import logging
 import os
-import subprocess
 import shutil
+import subprocess
 import sys
 import threading
 import time
