@@ -126,24 +126,6 @@ def fetch_api_data(api_url):
         logger.error(f"Details: {e}")
         return None
 
-def run_tunnel(service_provider):
-
-    try:
-        asyncio.run(start_quic_tunnel(service_provider))
-
-        logger.info("run_tun completed")
-        sys.exit(0)
-
-    except Exception as e:
-        error_message = str(e)
-
-        # Handle the exception, such as logging it or returning an error response
-        with app.app_context():
-            return jsonify({'error': error_message})
-
-    #return
-
-# Define a function to start the tunnel thread
 async def start_quic_tunnel(service_provider: RemoteServiceDiscoveryService) -> None:
 
     logger.warning("Start USB QUIC tunnel")
@@ -178,24 +160,6 @@ async def start_quic_tunnel(service_provider: RemoteServiceDiscoveryService) -> 
 
 
 # Define the function to be executed in the thread
-def run_tcp_tunnel(service_provider):
-
-    try:
-        asyncio.run(start_tcp_tunnel(service_provider))
-
-        logger.info("run_tun completed")
-        sys.exit(0)
-
-    except Exception as e:
-        error_message = str(e)
-
-        # Handle the exception, such as logging it or returning an error response
-        with app.app_context():
-            return jsonify({'error': error_message})
-
-    #return
-
-# Define a function to start the tunnel thread
 async def start_tcp_tunnel(service_provider: CoreDeviceTunnelProxy) -> None:
 
     logger.warning("Start USB TCP tunnel")
