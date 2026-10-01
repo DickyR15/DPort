@@ -130,12 +130,7 @@ async def start_quic_tunnel(service_provider: RemoteServiceDiscoveryService) -> 
     logger.warning("Start USB QUIC tunnel")
 
     global terminate_tunnel_thread
-    #install_driver_if_required()
 
-    #     logger.info("Windows System - Driver Check Required")
-    #     if version_check(ios_version):
-    #         logger.warning("Installing WeTest Driver - QUIC Tunnel")
-    #         cli_install_wetest_drivers()
 
     service = await create_core_device_tunnel_service_using_rsd(service_provider, autopair=True)
 
@@ -164,14 +159,10 @@ async def start_tcp_tunnel(service_provider: CoreDeviceTunnelProxy) -> None:
     logger.warning("Start USB TCP tunnel")
 
     global terminate_tunnel_thread
-    #install_driver_if_required()
 
-    #service = await create_core_device_tunnel_service_using_rsd(service_provider, autopair=True)
 
     lockdown = await create_using_usbmux(udid, autopair=True)
-    #print("Lockdown for Windows: ", lockdown)
     service = await CoreDeviceTunnelProxy.create(lockdown)
-    #asyncio.run(tunnel_task(service, secrets=None, protocol=TunnelProtocol.TCP), debug=True)
     async with service.start_tcp_tunnel() as tunnel_result:
         logger.info(f"TCP Address: {tunnel_result.address}")
         logger.info(f"TCP Port: {tunnel_result.port}")
@@ -446,9 +437,7 @@ def check_pair_record(udid):
     filename = get_remote_pairing_record_filename(udid)
     logger.info(f"Pair Record File: {filename}")
 
-    # pair_record = get_local_pairing_record(filename, home)
     pair_record = get_preferred_pair_record(udid, home)
-    #logger.info(f"Pair Record: {pair_record}")
     return pair_record
 
 def wait_for_usb_device_stable(udid, attempts=8, interval=0.5, consecutive=2):
@@ -775,9 +764,6 @@ def connect_wifi(data):
         # Extract the udid from the request
         udid = data.get('udid', None)
         ios_version = data.get('ios_version')
-        #ios_version = "17.3.1"
-        #wifi_address = data.get('wifiAddress')
-        #logger.error(f"wifi address: {wifi_address}")
         connection_type = data.get('connType')
         if data.get('wifiAddress'):
             wifi_address = data.get('wifiAddress')
@@ -805,10 +791,6 @@ def connect_wifi(data):
             rsd_host = None
             rsd_port = None
 
-            # Run tun(devices) as a background task
-            #asyncio.create_task(tun(devices))
-            #await tun(devices)
-            #start_wifi_tunnel_thread(devices)
             start_wifi_tunnel_thread()
 
             if not check_rsd_data():
@@ -828,7 +810,6 @@ def connect_wifi(data):
             # create LockdownServiceProvider
             global lockdown
             lockdown = asyncio.run(create_using_usbmux(serial=udid, connection_type=connection_type, autopair=True))
-            #lockdown = asyncio.run(create_using_tcp(wifi_address, identifier=udid))
             logger.info(f"Lockdown client = {lockdown}")
 
             rsd_data_map.setdefault(udid, {})[connection_type] = {"host": rsd_host, "port": rsd_port}
@@ -905,10 +886,7 @@ async def start_wifi_quic_tunnel() -> None:
     logger.warning(f"Start Wifi QUIC Tunnel")
 
     global terminate_tunnel_thread
-    #install_driver_if_required()
 
-    #         cli_install_wetest_drivers()
-    #get_wifi_with_retry()
     service = await create_core_device_tunnel_service_using_remotepairing(udid, wifi_address, wifi_port)
 
     async with service.start_quic_tunnel() as tunnel_result:
@@ -950,7 +928,6 @@ def run_wifi_tunnel():
             asyncio.run(start_wifi_quic_tunnel())
         else:
             asyncio.run(start_wifi_tcp_tunnel())
-        #await tun(devices)
     except Exception as e:
         logger.error(f"Error in run_wifi_tunnel: {e}")
 
@@ -1190,7 +1167,6 @@ def set_location():
             except (AttributeError, ValueError):
                 return jsonify({'error': '座標格式不正確，請使用「緯度 經度」。'}), 400
 
-            #asyncio.run(set_location_thread(latitude, longitude))
             success = start_set_location_thread(latitude, longitude)
             if success:
                 return 'Location set successfully'
@@ -1209,7 +1185,6 @@ def set_location():
                 return jsonify({'error': '座標格式不正確，請使用「緯度 經度」。'}), 400
 
             mount_developer_image()
-            #asyncio.run(set_location_thread(latitude, longitude))
             success = start_set_location_thread(latitude, longitude)
             if success:
                 return 'Location set successfully'
@@ -1430,7 +1405,6 @@ def terminate_threads():
             logger.info(f"thread: {thread}")
             terminate_flag = threading.Event()
             terminate_flag.set()
-            #thread.terminate()  # Terminate the thread
 
 def list_threads():
     """
@@ -1440,7 +1414,6 @@ def list_threads():
         logger.info(f"thread: {thread}")
 def cancel_async_tasks():
     try:
-        #loop = asyncio.get_running_loop()
         tasks = asyncio.all_tasks()
         for task in tasks:
             logger.info(f"task: {task}")
@@ -1499,7 +1472,6 @@ def index():
 
 def open_browser():
     time.sleep(2)  # Wait for the Flask app to start
-    #webbrowser.open_new(f'http://localhost:{chosen_port}')
     browser = webbrowser.get()
     browser.open(f'http://localhost:{chosen_port}')
 
@@ -1508,10 +1480,8 @@ def is_port_in_use(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('localhost', port)) == 0
     # with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    #     try:
     #         s.bind((' ', port))
     #         return False  # Port is available
-    #     except OSError:
     #         return True  # Port is already in use
 
 
@@ -1567,7 +1537,6 @@ def _dport_user_confirmed_update():
 
 
 if __name__ == '__main__':
-    #create_geoport_folder()
     if is_windows:
         try:
             import pyi_splash
@@ -1604,7 +1573,6 @@ if __name__ == '__main__':
 
 
 
-    #threading.Thread(target=open_browser).start()
 
     app.run(debug=True, use_reloader=False, port=chosen_port, host='0.0.0.0')
 
