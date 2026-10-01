@@ -382,5 +382,4 @@ __all__ = [
     "check_now",
     "get_status",
     "request_update",
-    "_get_update_candidate",
 ]
