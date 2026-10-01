@@ -38,7 +38,6 @@ from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscove
 from pymobiledevice3.remote.utils import resume_remoted_if_required
 from pymobiledevice3.remote.tunnel_service import create_core_device_tunnel_service_using_rsd, get_remote_pairing_tunnel_services, create_core_device_tunnel_service_using_remotepairing, CoreDeviceTunnelProxy
 from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel
-from pymobiledevice3.osu.os_utils import get_os_utils
 from pymobiledevice3.bonjour import DEFAULT_BONJOUR_TIMEOUT
 from pymobiledevice3.pair_records import get_local_pairing_record, get_remote_pairing_record_filename, get_preferred_pair_record
 from pymobiledevice3.common import get_home_folder
@@ -58,6 +57,7 @@ parser.add_argument('--port', type=int, help='Specify port number to listen on f
 parser.add_argument('--wifihost', type=str, help='Specify the wifi IP address to connect to')
 parser.add_argument('--udid', type=str, help='Specify the device udid to target')
 args = parser.parse_args()
+wifihost = args.wifihost
 #========= Arg Parser ========
 
 if sys.platform == 'win32':
