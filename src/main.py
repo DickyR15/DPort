@@ -1391,19 +1391,13 @@ def shutdown_server(preserve_updater=False):
 
 
 def terminate_threads():
-    """
-    Terminate all threads.
-    """
+    """Log non-main threads that remain during shutdown."""
     for thread in threading.enumerate():
         if thread != threading.main_thread():
             logger.info(f"thread: {thread}")
-            terminate_flag = threading.Event()
-            terminate_flag.set()
 
 def list_threads():
-    """
-    Terminate all threads.
-    """
+    """Log all currently running threads for diagnostics."""
     for thread in threading.enumerate():
         logger.info(f"thread: {thread}")
 def cancel_async_tasks():
