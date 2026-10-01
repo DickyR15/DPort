@@ -275,7 +275,7 @@ def main() -> int:
         _wait_for_pid_exit(args.pid, timeout=180)
         log("舊版 DPort 已完全關閉")
 
-        # 6.9.1 is downloaded directly beside the running 6.9.0.
+        # The new DPort executable is downloaded directly beside the running version.
         # Therefore downloaded and new_target MUST be the same file.
         # Do not copy the file onto itself.
         if downloaded.resolve() != new_target.resolve():
@@ -286,14 +286,14 @@ def main() -> int:
             raise RuntimeError(f"DPort-{args.version}.exe 沒有成功建立")
         log(f"新版 EXE 已位於應用程式資料夾：{new_target}")
 
-        # Start 6.9.1 before removing 6.9.0.
+        # Start the new DPort version before removing the old one.
         _start_detached(new_target, relaunch_args, restarted=True)
         # Do not use process.poll() as the success criterion. DPort may
         # self-elevate through UAC and replace the bootstrap process.
         _wait_for_new_version(args.version, args.port or 54321, timeout=120)
         log(f"DPort-{args.version}.exe 已回報新版本並成功啟動")
 
-        # Only now is it safe to remove 6.9.0.
+        # Only now is it safe to remove the old executable.
         if old_target.exists() and old_target != new_target:
             old_target.unlink()
             log(f"舊版 EXE 已刪除：{old_target}")
