@@ -69,8 +69,6 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-
-import logging
 def is_device_locked_error(error: BaseException | str) -> bool:
     """Return True only when the location operation is blocked by a locked/password-protected device."""
     if isinstance(error, (PasscodeRequiredError, PasswordRequiredError)):
