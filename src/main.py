@@ -38,7 +38,6 @@ from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscove
 from pymobiledevice3.remote.utils import resume_remoted_if_required
 from pymobiledevice3.remote.tunnel_service import create_core_device_tunnel_service_using_rsd, get_remote_pairing_tunnel_services, create_core_device_tunnel_service_using_remotepairing, CoreDeviceTunnelProxy
 from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel
-#from pymobiledevice3.cli.remote import install_driver_if_required
 from pymobiledevice3.osu.os_utils import get_os_utils
 from pymobiledevice3.bonjour import DEFAULT_BONJOUR_TIMEOUT
 from pymobiledevice3.pair_records import get_local_pairing_record, get_remote_pairing_record_filename, get_preferred_pair_record
@@ -176,7 +175,6 @@ async def start_quic_tunnel(service_provider: RemoteServiceDiscoveryService) -> 
     global terminate_tunnel_thread
     #install_driver_if_required()
 
-    # if sys.platform == 'win32':
     #     logger.info("Windows System - Driver Check Required")
     #     if version_check(ios_version):
     #         logger.warning("Installing WeTest Driver - QUIC Tunnel")
@@ -971,14 +969,9 @@ async def start_wifi_quic_tunnel() -> None:
     global terminate_tunnel_thread
     #install_driver_if_required()
 
-    # if sys.platform == 'win32':
-    #     if is_driver_required:
-    #         logger.warning("Installing WeTest Driver")
     #         cli_install_wetest_drivers()
     #get_wifi_with_retry()
     service = await create_core_device_tunnel_service_using_remotepairing(udid, wifi_address, wifi_port)
-    # lockdown = create_using_usbmux(udid)
-    # service = CoreDeviceTunnelProxy(lockdown)
 
     async with service.start_quic_tunnel() as tunnel_result:
         resume_remoted_if_required()
