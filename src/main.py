@@ -595,7 +595,7 @@ def enable_developer_mode(udid, connection_type):
     except DeviceHasPasscodeSetError:
         error_message = (
             'Error: Device has a passcode set\n\n'
-            'Please temporarily remove the passcode and run GeoPort again to enable Developer Mode\n\n'
+            'Please temporarily remove the passcode and run DPort again to enable Developer Mode\n\n'
             'Go to "Settings - Face ID & Passcode"\n'
         )
         logger.error(error_message)
@@ -1357,7 +1357,7 @@ def clear_geoport():
             # Terminate the process
             process.terminate()
     else:
-        logger.warning("No GeoPort found")
+        logger.warning("No DPort process found")
 
 
 def shutdown_server(preserve_updater=False):
