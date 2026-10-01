@@ -48,8 +48,6 @@ from pymobiledevice3.pair_records import get_remote_pairing_record_filename, get
 from pymobiledevice3.common import get_home_folder
 
 
-
-
 #========= Arg Parser ========
 # Parse command-line arguments
 parser = argparse.ArgumentParser()
@@ -117,7 +115,6 @@ if current_platform == "darwin":
         sudo_message = ""
 
 
-
 def fetch_api_data(api_url):
     global api_data
     try:
@@ -183,9 +180,6 @@ async def start_tcp_tunnel(service_provider: CoreDeviceTunnelProxy) -> None:
             await asyncio.sleep(.5)
 
 
-
-
-
 def is_major_version_17_or_greater(version_string):
     # Check if the major version in the given version string is 17 or greater.
     try:
@@ -216,7 +210,6 @@ def version_check(version_string):
                 return False
             logger.info("MacOS - pass")
             return False
-
 
 
     except (ValueError, IndexError) as e:
@@ -556,7 +549,6 @@ def check_developer_mode(udid, connection_type):
     return None
 
 
-
 def enable_developer_mode(udid, connection_type):
     """Enable Developer Mode using the async pymobiledevice3 API."""
     check_pair_record(udid)
@@ -621,7 +613,10 @@ def enable_developer_mode_route():
 
         if connection_type == "Network":
             return jsonify({
-                'error': 'Developer Mode must be enabled once over USB. Reconnect the Apple device by USB, enable Developer Mode, then use Wi-Fi.'
+                'error': (
+                'Developer Mode must be enabled once over USB. '
+                'Reconnect the Apple device by USB, then enable Developer Mode, then use Wi-Fi.'
+            )
             })
         success, error_message = enable_developer_mode(udid, connection_type)
 
@@ -639,8 +634,6 @@ def enable_developer_mode_route():
                 'error_type': 'PasswordProtected'
             }), 423
         return jsonify({'error': error_message})
-
-
 
 
 @app.route('/device_disconnected', methods=['POST'])
@@ -827,8 +820,6 @@ def connect_wifi(data):
             return jsonify({'error': 'No iOS version present'})
     finally:
         logger.warning("Connect Device function completed")
-
-
 
 
 async def start_wifi_tcp_tunnel() -> None:
@@ -1134,8 +1125,6 @@ def stop_set_location_thread():
     location_worker_thread = None
 
 
-
-
 @app.route('/set_location', methods=['POST'])
 def set_location():
     try:
@@ -1350,7 +1339,6 @@ def py_list_devices():
         return jsonify({"error": str(e)}), 500
 
 
-
 def clear_geoport():
     logger.info("clear any DPort instances")
     substring = "DPort"
@@ -1416,7 +1404,6 @@ def cancel_async_tasks():
             logger.error("No running event loop found.")
         else:
             raise e  # Re-raise the error if it's not related to the event loop
-
 
 
 @app.route('/exit', methods=['POST'])
@@ -1528,7 +1515,6 @@ def _dport_user_confirmed_update():
         return {"ok": False, "state": "update_failed", "message": str(exc)}, 500
 
 
-
 if __name__ == '__main__':
     if is_windows:
         try:
@@ -1565,10 +1551,5 @@ if __name__ == '__main__':
         logger.info("Running without auto-browser popup")
 
 
-
-
     app.run(debug=True, use_reloader=False, port=chosen_port, host='0.0.0.0')
-
-
-
 
