@@ -134,7 +134,7 @@ jobs:
           python -m py_compile src/dport_release_updater.py
           python -m py_compile src/dport_updater_helper.py
           python -m py_compile scripts/generate_version_info.py
-          python -m compileall -q src scripts
+          python -m compileall -q src
 
       - name: Generate Windows version metadata
         shell: pwsh
