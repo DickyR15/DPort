@@ -62,7 +62,6 @@ args = parser.parse_args()
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-OSUTILS = get_os_utils()
 
 
 import logging
@@ -127,29 +126,6 @@ def fetch_api_data(api_url):
         logger.error(f"Details: {e}")
         return None
 
-def create_geoport_folder():
-    # Define the path to the GeoPort folder
-    geoport_folder = os.path.join(home_dir, 'GeoPort')
-
-    # Check if the GeoPort folder exists, create it if not
-    if not os.path.exists(geoport_folder):
-        os.makedirs(geoport_folder)
-        logger.info(f"GeoPort Home: {geoport_folder}")
-        logger.info("GeoPort folder created successfully")
-
-    # Set permissions for the GeoPort folder
-    if current_platform == 'win32':
-        # Windows permissions (read/write for everyone)
-        os.system(f"icacls {geoport_folder} /grant Everyone:(OI)(CI)F")
-        logger.info("Permissions set for GeoPort folder on Windows")
-    else:  # Linux and MacOS
-        # POSIX permissions (read/write for everyone)
-        os.chmod(geoport_folder, 0o777)
-        logger.info("Permissions set for GeoPort folder on MacOS")
-
-
-
-# Define the function to be executed in the thread
 def run_tunnel(service_provider):
 
     try:
