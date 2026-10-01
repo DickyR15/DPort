@@ -94,8 +94,8 @@ jobs:
 
             The PR must be reviewed and merged manually. No release is created automatically.
 
-  validate-update-pr:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/pymobiledevice3-')
+  validate-pr:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: windows-latest
     permissions:
       contents: read
@@ -133,8 +133,15 @@ jobs:
           python -m py_compile src/dport_version.py
           python -m py_compile src/dport_release_updater.py
           python -m py_compile src/dport_updater_helper.py
-          python -m compileall -q src
           python -m py_compile scripts/generate_version_info.py
+          python -m compileall -q src scripts
+
+      - name: Generate Windows version metadata
+        shell: pwsh
+        run: |
+          python scripts/generate_version_info.py
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to generate version metadata.' }
+          if (-not (Test-Path 'version_info.generated.txt')) { throw 'Generated version metadata is missing.' }
 
       - name: Build validation executable
         shell: pwsh
