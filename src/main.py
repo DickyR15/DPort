@@ -38,15 +38,12 @@ from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscove
 from pymobiledevice3.remote.utils import resume_remoted_if_required
 from pymobiledevice3.remote.tunnel_service import create_core_device_tunnel_service_using_rsd, get_remote_pairing_tunnel_services, create_core_device_tunnel_service_using_remotepairing, CoreDeviceTunnelProxy
 from pymobiledevice3.bonjour import DEFAULT_BONJOUR_TIMEOUT
-from pymobiledevice3.pair_records import get_local_pairing_record, get_remote_pairing_record_filename, get_preferred_pair_record
+from pymobiledevice3.pair_records import get_remote_pairing_record_filename, get_preferred_pair_record
 from pymobiledevice3.common import get_home_folder
-def cli_install_wetest_drivers(*args, **kwargs):
-    logger.warning("WeTest driver installer is unavailable in this pymobiledevice3 build; skipping it.")
 
-from pymobiledevice3.cli.remote import tunnel_task
 
 from pymobiledevice3.lockdown_service_provider import LockdownServiceProvider
-from pymobiledevice3.remote.common import TunnelProtocol
+
 
 #========= Arg Parser ========
 # Parse command-line arguments
