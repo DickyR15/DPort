@@ -26,9 +26,13 @@ GitHub Actions 會自動：
 
 ## 手動觸發
 
-GitHub → Actions → DPort Build & Release → Run workflow，輸入版本，例如 `6.9.0`。
+GitHub → Actions → DPort Build & Release → Run workflow，輸入既有版本標籤，例如 `v6.9.2`。版本標籤必須符合 `vX.Y.Z`，且 Tag 內的 `src/dport_version.py` 必須使用相同版本。
 
-## 自動更新
+## pymobiledevice3 自動更新
+
+GitHub Actions 每 6 小時檢查一次上游 pymobiledevice3。發現新版時會建立更新 PR，先通過版本驗證、Python 編譯與 Windows PyInstaller Build Validation，再由維護者手動合併；合併不會自動建立 DPort Release。
+
+## DPort 自動更新
 
 DPort 會讀取 `DickyR15/DPort` 的最新正式 Release，尋找對應的 `DPort-x.y.z.exe` 與 `.sha256`，驗證 SHA-256 後交給內嵌 updater 等待舊程序退出、替換目前 EXE，再自動重新啟動。
 
