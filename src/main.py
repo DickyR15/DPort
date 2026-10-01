@@ -38,7 +38,6 @@ from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscove
 from pymobiledevice3.remote.utils import resume_remoted_if_required
 from pymobiledevice3.remote.tunnel_service import create_core_device_tunnel_service_using_rsd, get_remote_pairing_tunnel_services, create_core_device_tunnel_service_using_remotepairing, CoreDeviceTunnelProxy
 from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel
-from pymobiledevice3.osu.os_utils import get_os_utils
 from pymobiledevice3.bonjour import DEFAULT_BONJOUR_TIMEOUT
 from pymobiledevice3.pair_records import get_local_pairing_record, get_remote_pairing_record_filename, get_preferred_pair_record
 from pymobiledevice3.common import get_home_folder
@@ -58,11 +57,11 @@ parser.add_argument('--port', type=int, help='Specify port number to listen on f
 parser.add_argument('--wifihost', type=str, help='Specify the wifi IP address to connect to')
 parser.add_argument('--udid', type=str, help='Specify the device udid to target')
 args = parser.parse_args()
+wifihost = args.wifihost
 #========= Arg Parser ========
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-OSUTILS = get_os_utils()
 
 
 import logging
@@ -127,29 +126,6 @@ def fetch_api_data(api_url):
         logger.error(f"Details: {e}")
         return None
 
-def create_geoport_folder():
-    # Define the path to the GeoPort folder
-    geoport_folder = os.path.join(home_dir, 'GeoPort')
-
-    # Check if the GeoPort folder exists, create it if not
-    if not os.path.exists(geoport_folder):
-        os.makedirs(geoport_folder)
-        logger.info(f"GeoPort Home: {geoport_folder}")
-        logger.info("GeoPort folder created successfully")
-
-    # Set permissions for the GeoPort folder
-    if current_platform == 'win32':
-        # Windows permissions (read/write for everyone)
-        os.system(f"icacls {geoport_folder} /grant Everyone:(OI)(CI)F")
-        logger.info("Permissions set for GeoPort folder on Windows")
-    else:  # Linux and MacOS
-        # POSIX permissions (read/write for everyone)
-        os.chmod(geoport_folder, 0o777)
-        logger.info("Permissions set for GeoPort folder on MacOS")
-
-
-
-# Define the function to be executed in the thread
 def run_tunnel(service_provider):
 
     try:
