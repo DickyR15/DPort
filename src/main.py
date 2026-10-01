@@ -37,7 +37,6 @@ from pymobiledevice3.services.dvt.instruments.location_simulation import Locatio
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
 from pymobiledevice3.remote.utils import resume_remoted_if_required
 from pymobiledevice3.remote.tunnel_service import create_core_device_tunnel_service_using_rsd, get_remote_pairing_tunnel_services, create_core_device_tunnel_service_using_remotepairing, CoreDeviceTunnelProxy
-from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel
 from pymobiledevice3.bonjour import DEFAULT_BONJOUR_TIMEOUT
 from pymobiledevice3.pair_records import get_local_pairing_record, get_remote_pairing_record_filename, get_preferred_pair_record
 from pymobiledevice3.common import get_home_folder
@@ -653,7 +652,7 @@ def enable_developer_mode_route():
 def device_disconnected():
     """Reset stale state after the physical USB cable is removed."""
     global rsd_data, rsd_host, rsd_port, lockdown
-    global userspace_location_tunnel, connection_type
+    global connection_type
 
     logger.info("Physical USB disconnect detected; clearing stale state")
 
@@ -665,7 +664,6 @@ def device_disconnected():
     rsd_data = None
     rsd_host = None
     rsd_port = None
-    userspace_location_tunnel = None
     lockdown = None
     connection_type = None
     return jsonify({"success": True})
