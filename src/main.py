@@ -266,7 +266,7 @@ def get_wifi_with_retry(max_attempts=10):
     """Discover normal iTunes/Apple Wi-Fi devices through mobdev2 Bonjour.
 
     iTunes Wi-Fi Sync advertises _apple-mobdev2._tcp.  This is a different
-    discovery path from RemotePairing (_remotepairing._tcp), which FIX4 used.
+    discovery path from RemotePairing (_remotepairing._tcp), used by the earlier implementation.
     Normal Apple devices on iOS 17.4+ should use mobdev2 + CoreDeviceProxy for the
     Wi-Fi lockdown tunnel.
     """
