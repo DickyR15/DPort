@@ -110,7 +110,6 @@ Release 中的正式執行檔應以實際建置產物為準。
 DPort/
 ├─ .github/
 ├─ scripts/
-├─ source/
 ├─ src/
 ├─ requirements-build.txt
 ├─ GITHUB_AUTO_BUILD.md
