@@ -17,6 +17,7 @@ import queue
 import webbrowser
 import subprocess
 import pycountry
+import logging
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -42,7 +43,6 @@ from pymobiledevice3.pair_records import get_remote_pairing_record_filename, get
 from pymobiledevice3.common import get_home_folder
 
 
-from pymobiledevice3.lockdown_service_provider import LockdownServiceProvider
 
 
 #========= Arg Parser ========
@@ -55,7 +55,6 @@ parser.add_argument('--udid', type=str, help='Specify the device udid to target'
 args = parser.parse_args()
 #========= Arg Parser ========
 
-import logging
 
 logging.basicConfig(
     level=logging.DEBUG,
