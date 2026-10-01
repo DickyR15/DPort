@@ -56,6 +56,18 @@ args = parser.parse_args()
 wifihost = args.wifihost
 #========= Arg Parser ========
 
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+
+# Create the DPort logger used throughout this module.
+logger = logging.getLogger("DPort")
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
