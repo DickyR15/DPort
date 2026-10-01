@@ -1049,13 +1049,6 @@ async def _geoport_location_worker():
 def _geoport_location_worker_entry():
     asyncio.run(_geoport_location_worker())
 
-async def set_location_thread(latitude, longitude):
-    start_set_location_thread(latitude, longitude)
-    while not location_worker_stop.is_set():
-        await asyncio.sleep(0.1)
-
-
-# Function to start the set_location_thread in a separate thread
 def start_set_location_thread(latitude, longitude):
     global location_worker_thread, location_worker_stop
     global location_worker_ready, location_worker_error
