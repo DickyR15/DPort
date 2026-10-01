@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import compileall
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -18,7 +17,6 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-TAGS = ("v6.9.0", "v6.9.1")
 INJECTED_IDS = (
     "dport-final-ui-polish-v8",
     "dport-final-favorites-render-v8",
@@ -36,6 +34,7 @@ INJECTED_IDS = (
     "dport-definitive-location-gpx-fix-script",
 )
 FORBIDDEN = ("moenv_api_key", "MOENV", "public_toilet", "PUBLIC_TOILET", "公共廁所")
+EXCLUDED_AUDIT_PATHS = {Path(__file__).resolve()}
 
 
 def run(*args: str) -> None:
@@ -65,6 +64,26 @@ def extract_script_blocks(html: str) -> list[str]:
             blocks.append(code)
         pos = end + len("</script>")
     return blocks
+
+
+def get_stable_release_tags(limit: int = 2) -> list[str]:
+    url = "https://api.github.com/repos/DickyR15/DPort/releases?per_page=100"
+    request = urllib.request.Request(
+        url,
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "DPort-Full-Audit"},
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+        releases = json.load(response)
+
+    stable = [
+        str(r["tag_name"])
+        for r in releases
+        if not r.get("draft")
+        and not r.get("prerelease")
+        and re.fullmatch(r"v\d+\.\d+\.\d+", str(r.get("tag_name", "")))
+    ]
+    stable.sort(key=lambda tag: tuple(int(x) for x in tag[1:].split(".")), reverse=True)
+    return stable[:limit]
 
 
 def audit_tag(ref: str) -> list[str]:
@@ -182,6 +201,8 @@ def audit_tag(ref: str) -> list[str]:
     for path in ROOT.rglob("*"):
         if not path.is_file() or ".git" in path.parts or ".github" in path.parts:
             continue
+        if path.resolve() in EXCLUDED_AUDIT_PATHS:
+            continue
         if path.suffix.lower() not in {".py", ".bat", ".txt", ".md", ".yml", ".yaml", ".html", ".js", ".json"}:
             continue
         try:
@@ -198,49 +219,71 @@ def audit_tag(ref: str) -> list[str]:
     return failures
 
 
-def audit_live_releases() -> list[str]:
+def audit_live_releases(tags: list[str]) -> list[str]:
     failures: list[str] = []
     url = "https://api.github.com/repos/DickyR15/DPort/releases?per_page=100"
-    request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "DPort-Full-Audit"})
+    request = urllib.request.Request(
+        url,
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "DPort-Full-Audit"},
+    )
     with urllib.request.urlopen(request, timeout=20) as response:
         releases = json.load(response)
 
-    stable = [r for r in releases if not r.get("draft") and not r.get("prerelease") and re.fullmatch(r"v\d+\.\d+\.\d+", str(r.get("tag_name", "")))]
+    stable = [
+        r
+        for r in releases
+        if not r.get("draft")
+        and not r.get("prerelease")
+        and re.fullmatch(r"v\d+\.\d+\.\d+", str(r.get("tag_name", "")))
+    ]
     stable.sort(key=lambda r: tuple(int(x) for x in r["tag_name"][1:].split(".")), reverse=True)
 
     if not stable:
         return ["No stable releases found."]
+
     latest = stable[0]["tag_name"]
     print("GitHub highest stable release:", latest)
 
-    if latest != "v6.9.1":
-        failures.append(f"Expected current highest stable release to be v6.9.1, got {latest}.")
-
-    for tag in TAGS:
+    for tag in tags:
         release = next((r for r in stable if r.get("tag_name") == tag), None)
         if not release:
             failures.append(f"Release {tag} is missing.")
             continue
         assets = {str(a.get("name")) for a in release.get("assets", [])}
-        expected = {f"DPort-{tag[1:]}.exe", f"DPort-{tag[1:]}.exe.sha256", "DPort-Updater.exe", "DPort-Updater.exe.sha256"}
+        expected = {
+            f"DPort-{tag[1:]}.exe",
+            f"DPort-{tag[1:]}.exe.sha256",
+            "DPort-Updater.exe",
+            "DPort-Updater.exe.sha256",
+        }
         missing = expected - assets
         if missing:
             failures.append(f"{tag} missing assets: {sorted(missing)}")
 
     return failures
 
-
 def main() -> int:
     failures: list[str] = []
+    try:
+        tags = get_stable_release_tags(limit=2)
+    except Exception as exc:
+        print(f"Unable to discover stable release tags: {exc}")
+        tags = []
+        failures.append(f"Stable release discovery failed: {exc}")
+
     original_ref = subprocess.run(
         ["git", "branch", "--show-current"], cwd=ROOT, text=True, capture_output=True, check=True
     ).stdout.strip()
 
     try:
-        for tag in TAGS:
-            failures.extend(audit_tag(tag))
+        if not tags:
+            failures.append("No stable release tags available for audit.")
+        else:
+            for tag in tags:
+                failures.extend(audit_tag(tag))
         try:
-            failures.extend(audit_live_releases())
+            if tags:
+                failures.extend(audit_live_releases(tags))
         except Exception as exc:
             failures.append(f"Live GitHub release audit failed: {exc}")
     finally:
