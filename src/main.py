@@ -20,7 +20,7 @@ import pycountry
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
-from urllib3.exceptions import InsecureRequestWarning, ConnectionError
+from urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 # DPort pymobiledevice3 updater MUST bootstrap before the first pymobiledevice3 import.
@@ -125,12 +125,6 @@ def fetch_api_data(api_url):
         logger.error(f"Error: {e}")
         logger.error(f"API is unreachable or there was an error during the request")
         logger.error("Sorry - Fuel data is not available")
-        return None
-    except ConnectionError as e:
-        logger.error("Error: Name resolution failed.")
-        logger.error("Please check your internet connection or the correctness of the API URL.")
-        logger.error("Sorry - Fuel data is not available")
-        logger.error(f"Details: {e}")
         return None
 
 async def start_quic_tunnel(service_provider: RemoteServiceDiscoveryService) -> None:
