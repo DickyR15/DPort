@@ -1549,34 +1549,22 @@ def pymobiledevice3_status():
 
 @app.route('/')
 def index():
-    # global error_message
     fetch_api_data(api_url)
-    # pymobiledevice3 update status is handled independently; DPort's own version updater remains unchanged.
-    github_version = None
-    github_broadcast = None
     user_locale = get_user_country()
     logger.info(f"Country: {user_locale}")
     logger.info(f"Current platform: {platform}")
     logger.info(f"App Version = {APP_VERSION_NUMBER}")
     logger.info(f"base dir =  {base_directory}")
-    logger.info(f"GitHub Version = {github_version}")
 
-    #list_devices()
-    # Compare with the locally hardcoded version
-    if github_version and github_version > APP_VERSION_NUMBER:
-        version_message = f"Update available. New Version is {github_version}"
-
-    elif github_version and github_version < APP_VERSION_NUMBER:
-        version_message = None
-
-    else:
-        version_message = None
-
-    return render_template('map.html', version_message=version_message, github_broadcast=github_broadcast,
-                           user_locale=user_locale, app_version_num=DISPLAY_VERSION,
-                           app_version_type=APP_VERSION_TYPE, error_message=error_message, current_platform=platform,
-                           sudo_message=sudo_message)
-
+    return render_template(
+        'map.html',
+        user_locale=user_locale,
+        app_version_num=DISPLAY_VERSION,
+        app_version_type=APP_VERSION_TYPE,
+        error_message=error_message,
+        current_platform=platform,
+        sudo_message=sudo_message,
+    )
 
 def open_browser():
     time.sleep(2)  # Wait for the Flask app to start
