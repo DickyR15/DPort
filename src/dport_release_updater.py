@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,7 +38,7 @@ _STATE = {
 }
 _LOCK = threading.Lock()
 _STARTED = False
-_VERSION_RE = __import__("re").compile(
+_VERSION_RE = re.compile(
     r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+.]([0-9A-Za-z.-]+))?$"
 )
 
