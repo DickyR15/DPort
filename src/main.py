@@ -29,25 +29,25 @@ bootstrap_dport_updater()
 
 from pymobiledevice3.usbmux import list_devices
 from pymobiledevice3.cli.mounter import auto_mount
-from pymobiledevice3.lockdown import create_using_usbmux, create_using_tcp, get_mobdev2_lockdowns
+from pymobiledevice3.lockdown import create_using_usbmux, get_mobdev2_lockdowns
 from pymobiledevice3.services.amfi import AmfiService
-from pymobiledevice3.exceptions import DeviceHasPasscodeSetError, NoDeviceConnectedError, PasscodeRequiredError, PasswordRequiredError
+from pymobiledevice3.exceptions import DeviceHasPasscodeSetError, PasscodeRequiredError, PasswordRequiredError
 from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
 from pymobiledevice3.services.dvt.instruments.location_simulation import LocationSimulation
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
-from pymobiledevice3.remote.utils import stop_remoted_if_required, resume_remoted_if_required, get_rsds
-from pymobiledevice3.remote.tunnel_service import create_core_device_tunnel_service_using_rsd, get_remote_pairing_tunnel_services, start_tunnel, create_core_device_tunnel_service_using_remotepairing, get_core_device_tunnel_services, CoreDeviceTunnelProxy
+from pymobiledevice3.remote.utils import resume_remoted_if_required
+from pymobiledevice3.remote.tunnel_service import create_core_device_tunnel_service_using_rsd, get_remote_pairing_tunnel_services, create_core_device_tunnel_service_using_remotepairing, CoreDeviceTunnelProxy
 from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel
 #from pymobiledevice3.cli.remote import install_driver_if_required
 from pymobiledevice3.osu.os_utils import get_os_utils
-from pymobiledevice3.bonjour import DEFAULT_BONJOUR_TIMEOUT, browse_mobdev2
-from pymobiledevice3.pair_records import get_local_pairing_record, get_remote_pairing_record_filename, get_preferred_pair_record, iter_remote_paired_identifiers
+from pymobiledevice3.bonjour import DEFAULT_BONJOUR_TIMEOUT
+from pymobiledevice3.pair_records import get_local_pairing_record, get_remote_pairing_record_filename, get_preferred_pair_record
 from pymobiledevice3.common import get_home_folder
 def cli_install_wetest_drivers(*args, **kwargs):
     logger.warning("WeTest driver installer is unavailable in this pymobiledevice3 build; skipping it.")
 
 from pymobiledevice3.cli.remote import tunnel_task
-from pymobiledevice3.lockdown import LockdownClient
+
 from pymobiledevice3.lockdown_service_provider import LockdownServiceProvider
 from pymobiledevice3.remote.common import TunnelProtocol
 
