@@ -47,6 +47,7 @@ def cli_install_wetest_drivers(*args, **kwargs):
     logger.warning("WeTest driver installer is unavailable in this pymobiledevice3 build; skipping it.")
 
 from pymobiledevice3.cli.remote import tunnel_task
+
 from pymobiledevice3.lockdown_service_provider import LockdownServiceProvider
 from pymobiledevice3.remote.common import TunnelProtocol
 
