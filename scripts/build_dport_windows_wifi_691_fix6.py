@@ -1077,21 +1077,25 @@ def build_source() -> None:
     timeout_close_new = '''<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>'''
     page = page.replace(timeout_close_old, timeout_close_new, 1)
     # ========================================================================
-    # FIX3 FINAL PASS
+    # Final WiFi validation pass
     # - WiFi auto-appears immediately after USB removal
     # - USB insertion never changes the selected WiFi connection while WiFi
     #   connection is in progress/active
     # - WiFi connect cannot report success unless a real RSD tunnel exists
     # - WiFi location is tied to the active Network RSD
-    # - test dependency moves to current pymobiledevice3 11.20.0
+    # - test dependency follows the repository's current pymobiledevice3 pin
     # ========================================================================
 
     # Use the current pymobiledevice3 release for this research build.
     build_requirements = BUILD / "requirements-build.txt"
     req_text = build_requirements.read_text(encoding="utf-8")
+    root_requirements = (ROOT / "requirements-build.txt").read_text(encoding="utf-8")
+    current_pm3 = re.search(r"(?m)^pymobiledevice3==([0-9.]+)$", root_requirements)
+    if not current_pm3:
+        raise RuntimeError("Current repository pymobiledevice3 pin is missing")
     req_text = re.sub(
         r"(?m)^pymobiledevice3==[0-9.]+$",
-        "pymobiledevice3==11.20.0",
+        f"pymobiledevice3=={current_pm3.group(1)}",
         req_text,
         count=1,
     )
@@ -1101,7 +1105,7 @@ def build_source() -> None:
     route_start = main.find("@app.route('/device_disconnected', methods=['POST'])")
     route_end = main.find("@app.route('/connect_device', methods=['POST'])", route_start)
     if route_start < 0 or route_end < 0:
-        raise RuntimeError("FIX3 could not locate /device_disconnected")
+        raise RuntimeError("WiFi patch could not locate /device_disconnected")
 
     main = main[:route_start] + r'''@app.route('/device_disconnected', methods=['POST'])
 def device_disconnected():
@@ -1144,7 +1148,7 @@ def device_disconnected():
     cw_start = main.find("def connect_wifi(data):")
     cw_end = main.find("\n\n\nasync def start_wifi_tcp_tunnel()", cw_start)
     if cw_start < 0 or cw_end < 0:
-        raise RuntimeError("FIX3 could not locate connect_wifi()")
+        raise RuntimeError("WiFi patch could not locate connect_wifi()")
 
     main = main[:cw_start] + r'''def connect_wifi(data):
     try:
@@ -1253,7 +1257,7 @@ def device_disconnected():
     if "var dportConnectionInProgress = false;" not in page:
         global_anchor = "var marker;"
         if global_anchor not in page:
-            raise RuntimeError("FIX3 map global anchor missing")
+            raise RuntimeError("WiFi patch map global anchor missing")
         page = page.replace(
             global_anchor,
             "var dportConnectionInProgress = false;\n" + global_anchor,
@@ -1264,7 +1268,7 @@ def device_disconnected():
     ad_start = page.find("async function checkDeviceAutoDetect() {")
     ad_end = page.find("function startDeviceAutoDetect()", ad_start)
     if ad_start < 0 or ad_end < 0:
-        raise RuntimeError("FIX3 could not locate checkDeviceAutoDetect()")
+        raise RuntimeError("WiFi patch could not locate checkDeviceAutoDetect()")
 
     auto_fix = r'''async function checkDeviceAutoDetect() {
     if (
@@ -1440,7 +1444,7 @@ def device_disconnected():
     rm_start = page.find("function handleUsbCableRemoved() {")
     rm_end = page.find("var appVersionNum =", rm_start)
     if rm_start < 0 or rm_end < 0:
-        raise RuntimeError("FIX3 could not locate handleUsbCableRemoved()")
+        raise RuntimeError("WiFi patch could not locate handleUsbCableRemoved()")
 
     remove_fix = r'''function handleUsbCableRemoved() {
     stopUsbPresenceMonitor();
@@ -1544,12 +1548,12 @@ def device_disconnected():
     # --- Frontend: prevent auto-selection changes during connection transaction
     connect_mark = "async function connectDevice() {"
     if connect_mark not in page:
-        raise RuntimeError("FIX3 could not locate connectDevice()")
+        raise RuntimeError("WiFi patch could not locate connectDevice()")
     connect_pos = page.find(connect_mark)
     # Set state after the initial isDeviceConnected guard and before any fetch.
     insert_after = page.find("    if (isDeviceConnected) return;", connect_pos)
     if insert_after < 0:
-        raise RuntimeError("FIX3 connectDevice() guard missing")
+        raise RuntimeError("WiFi patch connectDevice() guard missing")
     insert_after = page.find("\n", insert_after) + 1
     if "    dportConnectionInProgress = true;" not in page[insert_after:insert_after+500]:
         page = page[:insert_after] + "    dportConnectionInProgress = true;\n" + page[insert_after:]
