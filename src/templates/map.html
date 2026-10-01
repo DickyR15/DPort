@@ -10080,7 +10080,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
         })
         .then(function(status){
           var current=String(status && status.current_version || '');
-          // Do not reload merely because the old 6.9.0 server answered.
+          // Do not reload merely because the previous-version server answered.
           if(!current || !atLeast(current, expectedVersion)){
             if(msg) msg.textContent='正在等待 DPort '+expectedVersion+' 啟動…';
             throw new Error('old-version-server');
@@ -10110,7 +10110,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
         if(result && result.ok){
           if(title) title.textContent='DPort 正在關閉';
           var msg=document.getElementById('dport-update-message');
-          if(msg) msg.textContent='6.9.1 已下載並驗證，正在關閉 6.9.0…';
+          if(msg) msg.textContent='DPort '+String(result.version || '')+' 已下載並驗證，正在關閉目前版本…';
           // The backend now shuts down DPort after the verified download.
           waitForRestart(String(result.version || ''));
         }else{
