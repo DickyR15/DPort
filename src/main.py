@@ -53,7 +53,6 @@ parser.add_argument('--port', type=int, help='Specify port number to listen on f
 parser.add_argument('--wifihost', type=str, help='Specify the wifi IP address to connect to')
 parser.add_argument('--udid', type=str, help='Specify the device udid to target')
 args = parser.parse_args()
-wifihost = args.wifihost
 #========= Arg Parser ========
 
 import logging
