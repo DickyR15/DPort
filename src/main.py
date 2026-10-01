@@ -953,7 +953,7 @@ def mount_developer_image():
         return jsonify({'error': error_message})
 
 
-async def _geoport_location_worker():
+async def _dport_location_worker():
     global location_worker_stop, location_worker_ready, location_worker_error
     logger.warning("Location worker starting")
     try:
@@ -1046,8 +1046,8 @@ async def _geoport_location_worker():
     finally:
         logger.warning("Location worker terminated")
 
-def _geoport_location_worker_entry():
-    asyncio.run(_geoport_location_worker())
+def _dport_location_worker_entry():
+    asyncio.run(_dport_location_worker())
 
 def start_set_location_thread(latitude, longitude):
     global location_worker_thread, location_worker_stop
@@ -1065,7 +1065,7 @@ def start_set_location_thread(latitude, longitude):
                 break
 
         location_worker_thread = threading.Thread(
-            target=_geoport_location_worker_entry,
+            target=_dport_location_worker_entry,
             name="DPortLocationWorker",
             daemon=True,
         )
@@ -1339,7 +1339,7 @@ def py_list_devices():
         return jsonify({"error": str(e)}), 500
 
 
-def clear_geoport():
+def clear_dport():
     logger.info("clear any DPort instances")
     substring = "DPort"
 
@@ -1373,7 +1373,7 @@ def shutdown_server(preserve_updater=False):
 
     # During an update, the standalone updater must survive this shutdown.
     if not preserve_updater:
-        clear_geoport()
+        clear_dport()
 
     logger.error("OS Kill")
     os.kill(os.getpid(), signal.SIGINT)
