@@ -25,7 +25,7 @@ The versions below reflect the current direct requirements in `requirements-buil
 
 | Component | Requirement | License | Upstream |
 |---|---|---|---|
-| pymobiledevice3 | 11.19.4 | GPL-3.0-or-later | https://github.com/doronz88/pymobiledevice3 |
+| pymobiledevice3 | 11.20.2 | GPL-3.0-or-later | https://github.com/doronz88/pymobiledevice3 |
 | Flask | unpinned | BSD-3-Clause | https://github.com/pallets/flask |
 | Requests | unpinned | Apache-2.0 | https://github.com/psf/requests |
 | pyuac | unpinned | MIT | https://github.com/Preston-Landers/pyuac |
