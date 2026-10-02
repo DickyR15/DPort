@@ -271,8 +271,10 @@ def main() -> int:
         tags = []
         failures.append(f"Stable release discovery failed: {exc}")
 
+    # Keep the exact starting commit so the audit is safe to run in a detached HEAD
+    # environment such as GitHub Actions tag builds.
     original_ref = subprocess.run(
-        ["git", "branch", "--show-current"], cwd=ROOT, text=True, capture_output=True, check=True
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
     ).stdout.strip()
 
     try:
@@ -288,7 +290,11 @@ def main() -> int:
             failures.append(f"Live GitHub release audit failed: {exc}")
     finally:
         if original_ref:
-            subprocess.run(["git", "switch", original_ref], cwd=ROOT, check=False)
+            subprocess.run(
+                ["git", "switch", "--detach", "--force", original_ref],
+                cwd=ROOT,
+                check=False,
+            )
 
     print("=" * 70)
     if failures:
