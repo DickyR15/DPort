@@ -7555,56 +7555,6 @@ function showModalWifiModeRequired() {
 
 
 
-    async function handleFuelTypeChange() {
-    var fuelTypeDropdown = document.getElementById('fuelType');
-    var fuelText = document.getElementById('fuelText');
-    var fuelRegionDropdown = document.getElementById('fuelRegion');
-    const selectedFuelRegion = fuelRegionDropdown.value;
-    const selectedFuelType = fuelTypeDropdown.value;
-    console.log('Selected Fuel Region = ', selectedFuelRegion);
-    fuelText.value = '';
-    fuelTypeDropdown.innerHTML = '';
-
-    try {
-        const response = await fetch(`/api/fuel_types?region=${selectedFuelRegion}`);
-        const fuelTypes = await response.json();
-        fuelTypes.sort();
-        fuelTypes.forEach(type => {
-            var option = document.createElement('option');
-            option.value = type;
-            option.text = type;
-            fuelTypeDropdown.add(option);
-        });
-        fuelTypeDropdown.value = selectedFuelType;
-        updateFuelText(selectedFuelType, selectedFuelRegion);
-    } catch (error) {
-        console.error('錯誤 fetching fuel types:', error);
-    }
-}
-
-async function updateFuelText(selectedFuelType, selectedFuelRegion) {
-    var fuelTypeDropdown = document.getElementById('fuelType');
-    var fuelText = document.getElementById('fuelText');
-    var fuelDataCollapse = document.getElementById('fuelDataCollapse');
-    try {
-        const response = await fetch(`/api/data/${selectedFuelType}?region=${selectedFuelRegion}`);
-        const fuelTypeData = await response.json();
-        fuelText.value = `
-            Type: ${fuelTypeData.type}
-            Price: ${fuelTypeData.price}
-            Suburb: ${fuelTypeData.suburb}
-            State: ${fuelTypeData.state}
-            Lat: ${fuelTypeData.lat}
-            Lng: ${fuelTypeData.lng}
-        `;
-        setCoordinates(fuelTypeData.lat, fuelTypeData.lng);
-        handleSearch();
-        fuelDataCollapse.classList.toggle('show', !!fuelTypeData);
-    } catch (error) {
-        console.error('錯誤 fetching fuel type data:', error);
-    }
-}
-
 function setLocationArrows() {
         fetch('/set_location', {
             method: 'POST',
