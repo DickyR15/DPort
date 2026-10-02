@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 *.update-backup
 version_info.generated.txt
+python_runtime.txt
