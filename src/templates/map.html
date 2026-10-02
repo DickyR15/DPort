@@ -4182,24 +4182,19 @@ if (typeof stopGPXPlaybackForReason === 'function') {
 // Global variables
 var marker; // Variable to store the marker
 var drawnItems = new L.FeatureGroup(); // Define the layer to add loaded files
-var gpxArray = []; // Array to store feature data
 var orangeIcon;
-// Define arrays to store latitudes and longitudes for markers and lines
-var markerLatLngs = [];
+// Define the array used to store latitudes and longitudes for drawn lines
 var lineLatLngs = [];
 // Initialize gpxPlaybackInterval variable outside the function
 var gpxPlaybackInterval;
 // Initialize a flag variable to control the loop
 // Create a variable to keep track of playback status
-let isPlaybackInProgress = false;
 let isPlaybackStopped = true; // Flag to control playback status
 let playbackIndex = 0; // Index to keep track of the current point being processed
 // Define the gpxMarker outside the function scope
 let gpxMarker = null;
 // Define a flag to track if playback was paused
 let wasPlaybackPaused = false;
-// Flag to track whether the velocity select menu is currently visible
-var velocitySelectVisible = false;
 // Define a global variable to store the time to next point
 var timeToNextPoint = 'N/A';
 var velocitySelect = 'walk';
@@ -4538,7 +4533,7 @@ async function initializeMap(userLocale) {
     });
     openStreetMapTileLayer.addTo(map);
 
-    var layerControl = L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
+    L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
     localizeMapControlText();
     //-----------------
    // Leaflet.FileLayer
@@ -5500,7 +5495,6 @@ function sendGPXToBackend() {
 }
 
     // Assuming your input field has an id of 'coordinates'
-    var inputField = document.getElementById('coordinates');
 }
 
 
@@ -5539,12 +5533,10 @@ function handleMarkerDragEnd(event) {
 
 
 
-// Function to delete marker
 
 
 // // Define global variables
 let currentFeature = null;
-let currentLayer = null;
 
 
 
@@ -8257,7 +8249,6 @@ function applyDPortLayoutStructure(mode) {
     const slot = document.getElementById('dport-ultra-device-slot');
     const standardDeviceSlot = document.getElementById('dport-standard-device-slot');
     const ultraGpxSlot = document.getElementById('dport-ultra-gpx-slot');
-    const heroNotifications = document.querySelector('.dport-hero-notifications');
     const ultraNotificationSlot = parts && parts.ultraNotificationSlot;
     if (!parts || !parts.connectionPanel) return;
 
