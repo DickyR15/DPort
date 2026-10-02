@@ -115,17 +115,6 @@ if current_platform == "darwin":
         sudo_message = ""
 
 
-def fetch_api_data(api_url):
-    global api_data
-    try:
-        api_data = requests.get(api_url, verify=False).json()
-        return api_data
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error: {e}")
-        logger.error(f"API is unreachable or there was an error during the request")
-        logger.error("Sorry - Fuel data is not available")
-        return None
-
 async def start_quic_tunnel(service_provider: RemoteServiceDiscoveryService) -> None:
 
     logger.warning("Start USB QUIC tunnel")
@@ -379,38 +368,6 @@ def stop_tunnel_thread():
     # Set the terminate flag to True to stop the thread
     terminate_tunnel_thread = True
     return jsonify("Tunnel stopped")
-
-@app.route('/api/data/<fuel_type>')
-def get_fuel_type_data(fuel_type):
-    selected_fuel_region = request.args.get('region', 'All')
-
-    if api_data is None:
-        logger.error("API Data is none, Fuel data is not available")
-        return jsonify({}), 500  # Return an empty response with status code 500 (Internal Server Error)
-
-    all_region_data = next(
-        (region['prices'] for region in api_data['regions'] if region['region'] == selected_fuel_region), [])
-
-    selected_data = next((entry for entry in all_region_data if entry['type'] == fuel_type), None)
-
-    return jsonify(selected_data)
-
-
-@app.route('/api/fuel_types')
-def get_fuel_types():
-    selected_fuel_region = request.args.get('region', 'All')
-
-    if api_data is None:
-        logger.error("API Data is none, sorry - Fuel data is not available")
-        return jsonify({}), 500  # Return an empty response with status code 500 (Internal Server Error)
-
-    all_region_data = next(
-        (region['prices'] for region in api_data['regions'] if region['region'] == selected_fuel_region), [])
-
-    fuel_types = set(entry['type'] for entry in all_region_data)
-
-    return jsonify(list(fuel_types))
-
 
 @app.route('/update_location', methods=['POST'])
 def update_location():
@@ -1433,7 +1390,6 @@ def pymobiledevice3_status():
 
 @app.route('/')
 def index():
-    fetch_api_data(api_url)
     user_locale = get_user_country()
     logger.info(f"Country: {user_locale}")
     logger.info(f"Current platform: {platform}")
