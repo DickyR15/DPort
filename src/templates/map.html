@@ -4173,16 +4173,6 @@ if (typeof stopGPXPlaybackForReason === 'function') {
     console.log("Platform: ", selectedDevicePlatform);
 
     // Function to toggle Dark Mode
-    function toggleDarkMode() {
-    // DPort 6.9.0：固定深色模式，不提供切換。
-    document.body.classList.add('dark-mode');
-    const sw = document.getElementById('darkModeSwitch');
-    if (sw) sw.checked = true;
-    try { localStorage.setItem('darkMode', 'dark'); } catch (e) {}
-}
-
-
-
     if (connectTextElement && rsdDataElement) {
         rsdDataElement.style.display = isDeviceConnected ? 'block' : 'none';
     }
@@ -4928,20 +4918,6 @@ var menu = L.leafletMenu(map, {
 
 });
 
-function submitCustomSpeed() {
-    var customSpeed = document.getElementById("customSpeedInput").value;
-    console.log("VelocitySelect set to:", customSpeed);
-    velocitySelect = customSpeed;
-    // Do something with the custom speed value
-
-    // Close the modal
-    var modal = new bootstrap.Modal(document.getElementById('customSpeedModal'));
-    modal.hide();
-}
-
-
-
-
 //=============
 
 // Create the dashboard button
@@ -5115,12 +5091,6 @@ function clearGPXPlaybackTimer() {
         gpxPlaybackTimer = null;
     }
     gpxPlaybackDeadline = 0;
-}
-
-function updateGPXPlaybackButtonToPlay() {
-    try {
-        var btn = document.getElementById('styles-menu');
-    } catch (e) {}
 }
 
 function stopGPXPlaybackForReason(message) {
@@ -6772,19 +6742,7 @@ function calculateTime(distance, velocity) {
 // Previous simulateGPXPlayback implementation is retained only as a compatibility wrapper.
 // The single authoritative implementation is startGPXPlayback() above.
 // Keep a compatibility wrapper for any older caller.
-function simulateGPXPlaybackLegacy(points, velocity) {
-    if (Array.isArray(points) && points.length) lineLatLngs = points;
-    if (velocity) velocitySelect = velocity;
-    return startGPXPlayback();
-}
-
 // Function to reset the flag variable
-function resetPlaybackFlag() {
-    isPlaybackStopped = false;
-}
-
-
-
 function dportSpeedLabel(value){
     const labels={walk:'步行',run:'跑步',ride:'騎車',drive:'開車'};
     if(labels[value]) return labels[value];
@@ -7134,16 +7092,6 @@ async function dportRefreshDeviceList() {
 
 
     // Checkbox visibility toggle
-    function toggleFuelTypeVisibility() {
-        var fuelTypeSection = document.getElementById('fuelTypeSection');
-        var fuelRegionSection = document.getElementById('fuelRegionSection');
-        var enableFuelPricesCheckbox = document.getElementById('enableFuelPrices');
-        if (fuelTypeSection && fuelRegionSection && enableFuelPricesCheckbox) {
-            fuelTypeSection.style.display = enableFuelPricesCheckbox.checked ? 'block' : 'none';
-            fuelRegionSection.style.display = enableFuelPricesCheckbox.checked ? 'block' : 'none';
-        }
-    }
-
     // Define an asynchronous function to update DynamoDB
     async function updateDynamoDB(selectedDeviceIdentifier, selectedDeviceVersion, selectedDeviceName, selectedDeviceClass, selectedDevicePlatform, appVersionNum, appType, selectedDeviceConnType, SelectedDeviceWifiState, selectedDeviceCountry) {
 
@@ -7799,12 +7747,6 @@ function setLocationArrows() {
             console.error('錯誤 during server shutdown:', error);
         }
         return false;
-    }
-
-    function aboutApp() {
-        event.preventDefault();
-        var appVersion = "{{ app_version }}";
-        dportUiAlert("程式版本：" + appVersion);
     }
 
     // Function to show the modal
