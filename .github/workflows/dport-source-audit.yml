@@ -1,0 +1,64 @@
+name: DPort Source Audit
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    - cron: '30 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  source-audit:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.7'
+
+      - name: Validate Python source
+        shell: pwsh
+        run: |
+          python -m py_compile src/main.py
+          python -m py_compile src/dport_version.py
+          python -m py_compile src/dport_release_updater.py
+          python -m py_compile src/dport_updater_helper.py
+          python -m py_compile scripts/full_source_audit.py
+          python -m py_compile scripts/generate_version_info.py
+          python -m compileall -q src scripts
+
+      - name: Validate embedded JavaScript
+        shell: pwsh
+        run: |
+          $html = Get-Content -LiteralPath 'src\templates\map.html' -Raw
+          $matches = [regex]::Matches($html, '<script\b([^>]*)>([\s\S]*?)</script>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+          $checked = 0
+          $index = 0
+          foreach ($match in $matches) {
+            $attrs = $match.Groups[1].Value
+            if ($attrs -match 'type\s*=\s*["''](?!text/javascript|application/javascript)["'']') { continue }
+            $code = $match.Groups[2].Value
+            if ([string]::IsNullOrWhiteSpace($code)) { continue }
+            $tmp = Join-Path $env:RUNNER_TEMP ("dport-audit-inline-$index.js")
+            Set-Content -LiteralPath $tmp -Value $code -Encoding utf8
+            node --check $tmp
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: block $index" }
+            $checked++
+            $index++
+          }
+          if ($checked -lt 1) { throw 'No JavaScript blocks were checked.' }
+
+      - name: Run full source and release audit
+        shell: pwsh
+        run: |
+          python scripts\full_source_audit.py
+          if ($LASTEXITCODE -ne 0) { throw 'DPort full source audit failed.' }
