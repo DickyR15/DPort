@@ -169,3 +169,14 @@ jobs:
           $v = '${{ steps.version.outputs.version }}'
           (Get-FileHash "dist\DPort-$v.exe" -Algorithm SHA256).Hash.ToLower() | Set-Content "dist\DPort-$v.exe.sha256" -Encoding ascii
           (Get-FileHash 'dist\DPort-Updater.exe' -Algorithm SHA256).Hash.ToLower() | Set-Content 'dist\DPort-Updater.exe.sha256' -Encoding ascii
+
+      - name: Upload DPort 6.9.2 candidate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-6.9.2-candidate-windows
+          retention-days: 14
+          path: |
+            dist/DPort-${{ steps.version.outputs.version }}.exe
+            dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
+            dist/DPort-Updater.exe
+            dist/DPort-Updater.exe.sha256
