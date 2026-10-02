@@ -5356,57 +5356,6 @@ function calculateRoute(startPoint, endPoint) {
 
 
 // Function to clear all polylines from the map
-function clearPolylines() {
-    drawnItems.clearLayers(); // Remove all layers from the drawnItems layer
-    lineLatLngs = []; // Clear the array storing coordinates
-}
-
-// Define a custom control for displaying time to next point
-var TimeToNextPointControl = L.Control.extend({
-    options: {
-        position: 'bottomleft' // Default position if not specified
-    },
-
-    onAdd: function(map) {
-        var container = L.DomUtil.create('div', 'time-to-next-point-control leaflet-bar leaflet-control');
-        var textbox = L.DomUtil.create('input');
-        textbox.type = 'text';
-        textbox.disabled = true; // Make textbox readonly
-        textbox.placeholder = '距離下一個點的時間';
-        textbox.style.width = '200px'; // Adjust the width as needed
-        textbox.id = 'timeToPointText'; // Set ID for the textbox
-
-        container.appendChild(textbox);
-
-        // Function to update the content with the time to next point
-        function updateContent() {
-            if (!isPlaybackStopped) { // Check if playback is in progress
-                container.style.display = 'block'; // Show the control
-                textbox.value = `距離下一個點：${Number(timeToNextPoint).toFixed(2)} 秒`;
-            } else {
-                container.style.display = 'none'; // Hide the control when playback is stopped
-            }
-        }
-
-        // Update the content initially
-        updateContent();
-
-        // Listen for changes in playback status and update the content accordingly
-        map.on('playbackchange', updateContent);
-
-        return container;
-    },
-
-    onRemove: function(map) {
-        // Remove event listener when control is removed from map
-        map.off('playbackchange');
-    }
-});
-
-// Create and add the custom control to the map with the specified position
-var timeToNextPointControl = new TimeToNextPointControl({ position: 'bottomleft' }); // Set position to bottom left
-timeToNextPointControl.addTo(map);
-
 function getDPortSpeedLabel() {
     const value = (typeof velocitySelect !== 'undefined') ? velocitySelect : 'walk';
     const labels = {walk:'步行', run:'跑步', ride:'騎車', drive:'開車'};
@@ -5544,28 +5493,6 @@ function handleMarkerDragEnd(event) {
 
 
 // Function to delete marker
-function deleteMarker() {
-    map.removeLayer(marker);
-    map.closePopup(); // Close the popup
-    marker = null;
-}
-
-
-// // Define global variables
-let currentFeature = null;
-let currentLayer = null;
-
-
-
-
-// DPort place-name helper: remembers the place associated with the current
-// map-only coordinate. It is used only as the default Favorite name.
-var geoportCurrentPlaceName = '';
-var geoportCurrentPlaceLat = null;
-var geoportCurrentPlaceLng = null;
-var geoportReverseGeocodeTimer = null;
-var geoportReverseGeocodeController = null;
-
 function geoportSetCurrentPlaceName(name, lat, lng){
     geoportCurrentPlaceName=String(name||'').trim();
     geoportCurrentPlaceLat=Number(lat);
@@ -7136,18 +7063,6 @@ async function dportRefreshDeviceList() {
 
     // Connect Device Function
 // Connect Device Function
-async function prepareConnectionSwitch() {
-    try {
-        await fetch('/stop_tunnel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-        });
-    } catch (e) {
-        console.warn('Unable to stop previous tunnel before switching:', e);
-    }
-}
-
 function showDeviceNotFoundToast() {
     displayToast("找不到此裝置，請重新嘗試連線。");
 }
@@ -7497,64 +7412,6 @@ function showPairRecordModal() {
 }
 
 // Function to show the modal for developer mode required
-function showModalWifiModeRequired() {
-    $('#wifiModeRequiredModal').modal('show');
-}
-
-
-    /// Function to disconnect device
-    function disconnectDevice() {
-        stopUsbPresenceMonitor();
-        activeUsbUDID = null;
-        isDeviceConnected = false;
-        startDeviceAutoDetect();
-        var connectTextElement = document.getElementById('connectText');
-        var connectButton = document.getElementById('connect');
-        var disconnectButton = document.getElementById('disconnect');
-        var deviceDropdown = document.getElementById('device');
-        stopLocation(true);
-        // Use navigator.sendBeacon to make the POST request without waiting for a response
-        const data = JSON.stringify({});
-        console.log('中斷連線 - Clearing');
-
-        var setLocationButton = document.getElementById('set-location');
-        var stopLocationButton = document.getElementById('stop-location');
-        stopLocationButton.disabled = true;
-        setLocationButton.disabled = true;
-
-        // Enable the device dropdown
-        if (deviceDropdown) {
-            deviceDropdown.disabled = false;
-        }
-
-        // Update 中斷連線 button text and show Connect button
-        if (disconnectButton) {
-            disconnectButton.innerText = "中斷連接中，請稍候……";
-            disconnectButton.style.display = 'none';
-        }
-
-        // Hide rsdData text box
-        var rsdDataElement = document.getElementById('rsdData');
-        if (rsdDataElement) {
-            rsdDataElement.style.display = 'none';
-        }
-
-        // Reset connectTextElement
-        if (connectTextElement) {
-            connectTextElement.innerText = "連接裝置";
-        }
-        if (deviceDropdown) {
-            deviceDropdown.disabled = false;
-        }
-
-        // Enable Connect button
-        if (connectButton) {
-            connectButton.disabled = false;
-        }
-    }
-
-
-
 function setLocationArrows() {
         fetch('/set_location', {
             method: 'POST',
@@ -7700,25 +7557,11 @@ function setLocationArrows() {
     }
 
     // Function to show the modal
-    function showModal() {
-<!--        var modal = document.getElementById('developerModeModal');-->
-<!--        modal.style.display = 'block';-->
-            $('#developerModeModal').modal('show');
-
-    }
-
-        // Function to show the modal
     function showModalTimeout() {
             $('#modalTimeout').modal('show');
     }
 
     // Function to close the modal
-    function closeModal() {
-        var modal = document.getElementById('developerModeModal');
-        modal.style.display = 'none';
-    }
-
-    // Function to toast
     function toast(data) {
     displayToast(data);
   }
@@ -10757,33 +10600,6 @@ body > div.toast-container{
                 el.style.setProperty('display','none','important');
             }catch(e){}
         }
-    }
-
-    function watchDeviceEnumeration(){
-        var select=document.getElementById('device');
-
-        if(select && !select.dataset.dportStatusReconnectWatch){
-            select.dataset.dportStatusReconnectWatch='1';
-
-            var observer=new MutationObserver(function(){
-                if(deviceListHasPhone()){
-                    clearStaleDisconnectStatus();
-                }
-            });
-
-            observer.observe(select,{childList:true,subtree:true});
-        }
-
-        if(!window.__dportReconnectStatusObserver && document.body && window.MutationObserver){
-            var bodyObserver=new MutationObserver(function(){
-                clearStaleDisconnectStatus();
-            });
-
-            bodyObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
-            window.__dportReconnectStatusObserver=bodyObserver;
-        }
-
-        clearStaleDisconnectStatus();
     }
 
     function enableManualRefresh(){
