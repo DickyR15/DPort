@@ -159,7 +159,7 @@ jobs:
         shell: pwsh
         run: |
           $v = '${{ steps.version.outputs.version }}'
-          python -c 'import os,pefile; v=os.environ["DPORT_VERSION"]; p=pefile.PE(f"dist/DPort-{v}.exe"); entries={k.decode(errors="replace"):val.decode(errors="replace") for fi in getattr(p,"FileInfo",[]) for st in getattr(fi,"StringTable",[]) for k,val in st.entries.items()}; assert entries.get("FileVersion")==v, entries.get("FileVersion"); assert entries.get("ProductVersion")==v, entries.get("ProductVersion"); assert entries.get("ProductName")=="DPort", entries.get("ProductName")'
+          python -c 'import os,pefile; v=os.environ["DPORT_VERSION"]; p=pefile.PE(f"dist/DPort-{v}.exe"); entries={k.decode(errors="replace"):val.decode(errors="replace") for fi in p.FileInfo for entry in fi for st in getattr(entry,"StringTable",[]) for k,val in st.entries.items()}; assert entries.get("FileVersion")==v, entries.get("FileVersion"); assert entries.get("ProductVersion")==v, entries.get("ProductVersion"); assert entries.get("ProductName")=="DPort", entries.get("ProductName")'
         env:
           DPORT_VERSION: ${{ steps.version.outputs.version }}
 
