@@ -2673,7 +2673,7 @@ html, body{
 </style>
 
 <style id="dport-69-fix20-layout-fix1">
-/* DPort 6.9.0 — based on FIX20 only.
+/* Ultra-wide header layout.
    Header: GPX | Device | Refresh | Connect | Exit
 */
 @media (min-width:1100px){
@@ -2985,9 +2985,8 @@ html, body{
 </style>
 
 <style id="dport-69-fix20-layout-fix2">
-/* DPort 6.9.0 — FIX20 Layout FIX2
-   Exact alignment fix from the user's screenshot:
-   Select + Refresh + Connect must share ONE horizontal row.
+/* Ultra-wide device row alignment.
+   Select + Refresh + Connect share one horizontal row.
 */
 @media (min-width:1100px){
 
@@ -3157,8 +3156,8 @@ html, body{
 </style>
 
 <style id="dport-69-fix20-gpx-text-fit-fix3">
-/* DPort 6.9.0 — FIX20 Layout FIX3
-   GPX card text-fit repair only.
+/* Ultra-wide GPX card text-fit.
+   Keep the GPX controls within the fixed card height.
 */
 @media (min-width:1100px){
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-card{
@@ -3289,9 +3288,8 @@ html, body{
 </style>
 
 <style id="dport-69-map-visible-height-fix5">
-/* DPort 6.9.0 GPX Taiwan FIX5
-   Increase the vertical map viewing area on the fixed Ultra-wide layout.
-   Keep left control card and map card exactly the same height.
+/* Ultra-wide map viewport height.
+   Keep the left control card and map card at the same height.
 */
 @media (min-width:1100px){
   body.dport-layout-ultrawide .dport-workspace{
@@ -3671,7 +3669,7 @@ function dportStartPm3StatusPolling(){
 }
 
 function setDPortLayout(mode) {
-    // DPort 6.9.0：固定採用超寬版，不再提供 Standard/Wide/Ultra 選擇器。
+    // Use the ultra-wide presentation; no Standard/Wide/Ultra selector is exposed.
     mode = 'ultrawide';
 
     const body = document.body;
