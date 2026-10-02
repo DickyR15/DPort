@@ -5356,10 +5356,6 @@ function calculateRoute(startPoint, endPoint) {
 
 
 // Function to clear all polylines from the map
-function clearPolylines() {
-    drawnItems.clearLayers(); // Remove all layers from the drawnItems layer
-    lineLatLngs = []; // Clear the array storing coordinates
-}
 
 // Define a custom control for displaying time to next point
 var TimeToNextPointControl = L.Control.extend({
@@ -5544,11 +5540,6 @@ function handleMarkerDragEnd(event) {
 
 
 // Function to delete marker
-function deleteMarker() {
-    map.removeLayer(marker);
-    map.closePopup(); // Close the popup
-    marker = null;
-}
 
 
 // // Define global variables
@@ -7136,17 +7127,6 @@ async function dportRefreshDeviceList() {
 
     // Connect Device Function
 // Connect Device Function
-async function prepareConnectionSwitch() {
-    try {
-        await fetch('/stop_tunnel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-        });
-    } catch (e) {
-        console.warn('Unable to stop previous tunnel before switching:', e);
-    }
-}
 
 function showDeviceNotFoundToast() {
     displayToast("找不到此裝置，請重新嘗試連線。");
@@ -7497,61 +7477,9 @@ function showPairRecordModal() {
 }
 
 // Function to show the modal for developer mode required
-function showModalWifiModeRequired() {
-    $('#wifiModeRequiredModal').modal('show');
-}
 
 
     /// Function to disconnect device
-    function disconnectDevice() {
-        stopUsbPresenceMonitor();
-        activeUsbUDID = null;
-        isDeviceConnected = false;
-        startDeviceAutoDetect();
-        var connectTextElement = document.getElementById('connectText');
-        var connectButton = document.getElementById('connect');
-        var disconnectButton = document.getElementById('disconnect');
-        var deviceDropdown = document.getElementById('device');
-        stopLocation(true);
-        // Use navigator.sendBeacon to make the POST request without waiting for a response
-        const data = JSON.stringify({});
-        console.log('中斷連線 - Clearing');
-
-        var setLocationButton = document.getElementById('set-location');
-        var stopLocationButton = document.getElementById('stop-location');
-        stopLocationButton.disabled = true;
-        setLocationButton.disabled = true;
-
-        // Enable the device dropdown
-        if (deviceDropdown) {
-            deviceDropdown.disabled = false;
-        }
-
-        // Update 中斷連線 button text and show Connect button
-        if (disconnectButton) {
-            disconnectButton.innerText = "中斷連接中，請稍候……";
-            disconnectButton.style.display = 'none';
-        }
-
-        // Hide rsdData text box
-        var rsdDataElement = document.getElementById('rsdData');
-        if (rsdDataElement) {
-            rsdDataElement.style.display = 'none';
-        }
-
-        // Reset connectTextElement
-        if (connectTextElement) {
-            connectTextElement.innerText = "連接裝置";
-        }
-        if (deviceDropdown) {
-            deviceDropdown.disabled = false;
-        }
-
-        // Enable Connect button
-        if (connectButton) {
-            connectButton.disabled = false;
-        }
-    }
 
 
 
@@ -7700,12 +7628,6 @@ function setLocationArrows() {
     }
 
     // Function to show the modal
-    function showModal() {
-<!--        var modal = document.getElementById('developerModeModal');-->
-<!--        modal.style.display = 'block';-->
-            $('#developerModeModal').modal('show');
-
-    }
 
         // Function to show the modal
     function showModalTimeout() {
@@ -7713,10 +7635,6 @@ function setLocationArrows() {
     }
 
     // Function to close the modal
-    function closeModal() {
-        var modal = document.getElementById('developerModeModal');
-        modal.style.display = 'none';
-    }
 
     // Function to toast
     function toast(data) {
@@ -10759,32 +10677,6 @@ body > div.toast-container{
         }
     }
 
-    function watchDeviceEnumeration(){
-        var select=document.getElementById('device');
-
-        if(select && !select.dataset.dportStatusReconnectWatch){
-            select.dataset.dportStatusReconnectWatch='1';
-
-            var observer=new MutationObserver(function(){
-                if(deviceListHasPhone()){
-                    clearStaleDisconnectStatus();
-                }
-            });
-
-            observer.observe(select,{childList:true,subtree:true});
-        }
-
-        if(!window.__dportReconnectStatusObserver && document.body && window.MutationObserver){
-            var bodyObserver=new MutationObserver(function(){
-                clearStaleDisconnectStatus();
-            });
-
-            bodyObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
-            window.__dportReconnectStatusObserver=bodyObserver;
-        }
-
-        clearStaleDisconnectStatus();
-    }
 
     function enableManualRefresh(){
         var btn=document.getElementById('refresh-device');
