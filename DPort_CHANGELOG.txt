@@ -1,12 +1,10 @@
-DPort 6.9.2 — Release Candidate
+DPort 6.9.2
 
 - Python 建置環境更新至 3.14.8。
 - pymobiledevice3 維持 11.20.2。
 - 完成舊版 Fuel、obsolete API、dead map function、舊裝置狀態 helper 與未使用 map state 的清理。
 - 強化 Source Audit、Windows Build Validation 與 Release Tag 驗證流程。
 - 保留現有 USB、定位、GPX 與 Windows 自動更新功能。
-- 本版本先提供測試建置；測試確認後才建立正式 v6.9.2 GitHub Release。
-
 DPort 6.9.0 FIX16\n- pymobiledevice3 auto-update restart now waits for the old DPort PID to exit before relaunching, avoiding the port-lock race.\n- No Wi-Fi changes in this build.\n\n[2026-09-23] DPort 6.9.0 FIX13 — GitHub 更新檢查快取修正
 - 基底：DPort 6.9.0 FIX12-PM3-CheckFix。
 - GitHub API／releases/latest 增加時間戳 cache-bust，避免 Windows／代理／CDN 快取舊版 Release。
