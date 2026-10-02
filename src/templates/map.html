@@ -890,7 +890,7 @@ body:not(.dport-layout-ultrawide) .dport-control-card .dport-connection-body #di
 </style>
 
 <style id="dport-notification-layout">
-/* DPort — notification placement only, based on the known-good FIX35 build. */
+/* DPort notification placement and responsive layout. */
 .dport-hero-notifications{
   flex:0 1 520px;
   min-width:0;
@@ -1644,7 +1644,7 @@ body.dark-mode .dport-gpx-speed-label{color:#aeb9cb}
 
 <style id="dport-69-header-single-layout-fix14">
 /* ============================================================
-   DPort 6.9.0 FIX14 — single-source header design
+   Single-source header design
    Standard/Wide:
      Brand | Device group | Right controls
    Ultra:
@@ -3342,7 +3342,7 @@ html, body{
 
 
 <style id="dport-69-feature-polish-fix7">
-/* DPort 6.9.0 FIX7 — retained Feature #5 UI polish only. */
+/* Feature #5 UI polish. */
 @media (min-width:1100px){
   body.dport-layout-ultrawide .dport-ultra-gpx-slot .dport-gpx-item span{
     color:#e4ebf5!important;
@@ -6769,7 +6769,7 @@ function calculateTime(distance, velocity) {
 }
 
 
-// Legacy simulateGPXPlayback implementation removed in FIX4.
+// Previous simulateGPXPlayback implementation is retained only as a compatibility wrapper.
 // The single authoritative implementation is startGPXPlayback() above.
 // Keep a compatibility wrapper for any older caller.
 function simulateGPXPlaybackLegacy(points, velocity) {
@@ -10246,7 +10246,7 @@ html body .geoport-fav-list .geoport-fav-card > button.geoport-fav-delete:hover:
 
 
 <style>
-/* DPort 6.9.0 Favorite palette: match the main blue/red controls and keep
+/* Favorite palette: match the main blue/red controls and keep
    contrast strong in dark mode. */
 .geoport-favorites-title{
     display:flex;
@@ -11227,7 +11227,7 @@ body > div.toast-container{
 
 
 <style>
-/* DPort 6.9.0 Favorite palette: match the main blue/red controls and keep
+/* Favorite palette: match the main blue/red controls and keep
    contrast strong in dark mode. */
 .geoport-favorites-title{
     display:flex;
@@ -11814,7 +11814,7 @@ body > div.toast-container{
 
 
 <style>
-/* DPort 6.9.0 Favorite palette: match the main blue/red controls and keep
+/* Favorite palette: match the main blue/red controls and keep
    contrast strong in dark mode. */
 .geoport-favorites-title{
     display:flex;
@@ -12266,7 +12266,7 @@ body > div.toast-container{
 </style>
 
 <style>
-/* DPort 6.9.0 Favorite palette: match the main blue/red controls and keep
+/* Favorite palette: match the main blue/red controls and keep
    contrast strong in dark mode. */
 .geoport-favorites-title{
     display:flex;
@@ -12718,7 +12718,7 @@ body > div.toast-container{
 </style>
 
 <style>
-/* DPort 6.9.0 Favorite palette: match the main blue/red controls and keep
+/* Favorite palette: match the main blue/red controls and keep
    contrast strong in dark mode. */
 .geoport-favorites-title{
     display:flex;
@@ -13321,7 +13321,7 @@ body > div.toast-container{
 </script>
 
 <style>
-/* DPort 6.9.0 Favorite palette: match the main blue/red controls and keep
+/* Favorite palette: match the main blue/red controls and keep
    contrast strong in dark mode. */
 .geoport-favorites-title{
     display:flex;
