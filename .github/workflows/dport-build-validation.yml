@@ -1,0 +1,171 @@
+name: DPort Windows Build Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-validation:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve DPort version
+        id: version
+        shell: pwsh
+        run: |
+          $raw = Get-Content -LiteralPath 'src\dport_version.py' -Raw
+          if ($raw -notmatch 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') { throw 'DPORT_VERSION not found.' }
+          $version = $Matches[1]
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid DPort version: $version" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "DPort version: $version"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.7'
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade "lzfse==0.4.2"
+          python -m pip install -r requirements-build.txt
+          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
+          $expected = (Get-Content requirements-build.txt | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1).Trim().Substring('pymobiledevice3=='.Length).Trim()
+          if ($pm3 -ne $expected) { throw "Expected pymobiledevice3 $expected, got $pm3" }
+
+      - name: Validate source
+        shell: pwsh
+        run: |
+          python -m py_compile src/main.py
+          python -m py_compile src/dport_version.py
+          python -m py_compile src/dport_release_updater.py
+          python -m py_compile src/dport_updater_helper.py
+          python -m py_compile scripts/full_source_audit.py
+          python -m py_compile scripts/generate_version_info.py
+          python -m compileall -q src scripts
+
+      - name: Validate embedded JavaScript
+        shell: pwsh
+        run: |
+          $html = Get-Content -LiteralPath 'src\templates\map.html' -Raw
+          $matches = [regex]::Matches($html, '<script\b([^>]*)>([\s\S]*?)</script>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+          $checked = 0
+          $index = 0
+          foreach ($match in $matches) {
+            $attrs = $match.Groups[1].Value
+            if ($attrs -match 'type\s*=\s*["''](?!text/javascript|application/javascript)["'']') { continue }
+            $code = $match.Groups[2].Value
+            if ([string]::IsNullOrWhiteSpace($code)) { continue }
+            $tmp = Join-Path $env:RUNNER_TEMP ("dport-build-inline-$index.js")
+            Set-Content -LiteralPath $tmp -Value $code -Encoding utf8
+            node --check $tmp
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: block $index" }
+            $checked++
+            $index++
+          }
+          if ($checked -lt 1) { throw 'No JavaScript blocks were checked.' }
+
+      - name: Prepare version metadata
+        shell: pwsh
+        run: |
+          python scripts/generate_version_info.py
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to generate version metadata.' }
+          if (-not (Test-Path 'version_info.generated.txt')) { throw 'Generated version metadata is missing.' }
+
+      - name: Resolve DPort icon
+        id: icon
+        shell: pwsh
+        run: |
+          $icons = @(Get-ChildItem -LiteralPath $PWD -Filter 'DPort-*.ico' -File)
+          if ($icons.Count -ne 1) { throw "Expected exactly one DPort icon, found $($icons.Count)." }
+          "path=$($icons[0].FullName)" >> $env:GITHUB_OUTPUT
+          Write-Host "Using icon: $($icons[0].FullName)"
+
+      - name: Build standalone updater
+        shell: pwsh
+        run: |
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name DPort-Updater --icon "${{ steps.icon.outputs.path }}" --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to build DPort-Updater.exe.' }
+          if (-not (Test-Path 'dist\DPort-Updater.exe')) { throw 'DPort-Updater.exe missing.' }
+
+      - name: Build DPort
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $args = @(
+            '--noconfirm','--clean','--onefile','--windowed',
+            '--name',("DPort-$v"),
+            '--icon',"${{ steps.icon.outputs.path }}",
+            '--collect-all','pymobiledevice3',
+            '--collect-all','pytun_pmd3',
+            '--collect-all','pyimg4',
+            '--collect-all','inquirer3',
+            '--copy-metadata','pymobiledevice3',
+            '--copy-metadata','pyimg4',
+            '--copy-metadata','readchar',
+            '--hidden-import','pymobiledevice3.remote.userspace_tunnel',
+            '--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider',
+            '--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation',
+            '--hidden-import','pymobiledevice3.usbmux',
+            '--hidden-import','dport_release_updater',
+            '--hidden-import','dport_version',
+            '--add-data','src/templates;templates',
+            '--add-binary','dist/DPort-Updater.exe;dport_updater',
+            '--version-file','version_info.generated.txt',
+            'src/main.py'
+          )
+          python -m PyInstaller @args
+          if ($LASTEXITCODE -ne 0) { throw "Failed to build DPort-$v.exe." }
+          if (-not (Test-Path "dist\DPort-$v.exe")) { throw "DPort-$v.exe missing." }
+
+      - name: Verify GUI executables
+        shell: pwsh
+        run: |
+          python -m pip install pefile
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install pefile.' }
+          foreach ($file in @('dist\DPort-Updater.exe',"dist\DPort-${{ steps.version.outputs.version }}.exe")) {
+            if (-not (Test-Path $file)) { throw "Missing executable: $file" }
+            python -c "import pefile,sys; p=pefile.PE(sys.argv[1]); sys.exit(0 if p.OPTIONAL_HEADER.Subsystem==2 else 1)" $file
+            if ($LASTEXITCODE -ne 0) { throw "$file is not a Windows GUI executable." }
+          }
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $p = Start-Process -FilePath "dist\DPort-$v.exe" -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 15
+          if ($p.HasExited -and $p.ExitCode -ne 0) { throw "DPort-$v.exe exited with code $($p.ExitCode)" }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+
+      - name: Verify executable version metadata
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          python -c "import os,sys,pefile; v=os.environ['DPORT_VERSION']; p=pefile.PE(f'dist/DPort-{v}.exe'); entries={k.decode(errors='replace'):val.decode(errors='replace') for fi in getattr(p,'FileInfo',[]) for st in getattr(fi,'StringTable',[]) for k,val in st.entries.items()}; assert entries.get('FileVersion')==v, entries.get('FileVersion'); assert entries.get('ProductVersion')==v, entries.get('ProductVersion'); assert entries.get('ProductName')=='DPort', entries.get('ProductName')
+        env:
+          DPORT_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Generate SHA-256
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          (Get-FileHash "dist\DPort-$v.exe" -Algorithm SHA256).Hash.ToLower() | Set-Content "dist\DPort-$v.exe.sha256" -Encoding ascii
+          (Get-FileHash 'dist\DPort-Updater.exe' -Algorithm SHA256).Hash.ToLower() | Set-Content 'dist\DPort-Updater.exe.sha256' -Encoding ascii
