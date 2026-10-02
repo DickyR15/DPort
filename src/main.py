@@ -131,6 +131,9 @@ platform = {
     'darwin': 'MacOS',
 }.get(current_platform, 'Unknown')
 
+# Windows-specific runtime flag used by the GUI startup path.
+is_windows = sys.platform == 'win32'
+
 # Check if running as sudo
 if current_platform == "darwin":
     if os.geteuid() != 0:
