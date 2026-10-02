@@ -29,12 +29,14 @@ from dport_release_updater import bootstrap_dport_updater
 bootstrap_dport_updater()
 
 from pymobiledevice3.usbmux import list_devices
+from pymobiledevice3.cli.mounter import auto_mount
 from pymobiledevice3.lockdown import create_using_usbmux, get_mobdev2_lockdowns
 from pymobiledevice3.services.amfi import AmfiService
 from pymobiledevice3.exceptions import DeviceHasPasscodeSetError, PasscodeRequiredError, PasswordRequiredError
 from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
 from pymobiledevice3.services.dvt.instruments.location_simulation import LocationSimulation
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
+from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel
 from pymobiledevice3.remote.utils import resume_remoted_if_required
 from pymobiledevice3.remote.tunnel_service import (
     create_core_device_tunnel_service_using_rsd,
@@ -68,6 +70,36 @@ logging.basicConfig(
 logger = logging.getLogger("DPort")
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+# Runtime state required by the Flask routes and location worker.
+app = Flask(__name__)
+base_directory = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(sys.argv[0])))
+flask_port = 54321
+user_locale = None
+location = None
+rsd_data = None
+rsd_host = None
+rsd_port = None
+rsd_data_map = {}
+wifi_address = None
+wifi_port = None
+connection_type = None
+udid = None
+lockdown = None
+ios_version = None
+pair_record = None
+error_message = None
+sudo_message = ""
+from dport_version import DPORT_VERSION
+APP_VERSION_NUMBER = DPORT_VERSION
+DISPLAY_VERSION = DPORT_VERSION
+APP_VERSION_TYPE = "usb"
+terminate_tunnel_thread = False
+location_command_queue = queue.Queue()
+location_worker_thread = None
+location_worker_stop = threading.Event()
+location_worker_ready = threading.Event()
+location_worker_error = None
+location_worker_stage = None
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -101,6 +133,12 @@ platform = {
     'linux': 'Linux',
     'darwin': 'MacOS',
 }.get(current_platform, 'Unknown')
+
+# Location-simulation error shown when the paired Apple device is locked.
+PASSWORD_PROTECTED_LOCATION_MESSAGE = "裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。"
+
+# Windows-specific runtime flag used by the GUI startup path.
+is_windows = sys.platform == 'win32'
 
 # Check if running as sudo
 if current_platform == "darwin":
@@ -877,13 +915,29 @@ def run_wifi_tunnel():
         logger.error(f"Error in run_wifi_tunnel: {e}")
 
 
+async def _mount_developer_image_async():
+    """Mount the developer image for legacy iOS releases that still require it."""
+    global lockdown
+    lockdown = await create_using_usbmux(serial=udid, autopair=True)
+    try:
+        logger.info(f"mount lockdown: {lockdown}")
+        await auto_mount(lockdown)
+    finally:
+        try:
+            await lockdown.close()
+        except Exception:
+            pass
+
 async def _dport_location_worker():
-    global location_worker_stop, location_worker_ready, location_worker_error
+    global location_worker_stop, location_worker_ready, location_worker_error, location_worker_stage
+    location_worker_stage = "UserspaceRsdTunnel"
     logger.warning("Location worker starting")
     try:
         async with UserspaceRsdTunnel(serial=udid, autopair=True) as rsd:
             logger.info("Userspace RSD tunnel established")
+            location_worker_stage = "DvtProvider"
             async with DvtProvider(rsd) as dvt:
+                location_worker_stage = "LocationSimulation"
                 async with LocationSimulation(dvt) as location_service:
                     while not location_worker_stop.is_set():
                         try:
@@ -905,6 +959,7 @@ async def _dport_location_worker():
                             latitude, longitude = command
 
                         try:
+                            location_worker_stage = "LocationSimulation.set"
                             await location_service.set(float(latitude), float(longitude))
                             logger.warning(
                                 f"Location Set Successfully: {latitude}, {longitude}"
@@ -929,6 +984,7 @@ async def _dport_location_worker():
                             if result_box is not None:
                                 result_box["success"] = False
                                 result_box["error"] = location_worker_error
+                                result_box["stage"] = location_worker_stage
                             if not location_worker_ready.is_set():
                                 location_worker_ready.set()
                         finally:
@@ -981,6 +1037,7 @@ def start_set_location_thread(latitude, longitude):
         location_worker_stop.clear()
         location_worker_ready.clear()
         location_worker_error = None
+        location_worker_stage = None
 
         while True:
             try:
@@ -1084,7 +1141,7 @@ def set_location():
                 return 'Location set successfully'
             if location_worker_error == PASSWORD_PROTECTED_LOCATION_MESSAGE:
                 return PASSWORD_PROTECTED_LOCATION_MESSAGE, 423
-            return jsonify({'error': location_worker_error or 'Location set failed'}), 500
+            return jsonify({'error': location_worker_error or 'Location set failed', 'stage': location_worker_stage}), 500
 
         elif ios_version is not None and not is_major_version_17_or_greater(ios_version):
             global lockdown
