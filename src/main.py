@@ -68,6 +68,35 @@ logging.basicConfig(
 logger = logging.getLogger("DPort")
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+# Runtime state required by the Flask routes and location worker.
+app = Flask(__name__)
+base_directory = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(sys.argv[0])))
+flask_port = 54321
+user_locale = None
+location = None
+rsd_data = None
+rsd_host = None
+rsd_port = None
+rsd_data_map = {}
+wifi_address = None
+wifi_port = None
+connection_type = None
+udid = None
+lockdown = None
+ios_version = None
+pair_record = None
+error_message = None
+sudo_message = ""
+from dport_version import DPORT_VERSION
+APP_VERSION_NUMBER = DPORT_VERSION
+DISPLAY_VERSION = DPORT_VERSION
+APP_VERSION_TYPE = "usb"
+terminate_tunnel_thread = False
+location_command_queue = queue.Queue()
+location_worker_thread = None
+location_worker_stop = threading.Event()
+location_worker_ready = threading.Event()
+location_worker_error = None
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
