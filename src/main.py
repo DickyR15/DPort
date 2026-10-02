@@ -29,7 +29,6 @@ from dport_release_updater import bootstrap_dport_updater
 bootstrap_dport_updater()
 
 from pymobiledevice3.usbmux import list_devices
-from pymobiledevice3.cli.mounter import auto_mount
 from pymobiledevice3.lockdown import create_using_usbmux, get_mobdev2_lockdowns
 from pymobiledevice3.services.amfi import AmfiService
 from pymobiledevice3.exceptions import DeviceHasPasscodeSetError, PasscodeRequiredError, PasswordRequiredError
@@ -360,14 +359,6 @@ def get_wifi_with_retry(max_attempts=10):
         "not RemotePairing. Verify the Apple device was paired by USB, Wi-Fi management is enabled, "
         "the PC and iPhone are on the same LAN, and Windows Firewall allows mDNS/Bonjour."
     )
-
-@app.route('/stop_tunnel', methods=['POST'])
-def stop_tunnel_thread():
-    global terminate_tunnel_thread
-    logger.info("stop tunnel thread")
-    # Set the terminate flag to True to stop the thread
-    terminate_tunnel_thread = True
-    return jsonify("Tunnel stopped")
 
 @app.route('/update_location', methods=['POST'])
 def update_location():
@@ -884,30 +875,6 @@ def run_wifi_tunnel():
             asyncio.run(start_wifi_tcp_tunnel())
     except Exception as e:
         logger.error(f"Error in run_wifi_tunnel: {e}")
-
-
-async def _mount_developer_image_async():
-    global lockdown
-    lockdown = await create_using_usbmux(serial=udid, autopair=True)
-    try:
-        logger.info(f"mount lockdown: {lockdown}")
-        await auto_mount(lockdown)
-    finally:
-        try:
-            await lockdown.close()
-        except Exception:
-            pass
-
-
-@app.route('/mount_developer_image', methods=['POST'])
-def mount_developer_image():
-    try:
-        asyncio.run(_mount_developer_image_async())
-        return 'Developer image mounted successfully'
-    except Exception as e:
-        error_message = str(e)
-        logger.exception(f"Developer image mount failed: {error_message}")
-        return jsonify({'error': error_message})
 
 
 async def _dport_location_worker():
