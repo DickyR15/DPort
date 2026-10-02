@@ -1,0 +1,86 @@
+name: DPort Python Auto Update
+run-name: DPort Python Auto Update
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-open-python-update-pr:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Find latest stable Python 3.14
+        id: latest
+        shell: pwsh
+        run: |
+          $manifest = Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/actions/python-versions/main/versions-manifest.json'
+          $stable = @(
+            $manifest | Where-Object {
+              $_.stable -eq $true -and
+              $_.version -match '^3\.14\.\d+$'
+            } | ForEach-Object {
+              [pscustomobject]@{ Version = [version]$_.version }
+            }
+          )
+          if ($stable.Count -eq 0) { throw 'No stable Python 3.14 release found in the actions/python-versions manifest.' }
+
+          $latest = $stable | Sort-Object Version -Descending | Select-Object -First 1
+          $current = (Get-Content -LiteralPath '.github\python-version.txt' -Raw).Trim()
+          if ($current -notmatch '^3\.14\.\d+$') { throw "Invalid current Python build version: $current" }
+
+          "current=$current" >> $env:GITHUB_OUTPUT
+          "latest=$($latest.Version)" >> $env:GITHUB_OUTPUT
+
+          if ([version]$latest.Version -gt [version]$current) {
+            "update=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Python update available: $current -> $($latest.Version)"
+          }
+          else {
+            "update=false" >> $env:GITHUB_OUTPUT
+            Write-Host "Python 3.14 is current: $current"
+          }
+
+      - name: Update pinned Python build version
+        if: steps.latest.outputs.update == 'true'
+        shell: pwsh
+        run: |
+          $version = '${{ steps.latest.outputs.latest }}'
+          Set-Content -LiteralPath '.github\python-version.txt' -Value $version -Encoding ascii
+
+      - name: Create pull request
+        if: steps.latest.outputs.update == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          branch: automation/python-${{ steps.latest.outputs.latest }}
+          delete-branch: false
+          title: "Update Python build version to ${{ steps.latest.outputs.latest }}"
+          commit-message: "chore: update Python build version to ${{ steps.latest.outputs.latest }}"
+          body: |
+            ## Python build environment update
+
+            Automated update detected the latest stable Python 3.14 patch release.
+
+            Current DPort build version: ${{ steps.latest.outputs.current }}
+            New build version: ${{ steps.latest.outputs.latest }}
+
+            This PR only changes .github/python-version.txt.
+
+            The PR must be reviewed and merged manually. No DPort Release is created automatically.
+
+            After merge, the normal DPort Source Audit and Windows Build Validation workflows will run against the new Python version.
+
+            Policy: automatic updates stay within Python 3.14.x. A future Python 3.15+ migration is intentionally not opened automatically.
