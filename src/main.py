@@ -36,6 +36,7 @@ from pymobiledevice3.exceptions import DeviceHasPasscodeSetError, PasscodeRequir
 from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
 from pymobiledevice3.services.dvt.instruments.location_simulation import LocationSimulation
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
+from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel
 from pymobiledevice3.remote.utils import resume_remoted_if_required
 from pymobiledevice3.remote.tunnel_service import (
     create_core_device_tunnel_service_using_rsd,
