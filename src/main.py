@@ -29,6 +29,7 @@ from dport_release_updater import bootstrap_dport_updater
 bootstrap_dport_updater()
 
 from pymobiledevice3.usbmux import list_devices
+from pymobiledevice3.cli.mounter import auto_mount
 from pymobiledevice3.lockdown import create_using_usbmux, get_mobdev2_lockdowns
 from pymobiledevice3.services.amfi import AmfiService
 from pymobiledevice3.exceptions import DeviceHasPasscodeSetError, PasscodeRequiredError, PasswordRequiredError
@@ -130,6 +131,9 @@ platform = {
     'linux': 'Linux',
     'darwin': 'MacOS',
 }.get(current_platform, 'Unknown')
+
+# Location-simulation error shown when the paired Apple device is locked.
+PASSWORD_PROTECTED_LOCATION_MESSAGE = "裝置目前已鎖定，請先解鎖裝置後再進行模擬定位。"
 
 # Windows-specific runtime flag used by the GUI startup path.
 is_windows = sys.platform == 'win32'
@@ -908,6 +912,19 @@ def run_wifi_tunnel():
     except Exception as e:
         logger.error(f"Error in run_wifi_tunnel: {e}")
 
+
+async def _mount_developer_image_async():
+    """Mount the developer image for legacy iOS releases that still require it."""
+    global lockdown
+    lockdown = await create_using_usbmux(serial=udid, autopair=True)
+    try:
+        logger.info(f"mount lockdown: {lockdown}")
+        await auto_mount(lockdown)
+    finally:
+        try:
+            await lockdown.close()
+        except Exception:
+            pass
 
 async def _dport_location_worker():
     global location_worker_stop, location_worker_ready, location_worker_error
