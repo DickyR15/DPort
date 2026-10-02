@@ -947,7 +947,7 @@ body.dark-mode .dport-hero-notifications .toast-body{
   }
 }
 
-/* DPort FIX2 — Ultra-wide notifications live inside the left control card,
+/* Ultra-wide notifications live inside the left control card,
    directly below the location action buttons. Standard / Wide are unchanged. */
 .dport-ultra-notification-slot{
   display:none;
@@ -2019,7 +2019,7 @@ body.dark-mode .dport-gpx-speed-label{color:#aeb9cb}
 </style>
 
 <style id="dport-69-header-card-balance-fix15">
-/* DPort 6.9.0 FIX15
+/* Header and device-card visual balance
    Visual balance requested from the screenshots:
    - Ultra-wide: GPX card and Device card use the same vertical footprint.
    - Standard/Wide: Device card is visibly larger/taller and fills its slot.
@@ -2172,7 +2172,7 @@ body.dark-mode .dport-gpx-speed-label{color:#aeb9cb}
 </style>
 
 <style id="dport-69-header-card-size-fix16">
-/* DPort 6.9.0 FIX16
+/* Header and device-card sizing
    Requested card heights:
    - Ultra-wide: GPX + Device cards = 72px
    - Standard / Wide: Device card = 75px
@@ -2214,7 +2214,7 @@ body.dark-mode .dport-gpx-speed-label{color:#aeb9cb}
 </style>
 
 <style id="dport-69-ultra-default-typography-fix17">
-/* DPort 6.9.0 FIX17
+/* Ultra-wide typography
    Ultra-wide is the sole UI mode.
    With the layout selector removed, typography gets more breathing room.
 */
@@ -2362,7 +2362,7 @@ body.dark-mode .dport-gpx-speed-label{color:#aeb9cb}
 </style>
 
 <style id="dport-69-readability-device-gpx-fix19">
-/* DPort 6.9.0 FIX19
+/* Device and GPX readability / spacing
    Screenshot-driven readability / spacing:
    1) GPX stats must be visible inside the 75px card.
    2) Device selector gets more width.
@@ -2612,7 +2612,7 @@ body.dark-mode .dport-gpx-speed-label{color:#aeb9cb}
 </style>
 
 <style id="dport-69-fixed-dark-header-taller-fix20">
-/* DPort 6.9.0 FIX20
+/* Fixed dark header and connection-card layout
    - Fixed dark mode: no switch in UI.
    - Ultra-wide GPX + Device connection cards: 88px.
    - Keep inner controls centered and readable.
@@ -5074,7 +5074,7 @@ async function applyGPXPointToDevice(lat, lng) {
     }
 
     try {
-        // DPort 6.8.2 FIX4:
+        // Use a single atomic /set_location request for each GPX point.
         // /set_location already accepts lat/lng directly. Sending one atomic
         // request avoids the previous update_location -> set_location double
         // round-trip, which caused the status to flash on every GPX point.
