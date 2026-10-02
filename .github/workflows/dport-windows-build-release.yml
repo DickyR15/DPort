@@ -219,13 +219,13 @@ jobs:
           - GPX 軌跡匯入、播放與速度調整
           - Windows 自動更新機制
           - SHA-256 完整性驗證
+          ## 🔧 本版本更新
 
-          ## 🔧 本版本修正
-
-          - 改善 iPhone / iPad 裝置鎖定狀態的定位訊息與處理
-          - 改善裝置狀態與 USB 重新連線訊息
-          - 移除公共廁所相關功能與介面
-          - 移除 MOENV API Key 相關功能、設定與文件
+          - Python 建置環境：3.14.8
+          - pymobiledevice3：11.20.2
+          - 完成舊 Fuel、obsolete API、dead map function、舊裝置狀態 helper 與未使用 map state 的清理
+          - 強化 Source Audit、Windows Build Validation 與 Release Tag 驗證流程
+          - 保留 USB、定位、GPX 與 Windows 自動更新功能
 
           ## 📦 下載
 
