@@ -98,6 +98,7 @@ location_worker_thread = None
 location_worker_stop = threading.Event()
 location_worker_ready = threading.Event()
 location_worker_error = None
+location_worker_stage = None
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -927,12 +928,15 @@ async def _mount_developer_image_async():
             pass
 
 async def _dport_location_worker():
-    global location_worker_stop, location_worker_ready, location_worker_error
+    global location_worker_stop, location_worker_ready, location_worker_error, location_worker_stage
+    location_worker_stage = "UserspaceRsdTunnel"
     logger.warning("Location worker starting")
     try:
         async with UserspaceRsdTunnel(serial=udid, autopair=True) as rsd:
             logger.info("Userspace RSD tunnel established")
+            location_worker_stage = "DvtProvider"
             async with DvtProvider(rsd) as dvt:
+                location_worker_stage = "LocationSimulation"
                 async with LocationSimulation(dvt) as location_service:
                     while not location_worker_stop.is_set():
                         try:
@@ -954,6 +958,7 @@ async def _dport_location_worker():
                             latitude, longitude = command
 
                         try:
+                            location_worker_stage = "LocationSimulation.set"
                             await location_service.set(float(latitude), float(longitude))
                             logger.warning(
                                 f"Location Set Successfully: {latitude}, {longitude}"
@@ -978,6 +983,7 @@ async def _dport_location_worker():
                             if result_box is not None:
                                 result_box["success"] = False
                                 result_box["error"] = location_worker_error
+                                result_box["stage"] = location_worker_stage
                             if not location_worker_ready.is_set():
                                 location_worker_ready.set()
                         finally:
@@ -1030,6 +1036,7 @@ def start_set_location_thread(latitude, longitude):
         location_worker_stop.clear()
         location_worker_ready.clear()
         location_worker_error = None
+        location_worker_stage = None
 
         while True:
             try:
@@ -1133,7 +1140,7 @@ def set_location():
                 return 'Location set successfully'
             if location_worker_error == PASSWORD_PROTECTED_LOCATION_MESSAGE:
                 return PASSWORD_PROTECTED_LOCATION_MESSAGE, 423
-            return jsonify({'error': location_worker_error or 'Location set failed'}), 500
+            return jsonify({'error': location_worker_error or 'Location set failed', 'stage': location_worker_stage}), 500
 
         elif ios_version is not None and not is_major_version_17_or_greater(ios_version):
             global lockdown
