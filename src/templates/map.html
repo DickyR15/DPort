@@ -5356,6 +5356,53 @@ function calculateRoute(startPoint, endPoint) {
 
 
 // Function to clear all polylines from the map
+
+// Define a custom control for displaying time to next point
+var TimeToNextPointControl = L.Control.extend({
+    options: {
+        position: 'bottomleft' // Default position if not specified
+    },
+
+    onAdd: function(map) {
+        var container = L.DomUtil.create('div', 'time-to-next-point-control leaflet-bar leaflet-control');
+        var textbox = L.DomUtil.create('input');
+        textbox.type = 'text';
+        textbox.disabled = true; // Make textbox readonly
+        textbox.placeholder = '距離下一個點的時間';
+        textbox.style.width = '200px'; // Adjust the width as needed
+        textbox.id = 'timeToPointText'; // Set ID for the textbox
+
+        container.appendChild(textbox);
+
+        // Function to update the content with the time to next point
+        function updateContent() {
+            if (!isPlaybackStopped) { // Check if playback is in progress
+                container.style.display = 'block'; // Show the control
+                textbox.value = `距離下一個點：${Number(timeToNextPoint).toFixed(2)} 秒`;
+            } else {
+                container.style.display = 'none'; // Hide the control when playback is stopped
+            }
+        }
+
+        // Update the content initially
+        updateContent();
+
+        // Listen for changes in playback status and update the content accordingly
+        map.on('playbackchange', updateContent);
+
+        return container;
+    },
+
+    onRemove: function(map) {
+        // Remove event listener when control is removed from map
+        map.off('playbackchange');
+    }
+});
+
+// Create and add the custom control to the map with the specified position
+var timeToNextPointControl = new TimeToNextPointControl({ position: 'bottomleft' }); // Set position to bottom left
+timeToNextPointControl.addTo(map);
+
 function getDPortSpeedLabel() {
     const value = (typeof velocitySelect !== 'undefined') ? velocitySelect : 'walk';
     const labels = {walk:'步行', run:'跑步', ride:'騎車', drive:'開車'};
@@ -5493,6 +5540,23 @@ function handleMarkerDragEnd(event) {
 
 
 // Function to delete marker
+
+
+// // Define global variables
+let currentFeature = null;
+let currentLayer = null;
+
+
+
+
+// DPort place-name helper: remembers the place associated with the current
+// map-only coordinate. It is used only as the default Favorite name.
+var geoportCurrentPlaceName = '';
+var geoportCurrentPlaceLat = null;
+var geoportCurrentPlaceLng = null;
+var geoportReverseGeocodeTimer = null;
+var geoportReverseGeocodeController = null;
+
 function geoportSetCurrentPlaceName(name, lat, lng){
     geoportCurrentPlaceName=String(name||'').trim();
     geoportCurrentPlaceLat=Number(lat);
@@ -7063,6 +7127,7 @@ async function dportRefreshDeviceList() {
 
     // Connect Device Function
 // Connect Device Function
+
 function showDeviceNotFoundToast() {
     displayToast("找不到此裝置，請重新嘗試連線。");
 }
@@ -7412,6 +7477,12 @@ function showPairRecordModal() {
 }
 
 // Function to show the modal for developer mode required
+
+
+    /// Function to disconnect device
+
+
+
 function setLocationArrows() {
         fetch('/set_location', {
             method: 'POST',
@@ -7557,11 +7628,15 @@ function setLocationArrows() {
     }
 
     // Function to show the modal
+
+        // Function to show the modal
     function showModalTimeout() {
             $('#modalTimeout').modal('show');
     }
 
     // Function to close the modal
+
+    // Function to toast
     function toast(data) {
     displayToast(data);
   }
@@ -10601,6 +10676,7 @@ body > div.toast-container{
             }catch(e){}
         }
     }
+
 
     function enableManualRefresh(){
         var btn=document.getElementById('refresh-device');
