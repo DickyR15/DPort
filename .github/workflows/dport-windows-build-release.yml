@@ -103,13 +103,21 @@ jobs:
             if ($count -ne 1) { throw "Injected block ID '$id' appears $count times; expected exactly once." }
           }
 
+      - name: Resolve DPort icon
+        id: icon
+        shell: pwsh
+        run: |
+          $icons = @(Get-ChildItem -LiteralPath $PWD -Filter 'DPort-*.ico' -File)
+          if ($icons.Count -ne 1) { throw "Expected exactly one DPort icon, found $($icons.Count)." }
+          "path=$($icons[0].FullName)" >> $env:GITHUB_OUTPUT
+          Write-Host "Using icon: $($icons[0].FullName)"
+
       - name: Build standalone updater
         shell: pwsh
         run: |
-          if (-not (Test-Path 'DPort-6.9.0.ico')) { throw 'DPort icon file is missing.' }
           if (Test-Path dist) { Remove-Item dist -Recurse -Force }
           if (Test-Path build) { Remove-Item build -Recurse -Force }
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name DPort-Updater --icon DPort-6.9.0.ico --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name DPort-Updater --icon "${{ steps.icon.outputs.path }}" --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
           if ($LASTEXITCODE -ne 0) { throw 'Failed to build DPort-Updater.exe.' }
           if (-not (Test-Path 'dist\DPort-Updater.exe')) { throw 'DPort-Updater.exe missing.' }
 
@@ -145,7 +153,7 @@ jobs:
         run: |
           $v = '${{ steps.version.outputs.version }}'
           if (Test-Path dist\DPort-$v.exe) { Remove-Item dist\DPort-$v.exe -Force }
-          $args = @('--noconfirm','--clean','--onefile','--windowed','--name',("DPort-$v"),'--icon','DPort-6.9.0.ico','--collect-all','pymobiledevice3','--collect-all','pytun_pmd3','--collect-all','pyimg4','--collect-all','inquirer3','--copy-metadata','pymobiledevice3','--copy-metadata','pyimg4','--copy-metadata','readchar','--hidden-import','pymobiledevice3.remote.userspace_tunnel','--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider','--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation','--hidden-import','pymobiledevice3.usbmux','--hidden-import','dport_release_updater','--hidden-import','dport_version','--add-data','src/templates;templates','--add-binary','dist/DPort-Updater.exe;dport_updater','--version-file','version_info.generated.txt','src/main.py')
+          $args = @('--noconfirm','--clean','--onefile','--windowed','--name',("DPort-$v"),'--icon',"${{ steps.icon.outputs.path }}",'--collect-all','pymobiledevice3','--collect-all','pytun_pmd3','--collect-all','pyimg4','--collect-all','inquirer3','--copy-metadata','pymobiledevice3','--copy-metadata','pyimg4','--copy-metadata','readchar','--hidden-import','pymobiledevice3.remote.userspace_tunnel','--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider','--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation','--hidden-import','pymobiledevice3.usbmux','--hidden-import','dport_release_updater','--hidden-import','dport_version','--add-data','src/templates;templates','--add-binary','dist/DPort-Updater.exe;dport_updater','--version-file','version_info.generated.txt','src/main.py')
           python -m PyInstaller @args
           if ($LASTEXITCODE -ne 0) { throw "Failed to build DPort-$v.exe." }
           if (-not (Test-Path "dist\DPort-$v.exe")) { throw "DPort-$v.exe missing." }
