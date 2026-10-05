@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import compileall
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -46,6 +47,19 @@ def read_text(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8", errors="replace")
 
 
+def github_request(url: str) -> object:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "DPort-Full-Audit",
+    }
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.load(response)
+
+
 def extract_script_blocks(html: str) -> list[str]:
     blocks: list[str] = []
     pos = 0
@@ -68,12 +82,7 @@ def extract_script_blocks(html: str) -> list[str]:
 
 def get_stable_release_tags(limit: int = 2) -> list[str]:
     url = "https://api.github.com/repos/DickyR15/DPort/releases?per_page=100"
-    request = urllib.request.Request(
-        url,
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "DPort-Full-Audit"},
-    )
-    with urllib.request.urlopen(request, timeout=20) as response:
-        releases = json.load(response)
+    releases = github_request(url)
 
     stable = [
         str(r["tag_name"])
