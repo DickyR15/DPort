@@ -190,11 +190,19 @@ python "scripts\generate_version_info.py"
 if errorlevel 1 goto fail
 
 echo.
-echo [5/6] Checking DPort icon...
-if not exist "DPort-6.9.0.ico" (
-    echo ERROR: DPort-6.9.0.ico was not found.
+echo.
+echo [5/6] Resolving DPort icon...
+set "DPORT_ICON="
+set "DPORT_ICON_COUNT=0"
+for /f "delims=" %%I in ('dir /b /a-d "DPort-*.ico" 2^>nul') do (
+    set /a DPORT_ICON_COUNT+=1
+    if not defined DPORT_ICON set "DPORT_ICON=%%I"
+)
+if not "!DPORT_ICON_COUNT!"=="1" (
+    echo ERROR: Expected exactly one DPort-*.ico icon, found !DPORT_ICON_COUNT!.
     goto fail
 )
+echo Using icon: !DPORT_ICON!
 
 echo.
 echo [5/6] Building embedded DPort updater helper...
