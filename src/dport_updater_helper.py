@@ -52,6 +52,22 @@ def _discover_mei_dir(pid: int) -> Path | None:
         import psutil
 
         process = psutil.Process(int(pid))
+
+        # PyInstaller uses _PYI_APPLICATION_HOME_DIR to communicate the
+        # one-file extraction directory to the application process. Reading
+        # the old process environment lets a newer standalone updater recover
+        # the exact _MEI path even when the old DPort cannot pass --mei-dir.
+        try:
+            env = process.environ()
+            env_path = str(env.get("_PYI_APPLICATION_HOME_DIR") or "").strip()
+            if env_path:
+                candidate = Path(env_path)
+                if candidate.name.startswith("_MEI") and candidate.is_dir():
+                    return candidate.resolve()
+        except Exception:
+            pass
+
+        # Fallback: inspect mapped files from the old DPort process.
         for mapping in process.memory_maps(grouped=True):
             raw_path = str(getattr(mapping, "path", "") or "")
             if not raw_path:
