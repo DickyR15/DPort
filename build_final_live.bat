@@ -190,11 +190,19 @@ python "scripts\generate_version_info.py"
 if errorlevel 1 goto fail
 
 echo.
-echo [5/6] Checking DPort icon...
-if not exist "DPort-6.9.0.ico" (
-    echo ERROR: DPort-6.9.0.ico was not found.
+echo.
+echo [5/6] Resolving DPort icon...
+set "DPORT_ICON="
+set "DPORT_ICON_COUNT=0"
+for /f "delims=" %%I in ('dir /b /a-d "DPort-*.ico" 2^>nul') do (
+    set /a DPORT_ICON_COUNT+=1
+    if not defined DPORT_ICON set "DPORT_ICON=%%I"
+)
+if not "!DPORT_ICON_COUNT!"=="1" (
+    echo ERROR: Expected exactly one DPort-*.ico icon, found !DPORT_ICON_COUNT!.
     goto fail
 )
+echo Using icon: !DPORT_ICON!
 
 echo.
 echo [5/6] Building embedded DPort updater helper...
@@ -203,33 +211,33 @@ if not exist "src\dport_updater_helper.py" (
     goto fail
 )
 
-if exist "dist\DPortUpdater.exe" del /q "dist\DPortUpdater.exe"
+if exist "dist\DPort-Updater.exe" del /q "dist\DPortUpdater.exe"
 if exist "build\updater" rmdir /s /q "build\updater"
 
 python -m PyInstaller --noconfirm --clean --onefile --name "DPortUpdater" --collect-all certifi --hidden-import "importlib.metadata" "src\dport_updater_helper.py"
 if errorlevel 1 goto fail
 
-if not exist "dist\DPortUpdater.exe" (
-    echo ERROR: DPortUpdater.exe was not created.
+if not exist "dist\DPort-Updater.exe" (
+    echo ERROR: DPort-Updater.exe was not created.
     goto fail
 )
 
 mkdir "build\updater"
-copy /y "dist\DPortUpdater.exe" "build\updater\DPortUpdater.exe" >nul
+copy /y "dist\DPort-Updater.exe" "build\updater\DPortUpdater.exe" >nul
 if errorlevel 1 goto fail
 
 echo Embedded updater helper ready.
 
 echo.
 echo [5/6] Building DPort-%DPORT_VERSION%.exe...
-python -m PyInstaller --noconfirm --clean --onefile --name "DPort-%DPORT_VERSION%" --icon "DPort-6.9.0.ico" --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import "pymobiledevice3.remote.userspace_tunnel" --hidden-import "dport_version" --hidden-import "dport_release_updater" --hidden-import "pymobiledevice3.services.dvt.instruments.dvt_provider" --hidden-import "pymobiledevice3.services.dvt.instruments.location_simulation" --hidden-import "pymobiledevice3.usbmux" --add-data "src\templates;templates" --add-data "python_runtime.txt;." --add-binary "build\updater\DPortUpdater.exe;dport_updater" --version-file "%CD%\version_info.generated.txt" "src\main.py"
+python -m PyInstaller --noconfirm --clean --onefile --name "DPort-%DPORT_VERSION%" --icon "!DPORT_ICON!" --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import "pymobiledevice3.remote.userspace_tunnel" --hidden-import "dport_version" --hidden-import "dport_release_updater" --hidden-import "pymobiledevice3.services.dvt.instruments.dvt_provider" --hidden-import "pymobiledevice3.services.dvt.instruments.location_simulation" --hidden-import "pymobiledevice3.usbmux" --add-data "src\templates;templates" --add-data "python_runtime.txt;." --add-binary "build\updater\DPort-Updater.exe;dport_updater" --version-file "%CD%\version_info.generated.txt" "src\main.py"
 if errorlevel 1 goto fail
 
 echo.
 echo [6/6] BUILD SUCCESSFUL
 echo EXE: %CD%\dist\DPort-%DPORT_VERSION%.exe
 echo Updater: embedded in DPort-%DPORT_VERSION%.exe
-if exist "dist\DPortUpdater.exe" del /q "dist\DPortUpdater.exe"
+if exist "dist\DPort-Updater.exe" del /q "dist\DPortUpdater.exe"
 if exist "build\updater" rmdir /s /q "build\updater"
 echo Python: !PY_VERSION!
 if exist "version_info.generated.txt" del /q "version_info.generated.txt"
