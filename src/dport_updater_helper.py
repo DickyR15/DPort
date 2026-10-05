@@ -44,6 +44,27 @@ def _read_expected_sha256(url: str) -> str:
     raise RuntimeError("SHA-256 checksum file is invalid")
 
 
+def _discover_mei_dir(pid: int) -> Path | None:
+    """Best-effort discovery of the old PyInstaller one-file _MEI directory."""
+    if os.name != "nt":
+        return None
+    try:
+        import psutil
+
+        process = psutil.Process(int(pid))
+        for mapping in process.memory_maps(grouped=True):
+            raw_path = str(getattr(mapping, "path", "") or "")
+            if not raw_path:
+                continue
+            candidate = Path(raw_path)
+            for ancestor in (candidate.parent, *candidate.parents):
+                if ancestor.name.startswith("_MEI") and ancestor.is_dir():
+                    return ancestor.resolve()
+    except Exception:
+        pass
+    return None
+
+
 def _wait_for_pid_exit(pid: int, timeout: int = 180) -> None:
     """Wait for the exact parent PID to exit without relying on tasklist parsing."""
     if os.name == "nt":
@@ -235,6 +256,9 @@ def main() -> int:
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--mei-dir")
     args = parser.parse_args()
+    mei_dir = Path(args.mei_dir).resolve() if args.mei_dir else None
+    if mei_dir is None and discovered_mei_dir is not None:
+        mei_dir = discovered_mei_dir
     mei_dir = Path(args.mei_dir).resolve() if args.mei_dir else None
 
     old_target = Path(args.target).resolve()
