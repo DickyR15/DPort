@@ -228,6 +228,44 @@ def audit_tag(ref: str) -> list[str]:
     return failures
 
 
+def audit_current_source() -> list[str]:
+    """Validate version-agnostic rules that apply to the current source tree."""
+    failures: list[str] = []
+
+    bat = read_text("build_final_live.bat")
+    if "DPort-6.9.0.ico" in bat:
+        failures.append("build_final_live.bat hardcodes a versioned DPort icon.")
+    if "DPortUpdater.exe" in bat:
+        failures.append("build_final_live.bat still contains legacy DPortUpdater.exe naming.")
+    if "DPort-Updater.exe" not in bat:
+        failures.append("build_final_live.bat does not use DPort-Updater.exe.")
+    if "DPORT_ICON" not in bat or 'DPort-*.ico' not in bat:
+        failures.append("build_final_live.bat does not resolve the DPort icon dynamically.")
+
+    release_workflow = read_text(".github/workflows/dport-windows-build-release.yml")
+    if "DPort-6.9.0.ico" in release_workflow:
+        failures.append("Release workflow hardcodes DPort-6.9.0.ico.")
+    if "DPortUpdater.exe" in release_workflow:
+        failures.append("Release workflow contains legacy DPortUpdater.exe naming.")
+    if "DPort-Updater.exe" not in release_workflow:
+        failures.append("Release workflow does not use DPort-Updater.exe.")
+    if "steps.version.outputs.python_version" not in release_workflow:
+        failures.append("Release workflow does not use dynamic Python build version metadata.")
+    if "steps.version.outputs.pm3_version" not in release_workflow:
+        failures.append("Release workflow does not use dynamic pymobiledevice3 version metadata.")
+
+    pm3_workflow = read_text(".github/workflows/pymobiledevice3-auto-update.yml")
+    if "DPort-6.9.0.ico" in pm3_workflow:
+        failures.append("pymobiledevice3 Auto Update workflow hardcodes DPort-6.9.0.ico.")
+    if pm3_workflow.count("Build validation executable") != 1:
+        failures.append("pymobiledevice3 Auto Update workflow must contain exactly one validation build step.")
+
+    if (ROOT / "version_info.txt").exists():
+        failures.append("Legacy version_info.txt should not exist in the current source tree.")
+
+    return failures
+
+
 def audit_live_releases(tags: list[str]) -> list[str]:
     failures: list[str] = []
     url = "https://api.github.com/repos/DickyR15/DPort/releases?per_page=100"
@@ -304,6 +342,14 @@ def main() -> int:
                 cwd=ROOT,
                 check=False,
             )
+
+    # Return to the submitted ref before auditing current build tooling.
+    subprocess.run(
+        ["git", "switch", "--detach", "--force", original_ref],
+        cwd=ROOT,
+        check=False,
+    )
+    failures.extend(audit_current_source())
 
     print("=" * 70)
     if failures:
