@@ -211,10 +211,10 @@ if not exist "src\dport_updater_helper.py" (
     goto fail
 )
 
-if exist "dist\DPort-Updater.exe" del /q "dist\DPortUpdater.exe"
+if exist "dist\DPort-Updater.exe" del /q "dist\DPort-Updater.exe"
 if exist "build\updater" rmdir /s /q "build\updater"
 
-python -m PyInstaller --noconfirm --clean --onefile --name "DPortUpdater" --collect-all certifi --hidden-import "importlib.metadata" "src\dport_updater_helper.py"
+python -m PyInstaller --noconfirm --clean --onefile --name "DPort-Updater" --collect-all certifi --hidden-import "importlib.metadata" "src\dport_updater_helper.py"
 if errorlevel 1 goto fail
 
 if not exist "dist\DPort-Updater.exe" (
@@ -223,7 +223,7 @@ if not exist "dist\DPort-Updater.exe" (
 )
 
 mkdir "build\updater"
-copy /y "dist\DPort-Updater.exe" "build\updater\DPortUpdater.exe" >nul
+copy /y "dist\DPort-Updater.exe" "build\updater\DPort-Updater.exe" >nul
 if errorlevel 1 goto fail
 
 echo Embedded updater helper ready.
