@@ -178,21 +178,7 @@ def audit_tag(ref: str) -> list[str]:
     except Exception as exc:
         failures.append(f"AST route audit failed: {exc}")
 
-    bat = read_text("build_final_live.bat")
-    if "DPort-6.9.0.exe" in bat:
-        failures.append("build_final_live.bat hardcodes DPort-6.9.0.exe.")
-    if "DPort-6.9.0.ico" in bat:
-        failures.append("build_final_live.bat hardcodes a versioned DPort icon.")
-    if "DPORT_ICON" not in bat or "DPort-*.ico" not in bat:
-        failures.append("build_final_live.bat does not resolve the DPort icon dynamically.")
-    if "DPort-Updater.exe" not in bat:
-        failures.append("build_final_live.bat does not use the canonical DPort-Updater.exe name.")
-    if "DPortUpdater.exe" in bat:
-        failures.append("build_final_live.bat still contains legacy DPortUpdater.exe naming.")
-    if "generate_version_info.py" not in bat:
-        failures.append("build_final_live.bat lacks dynamic version metadata generation.")
-    if "version_info.generated.txt" not in bat:
-        failures.append("build_final_live.bat does not use generated version metadata.")
+    # Historical release tags are audited for release integrity; current build tooling is checked on the live ref.
 
     # version_info.txt is a legacy/static metadata file and is not the source
     # used by current builds. Release builds generate version_info.generated.txt
