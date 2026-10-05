@@ -140,10 +140,19 @@ def _start_detached(exe: Path, arguments: list[str], restarted: bool = False) ->
         env=env,
     )
 
-def _schedule_cleanup(folder: Path) -> None:
-    """Silently delete the updater temp folder after the updater exits."""
+def _schedule_cleanup(folder: Path, extra_paths: list[Path] | None = None) -> None:
+    """Silently delete updater temp data and optional old PyInstaller dirs."""
     folder = folder.resolve()
     parent = folder.parent.resolve()
+    cleanup_paths = [folder]
+    for extra in extra_paths or []:
+        try:
+            candidate = extra.resolve()
+        except Exception:
+            continue
+        if candidate != folder and candidate not in cleanup_paths:
+            cleanup_paths.append(candidate)
+
 
     # Do not use cmd.exe, timeout.exe, rmdir.exe, or a .vbs file. Those
     # approaches can briefly flash a console or leave a cleanup script behind.
@@ -155,16 +164,22 @@ def _schedule_cleanup(folder: Path) -> None:
     def ps_escape(value: str) -> str:
         return str(value).replace("'", "''")
 
-    folder_ps = ps_escape(folder)
     parent_ps = ps_escape(parent)
+    cleanup_statements = []
+    for cleanup_path in cleanup_paths:
+        cleanup_ps = ps_escape(cleanup_path)
+        cleanup_statements.append(
+            f"for ($i=0; $i -lt 24; $i++) {{ "
+            f"Remove-Item -LiteralPath '{cleanup_ps}' -Recurse -Force -ErrorAction SilentlyContinue; "
+            f"if (-not (Test-Path -LiteralPath '{cleanup_ps}')) {{ break }}; "
+            "Start-Sleep -Milliseconds 500 }"
+        )
 
     command = (
         "Start-Sleep -Milliseconds 1000; "
-        f"for ($i=0; $i -lt 24; $i++) {{ "
-        f"Remove-Item -LiteralPath '{folder_ps}' -Recurse -Force -ErrorAction SilentlyContinue; "
-        f"if (-not (Test-Path -LiteralPath '{folder_ps}')) {{ break }}; "
-        "Start-Sleep -Milliseconds 500 }; "
-        f"Get-ChildItem -LiteralPath '{parent_ps}' -Filter 'DPort-cleanup-*.vbs' "
+        + " ; ".join(cleanup_statements)
+        + " ; "
+        + f"Get-ChildItem -LiteralPath '{parent_ps}' -Filter 'DPort-cleanup-*.vbs' "
         "-File -ErrorAction SilentlyContinue | "
         "Remove-Item -Force -ErrorAction SilentlyContinue"
     )
@@ -218,7 +233,9 @@ def main() -> int:
     parser.add_argument("--args-json", default=None)
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--mei-dir")
     args = parser.parse_args()
+    mei_dir = Path(args.mei_dir).resolve() if args.mei_dir else None
 
     old_target = Path(args.target).resolve()
     app_dir = old_target.parent
@@ -295,7 +312,8 @@ def main() -> int:
             old_target.unlink()
             log(f"舊版 EXE 已刪除：{old_target}")
 
-        _schedule_cleanup(work_dir)
+        cleanup_extra = [mei_dir] if mei_dir is not None else None
+        _schedule_cleanup(work_dir, cleanup_extra)
         return 0
 
     except Exception as exc:
