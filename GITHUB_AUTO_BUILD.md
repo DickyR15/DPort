@@ -7,16 +7,14 @@
 在 `main` 分支修改程式後，建立並推送版本標籤：
 
 ```text
-v6.9.0
-v6.9.1
-v6.9.2
+vX.Y.Z
 ```
 
 GitHub Actions 會自動：
 
 1. Windows runner 建立 Python 3.14 建置環境
 2. 安裝 requirements-build.txt
-3. 建置內嵌 DPortUpdater.exe
+3. 建置內嵌 DPort-Updater.exe
 4. 建置完整 DPort EXE
 5. 產生 SHA-256
 6. 建立 GitHub Release
@@ -26,7 +24,7 @@ GitHub Actions 會自動：
 
 ## 手動觸發
 
-GitHub → Actions → DPort Build & Release → Run workflow，輸入既有版本標籤，例如 `v6.9.2`。版本標籤必須符合 `vX.Y.Z`，且 Tag 內的 `src/dport_version.py` 必須使用相同版本。
+GitHub → Actions → DPort Build & Release → Run workflow，輸入既有版本標籤，例如 `vX.Y.Z`。版本標籤必須符合 `vX.Y.Z`，且 Tag 內的 `src/dport_version.py` 必須使用相同版本。
 
 ## pymobiledevice3 自動更新
 
