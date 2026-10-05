@@ -44,6 +44,43 @@ def _read_expected_sha256(url: str) -> str:
     raise RuntimeError("SHA-256 checksum file is invalid")
 
 
+def _discover_mei_dir(pid: int) -> Path | None:
+    """Best-effort discovery of the old PyInstaller one-file _MEI directory."""
+    if os.name != "nt":
+        return None
+    try:
+        import psutil
+
+        process = psutil.Process(int(pid))
+
+        # PyInstaller uses _PYI_APPLICATION_HOME_DIR to communicate the
+        # one-file extraction directory to the application process. Reading
+        # the old process environment lets a newer standalone updater recover
+        # the exact _MEI path even when the old DPort cannot pass --mei-dir.
+        try:
+            env = process.environ()
+            env_path = str(env.get("_PYI_APPLICATION_HOME_DIR") or "").strip()
+            if env_path:
+                candidate = Path(env_path)
+                if candidate.name.startswith("_MEI") and candidate.is_dir():
+                    return candidate.resolve()
+        except Exception:
+            pass
+
+        # Fallback: inspect mapped files from the old DPort process.
+        for mapping in process.memory_maps(grouped=True):
+            raw_path = str(getattr(mapping, "path", "") or "")
+            if not raw_path:
+                continue
+            candidate = Path(raw_path)
+            for ancestor in (candidate.parent, *candidate.parents):
+                if ancestor.name.startswith("_MEI") and ancestor.is_dir():
+                    return ancestor.resolve()
+    except Exception:
+        pass
+    return None
+
+
 def _wait_for_pid_exit(pid: int, timeout: int = 180) -> None:
     """Wait for the exact parent PID to exit without relying on tasklist parsing."""
     if os.name == "nt":
@@ -236,6 +273,9 @@ def main() -> int:
     parser.add_argument("--mei-dir")
     args = parser.parse_args()
     mei_dir = Path(args.mei_dir).resolve() if args.mei_dir else None
+    discovered_mei_dir = None if mei_dir is not None else _discover_mei_dir(args.pid)
+    if mei_dir is None and discovered_mei_dir is not None:
+        mei_dir = discovered_mei_dir
 
     old_target = Path(args.target).resolve()
     app_dir = old_target.parent

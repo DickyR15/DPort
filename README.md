@@ -184,7 +184,7 @@ DPort 發布包含 GPL 涵蓋內容的 EXE 時，應讓使用者能取得該版�
 
 例如：
 
-`v6.9.2` → 該 Tag 所指向的 Commit → 該 Commit 建置出的 `DPort-6.9.2.exe`
+`vX.Y.Z` → 該 Tag 所指向的 Commit → 該 Commit 建置出的 `DPort-X.Y.Z.exe`
 
 GitHub Release 的 Source archive 應以該 Release Tag 為準。建置流程應確認 Tag 版本與 DPort 內部版本一致，避免二進位檔與 Source Snapshot 對應錯誤。
 
