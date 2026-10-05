@@ -340,6 +340,7 @@ def request_update() -> dict[str, Any]:
             "--version", latest,
             "--port", str(port),
             "--no-browser",
+        ]
         # PyInstaller --onefile extracts DPort into _MEIxxxxx. The hard-exit
         # path can bypass bootloader cleanup, so pass the old extraction
         # directory to the standalone updater for post-update cleanup.
@@ -351,7 +352,6 @@ def request_update() -> dict[str, Any]:
                     updater_args.extend(["--mei-dir", str(mei_path)])
             except Exception:
                 pass
-        ]
         flags = (
             getattr(subprocess, "CREATE_NO_WINDOW", 0)
             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
