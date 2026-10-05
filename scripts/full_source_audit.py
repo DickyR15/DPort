@@ -187,11 +187,27 @@ def audit_tag(ref: str) -> list[str]:
     if "version_info.generated.txt" not in bat:
         failures.append("build_final_live.bat does not use generated version metadata.")
 
-    version_info = read_text("version_info.txt")
-    if not re.search(r"FileVersion'\s*,\s*'" + re.escape(version) + r"'", version_info):
-        failures.append("version_info.txt FileVersion mismatch.")
-    if not re.search(r"ProductVersion'\s*,\s*'" + re.escape(version) + r"'", version_info):
-        failures.append("version_info.txt ProductVersion mismatch.")
+    # version_info.txt is a legacy/static metadata file and is not the source
+    # used by current builds. Release builds generate version_info.generated.txt
+    # from src/dport_version.py, so audit the generated metadata instead.
+    run(sys.executable, "scripts/generate_version_info.py")
+    generated_version_info = ROOT / "version_info.generated.txt"
+    if not generated_version_info.exists():
+        failures.append("Generated version_info.generated.txt is missing.")
+    else:
+        generated = generated_version_info.read_text(
+            encoding="utf-8", errors="replace"
+        )
+        if not re.search(
+            r"FileVersion'\s*,\s*'" + re.escape(version) + r"'",
+            generated,
+        ):
+            failures.append("Generated version_info.txt FileVersion mismatch.")
+        if not re.search(
+            r"ProductVersion'\s*,\s*'" + re.escape(version) + r"'",
+            generated,
+        ):
+            failures.append("Generated version_info.txt ProductVersion mismatch.")
 
     updater = read_text("src/dport_release_updater.py")
     for needle in ("RELEASES_API", "_get_latest_stable_release", "_is_newer"):
