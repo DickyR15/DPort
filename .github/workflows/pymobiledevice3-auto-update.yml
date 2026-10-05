@@ -155,13 +155,6 @@ jobs:
       - name: Build validation executable
         shell: pwsh
         run: |
-          $v = (Get-Content src/dport_version.py | Where-Object { $_.Trim().StartsWith('DPORT_VERSION=') } | Select-Object -First 1).Split('=')[1].Trim().Trim('"').Trim("'")
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name "DPort-$v-PM3-VALIDATION" --icon "${{ steps.icon.outputs.path }}" --collect-all pymobiledevice3 --collect-all pytun_pmd3 --collect-all pyimg4 --collect-all inquirer3 --copy-metadata pymobiledevice3 --copy-metadata pyimg4 --copy-metadata readchar --hidden-import "pymobiledevice3.remote.userspace_tunnel" --hidden-import "pymobiledevice3.services.dvt.instruments.dvt_provider" --hidden-import "pymobiledevice3.services.dvt.instruments.location_simulation" --hidden-import "pymobiledevice3.usbmux" --hidden-import "dport_release_updater" --hidden-import "dport_version" --add-data "src\templates;templates" --version-file "version_info.generated.txt" "src\main.py"
-          if ($LASTEXITCODE -ne 0) { throw 'pymobiledevice3 update validation build failed.' }
-          if (-not (Test-Path "dist\DPort-$v-PM3-VALIDATION.exe")) { throw 'Validation executable was not produced.' }
-      - name: Build validation executable
-        shell: pwsh
-        run: |
 
           $v = (Get-Content src/dport_version.py | Where-Object { $_.Trim().StartsWith('DPORT_VERSION=') } | Select-Object -First 1).Split('=')[1].Trim().Trim('"').Trim("'")
 
