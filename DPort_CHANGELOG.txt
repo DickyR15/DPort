@@ -1,3 +1,13 @@
+DPort 6.9.3
+
+- Python 建置環境維持 3.14.8。
+- pymobiledevice3 更新至 11.23.0。
+- 新增 USB 快速 Reconnect Recovery，支援一般 USB 拔插與 USB HUB 快速 OFF／ON 後快速恢復裝置清單。
+- 建置與 Release 流程全面採用動態 DPort 版本命名與動態 Icon，不再依賴固定舊版名稱。
+- 統一 DPort-Updater.exe 命名，並強化 Windows 自動更新的 SHA-256 驗證與更新後暫存清理。
+- 強化 Source Audit、Windows Build Validation 與 pymobiledevice3 Auto Update 驗證流程。
+- 不納入 Wi-Fi 研究版功能，維持正式主版以 USB 為主。
+
 DPort 6.9.2
 
 - Python 建置環境更新至 3.14.8。
