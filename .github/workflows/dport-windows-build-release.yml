@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing release tag to build, e.g. v6.9.2'
+        description: 'Existing release tag to build, e.g. vX.Y.Z'
         required: true
         type: string
 
@@ -42,6 +42,14 @@ jobs:
           if ($sourceVersion -ne $version) { throw "Tag $tag does not match source version $sourceVersion." }
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
+          $pythonBuildVersion = (Get-Content -LiteralPath '.github\python-version.txt' -Raw).Trim()
+          if ($pythonBuildVersion -notmatch '^3\.14\.\d+$') { throw "Invalid Python build version: $pythonBuildVersion" }
+          $pm3Line = Get-Content -LiteralPath 'requirements-build.txt' | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1
+          if (-not $pm3Line) { throw 'pymobiledevice3 pin missing from requirements-build.txt.' }
+          $pm3Version = $pm3Line.Trim().Substring('pymobiledevice3=='.Length).Trim()
+          if ($pm3Version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid pymobiledevice3 version: $pm3Version" }
+          "python_version=$pythonBuildVersion" >> $env:GITHUB_OUTPUT
+          "pm3_version=$pm3Version" >> $env:GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -229,8 +237,8 @@ jobs:
           - SHA-256 完整性驗證
           ## 🔧 本版本更新
 
-          - Python 建置環境：3.14.8
-          - pymobiledevice3：11.20.2
+          - Python 建置環境：${{ steps.version.outputs.python_version }}
+          - pymobiledevice3：${{ steps.version.outputs.pm3_version }}
           - 完成舊 Fuel、obsolete API、dead map function、舊裝置狀態 helper 與未使用 map state 的清理
           - 強化 Source Audit、Windows Build Validation 與 Release Tag 驗證流程
           - 保留 USB、定位、GPX 與 Windows 自動更新功能
