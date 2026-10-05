@@ -115,7 +115,6 @@ def audit_tag(ref: str) -> list[str]:
         "src/templates/map.html",
         "requirements-build.txt",
         "build_final_live.bat",
-        "version_info.txt",
     )
     for item in required:
         if not (ROOT / item).exists():
@@ -179,13 +178,7 @@ def audit_tag(ref: str) -> list[str]:
     except Exception as exc:
         failures.append(f"AST route audit failed: {exc}")
 
-    bat = read_text("build_final_live.bat")
-    if "DPort-6.9.0.exe" in bat:
-        failures.append("build_final_live.bat hardcodes DPort-6.9.0.exe.")
-    if "generate_version_info.py" not in bat:
-        failures.append("build_final_live.bat lacks dynamic version metadata generation.")
-    if "version_info.generated.txt" not in bat:
-        failures.append("build_final_live.bat does not use generated version metadata.")
+    # Historical release tags are audited for release integrity; current build tooling is checked on the live ref.
 
     # version_info.txt is a legacy/static metadata file and is not the source
     # used by current builds. Release builds generate version_info.generated.txt

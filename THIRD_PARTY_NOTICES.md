@@ -21,11 +21,11 @@ The original GeoPort copyright and GPL rights remain applicable to covered porti
 
 ## 2. Python dependencies
 
-The versions below reflect the current direct requirements in `requirements-build.txt`.
+The dependency versions below are descriptive only; the pinned versions in `requirements-build.txt` are the authoritative build inputs.
 
 | Component | Requirement | License | Upstream |
 |---|---|---|---|
-| pymobiledevice3 | 11.20.2 | GPL-3.0-or-later | https://github.com/doronz88/pymobiledevice3 |
+| pymobiledevice3 | See `requirements-build.txt` | GPL-3.0-or-later | https://github.com/doronz88/pymobiledevice3 |
 | Flask | unpinned | BSD-3-Clause | https://github.com/pallets/flask |
 | Requests | unpinned | Apache-2.0 | https://github.com/psf/requests |
 | pyuac | unpinned | MIT | https://github.com/Preston-Landers/pyuac |
