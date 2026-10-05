@@ -173,7 +173,7 @@ jobs:
       - name: Upload DPort 6.9.2 candidate artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DPort-6.9.2-candidate-windows
+          name: DPort-${{ steps.version.outputs.version }}-candidate-windows
           retention-days: 14
           path: |
             dist/DPort-${{ steps.version.outputs.version }}.exe
