@@ -237,7 +237,7 @@ echo.
 echo [6/6] BUILD SUCCESSFUL
 echo EXE: %CD%\dist\DPort-%DPORT_VERSION%.exe
 echo Updater: embedded in DPort-%DPORT_VERSION%.exe
-if exist "dist\DPort-Updater.exe" del /q "dist\DPortUpdater.exe"
+if exist "dist\DPort-Updater.exe" del /q "dist\DPort-Updater.exe"
 if exist "build\updater" rmdir /s /q "build\updater"
 echo Python: !PY_VERSION!
 if exist "version_info.generated.txt" del /q "version_info.generated.txt"
