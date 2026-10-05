@@ -257,9 +257,9 @@ def main() -> int:
     parser.add_argument("--mei-dir")
     args = parser.parse_args()
     mei_dir = Path(args.mei_dir).resolve() if args.mei_dir else None
+    discovered_mei_dir = None if mei_dir is not None else _discover_mei_dir(args.pid)
     if mei_dir is None and discovered_mei_dir is not None:
         mei_dir = discovered_mei_dir
-    mei_dir = Path(args.mei_dir).resolve() if args.mei_dir else None
 
     old_target = Path(args.target).resolve()
     app_dir = old_target.parent
