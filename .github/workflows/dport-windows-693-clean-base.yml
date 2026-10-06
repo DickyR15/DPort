@@ -1,0 +1,214 @@
+name: "DPort 6.9.3 Clean Base Build"
+
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build, e.g. vX.Y.Z'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dport-release-${{ github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Resolve release tag and version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.tag }}'.Trim() } else { '${{ github.ref_name }}'.Trim() }
+          if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw "Invalid release tag: $tag" }
+          $version = $tag.Substring(1)
+          $raw = Get-Content -LiteralPath 'src\dport_version.py' -Raw
+          if ($raw -notmatch 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') { throw 'DPORT_VERSION not found.' }
+          $sourceVersion = $Matches[1]
+          if ($sourceVersion -ne $version) { throw "Tag $tag does not match source version $sourceVersion." }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          $pythonBuildVersion = (Get-Content -LiteralPath '.github\python-version.txt' -Raw).Trim()
+          if ($pythonBuildVersion -notmatch '^3\.14\.\d+$') { throw "Invalid Python build version: $pythonBuildVersion" }
+          $pm3Line = Get-Content -LiteralPath 'requirements-build.txt' | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1
+          if (-not $pm3Line) { throw 'pymobiledevice3 pin missing from requirements-build.txt.' }
+          $pm3Version = $pm3Line.Trim().Substring('pymobiledevice3=='.Length).Trim()
+          if ($pm3Version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid pymobiledevice3 version: $pm3Version" }
+          "python_version=$pythonBuildVersion" >> $env:GITHUB_OUTPUT
+          "pm3_version=$pm3Version" >> $env:GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: '.github/python-version.txt'
+ 
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements-build.txt
+          python -m pip install lzfse==0.4.2
+          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
+          $expected = (Get-Content requirements-build.txt | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1).Trim().Substring('pymobiledevice3=='.Length).Trim()
+          if ($pm3 -ne $expected) { throw "Expected pymobiledevice3 $expected, got $pm3" }
+
+      - name: Validate tagged source
+        shell: pwsh
+        run: |
+          foreach ($required in @('src\main.py','src\dport_version.py','src\dport_release_updater.py','src\dport_updater_helper.py','requirements-build.txt','src\templates\map.html')) {
+            if (-not (Test-Path $required)) { throw "Tagged source is missing: $required" }
+          }
+          python -m py_compile src/main.py
+          python -m py_compile src/dport_version.py
+          python -m py_compile src/dport_release_updater.py
+          python -m py_compile src/dport_updater_helper.py
+          python -m compileall -q src scripts
+
+      - name: Validate embedded JavaScript
+        shell: pwsh
+        run: |
+          $html = Get-Content -LiteralPath 'src\templates\map.html' -Raw
+          $matches = [regex]::Matches($html, '<script\b([^>]*)>([\s\S]*?)</script>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+          $checked = 0
+          $index = 0
+          foreach ($match in $matches) {
+            $attrs = $match.Groups[1].Value
+            if ($attrs -match 'type\s*=\s*["''](?!text/javascript|application/javascript)["'']') { continue }
+            $code = $match.Groups[2].Value
+            if ([string]::IsNullOrWhiteSpace($code)) { continue }
+            $tmp = Join-Path $env:RUNNER_TEMP ("dport-inline-$index.js")
+            Set-Content -LiteralPath $tmp -Value $code -Encoding utf8
+            node --check $tmp
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: block $index" }
+            $checked++
+            $index++
+          }
+          if ($checked -lt 1) { throw 'No JavaScript blocks were checked.' }
+
+      - name: Check duplicate injected block IDs
+        shell: pwsh
+        run: |
+          $html = Get-Content -LiteralPath 'src\templates\map.html' -Raw
+          $ids = @('dport-final-ui-polish-v8','dport-final-favorites-render-v8','dport-map-status-overlay-script','dport-header-brand-version-final','dport-exact-copy-button-appearance','dport-copy-button-style-sync','dport-usb-manual-refresh-status','dport-usb-manual-refresh-only','dport-unified-status-final','dport-unified-status-final-script','dport-location-gpx-interaction-final','dport-location-gpx-interaction-final-script','dport-definitive-location-gpx-fix','dport-definitive-location-gpx-fix-script')
+          foreach ($id in $ids) {
+            $pattern = 'id=["'']' + [regex]::Escape($id) + '["'']'
+            $count = ([regex]::Matches($html, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count
+            if ($count -ne 1) { throw "Injected block ID '$id' appears $count times; expected exactly once." }
+          }
+
+      - name: Resolve DPort icon
+        id: icon
+        shell: pwsh
+        run: |
+          $icons = @(Get-ChildItem -LiteralPath $PWD -Filter 'DPort-*.ico' -File)
+          if ($icons.Count -ne 1) { throw "Expected exactly one DPort icon, found $($icons.Count)." }
+          "path=$($icons[0].FullName)" >> $env:GITHUB_OUTPUT
+          Write-Host "Using icon: $($icons[0].FullName)"
+
+      - name: Build standalone updater
+        shell: pwsh
+        run: |
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name DPort-Updater --icon "${{ steps.icon.outputs.path }}" --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to build DPort-Updater.exe.' }
+          if (-not (Test-Path 'dist\DPort-Updater.exe')) { throw 'DPort-Updater.exe missing.' }
+
+      - name: Generate Windows version metadata
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $p = $v.Split('.') | ForEach-Object { [int]$_ }
+          @(
+            '# UTF-8',
+            'VSVersionInfo(',
+            '  ffi=FixedFileInfo(',
+            "    filevers=($($p[0]),$($p[1]),$($p[2]),0),",
+            "    prodvers=($($p[0]),$($p[1]),$($p[2]),0),",
+            '    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)',
+            '  ),',
+            "  kids=[StringFileInfo([StringTable('040404B0',[",
+            "    StringStruct('CompanyName','Dicky'),",
+            "    StringStruct('FileDescription','DPort'),",
+            "    StringStruct('FileVersion','$v'),",
+            "    StringStruct('InternalName','DPort-$v'),",
+            "    StringStruct('LegalCopyright','Dicky'),",
+            "    StringStruct('OriginalFilename','DPort-$v.exe'),",
+            "    StringStruct('ProductName','DPort'),",
+            "    StringStruct('ProductVersion','$v'),",
+            "    StringStruct('Comments','Dicky')])]),",
+            '    VarFileInfo([VarStruct(''Translation'',[0x0404,1200])])]',
+            ')'
+          ) -join [Environment]::NewLine | Set-Content version_info.generated.txt -Encoding utf8
+
+      - name: Build DPort
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          if (Test-Path dist\DPort-$v.exe) { Remove-Item dist\DPort-$v.exe -Force }
+          $args = @('--noconfirm','--clean','--onefile','--windowed','--name',("DPort-$v"),'--icon',"${{ steps.icon.outputs.path }}",'--collect-all','pymobiledevice3','--collect-all','pytun_pmd3','--collect-all','pyimg4','--collect-all','inquirer3','--copy-metadata','pymobiledevice3','--copy-metadata','pyimg4','--copy-metadata','readchar','--hidden-import','pymobiledevice3.remote.userspace_tunnel','--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider','--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation','--hidden-import','pymobiledevice3.usbmux','--hidden-import','dport_release_updater','--hidden-import','dport_version','--add-data','src/templates;templates','--add-binary','dist/DPort-Updater.exe;dport_updater','--version-file','version_info.generated.txt','src/main.py')
+          python -m PyInstaller @args
+          if ($LASTEXITCODE -ne 0) { throw "Failed to build DPort-$v.exe." }
+          if (-not (Test-Path "dist\DPort-$v.exe")) { throw "DPort-$v.exe missing." }
+
+      - name: Verify Windows GUI executables
+        shell: pwsh
+        run: |
+          python -m pip install pefile
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install pefile.' }
+          foreach ($file in @('dist\DPort-Updater.exe',"dist\DPort-${{ steps.version.outputs.version }}.exe")) {
+            if (-not (Test-Path $file)) { throw "Missing executable: $file" }
+            python -c "import pefile,sys; p=pefile.PE(sys.argv[1]); sys.exit(0 if p.OPTIONAL_HEADER.Subsystem==2 else 1)" $file
+            if ($LASTEXITCODE -ne 0) { throw "$file is not a Windows GUI executable." }
+          }
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $p = Start-Process -FilePath "dist\DPort-$v.exe" -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 15
+          if ($p.HasExited -and $p.ExitCode -ne 0) { throw "DPort-$v.exe exited with code $($p.ExitCode)" }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+
+      - name: Generate SHA-256
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          (Get-FileHash "dist\DPort-$v.exe" -Algorithm SHA256).Hash.ToLower() | Set-Content "dist\DPort-$v.exe.sha256" -Encoding ascii
+          (Get-FileHash 'dist\DPort-Updater.exe' -Algorithm SHA256).Hash.ToLower() | Set-Content 'dist\DPort-Updater.exe.sha256' -Encoding ascii
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-${{ steps.version.outputs.version }}-windows
+          path: |
+            dist/DPort-${{ steps.version.outputs.version }}.exe
+            dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
+            dist/DPort-Updater.exe
+            dist/DPort-Updater.exe.sha256
+
+      - name: Upload clean 6.9.3 base artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-6.9.3-clean-base-windows
+          path: |
+            dist/DPort-${{ steps.version.outputs.version }}.exe
+            dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
+            dist/DPort-Updater.exe
+            dist/DPort-Updater.exe.sha256
