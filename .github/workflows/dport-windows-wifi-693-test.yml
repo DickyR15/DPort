@@ -42,3 +42,5 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+# Trigger WiFi 6.9.3 test build.
