@@ -299,7 +299,7 @@ async function checkDeviceAutoDetect() {
 }
 
 '''
-page = page[:ad_start] + auto_fix + page[ad_end:]
+    page = page[:ad_start] + auto_fix + page[ad_end:]
 
     # Timeout modal is left unchanged in this build; WiFi discovery/selection is the focus.
 
