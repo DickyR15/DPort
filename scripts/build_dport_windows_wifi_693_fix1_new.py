@@ -51,6 +51,24 @@ def build_source():
     if gate not in main: raise RuntimeError("6.9.3 USB-only gate not found")
     main = main.replace(gate, "", 1)
 
+    # WiFi tunnel service switch used by CoreDeviceProxy on Windows.
+    tunnel_import_anchor = "from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel"
+    if "import pymobiledevice3.remote.tunnel_service as tunnel_service" not in main:
+        if tunnel_import_anchor not in main:
+            raise RuntimeError("WiFi tunnel_service import anchor not found")
+        main = main.replace(
+            tunnel_import_anchor,
+            tunnel_import_anchor + "\nimport pymobiledevice3.remote.tunnel_service as tunnel_service",
+            1,
+        )
+
+    # Force CoreDeviceProxy to use the TCP tunnel path on Windows.
+    main = main.replace(
+        "        service = await CoreDeviceTunnelProxy.create(lockdown)\n        async with service.start_tcp_tunnel() as tunnel_result:",
+        "        service = await CoreDeviceTunnelProxy.create(lockdown)\n        tunnel_service.USE_USERSPACE_TUNNEL = False\n        async with service.start_tcp_tunnel() as tunnel_result:",
+        1,
+    )
+
     # 6.9.3 Wi-Fi discovery: replace only the nested collect_devices()
     # function with a concurrent USB + mobdev2 implementation. This avoids the
     # slow sequential Wi-Fi scan while preserving the clean 6.9.3 source.
@@ -176,8 +194,112 @@ def build_source():
         1,
     )
     
-    # Frontend USB auto-switch is added only after the first WiFi backend build
-    # succeeds. Keeping this build focused prevents UI changes from masking backend errors.
+    # Frontend: USB and WiFi coexistence.
+    ad_start = page.find("async function checkDeviceAutoDetect() {")
+    ad_end = page.find("function startDeviceAutoDetect()", ad_start)
+    if ad_start < 0 or ad_end < 0:
+        raise RuntimeError("6.9.3 could not locate checkDeviceAutoDetect()")
+
+    auto_fix = r'''var dportLastUsbPresent = false;
+
+async function checkDeviceAutoDetect() {
+    if (isDeviceConnected || deviceAutoDetectBusy || deviceListManualRefreshInFlight) return;
+
+    var deviceDropdown = document.getElementById('device');
+    if (!deviceDropdown) return;
+
+    deviceAutoDetectBusy = true;
+    try {
+        const presence = await fetchJsonWithTimeout('/usb_presence?_=' + Date.now(), 1500);
+        const usbDevices = presence && Array.isArray(presence.devices) ? presence.devices : [];
+
+        const rawIds = usbDevices
+            .map(function(device){ return String(device.Identifier || ''); })
+            .filter(Boolean)
+            .sort();
+
+        const usbJustInserted = !dportLastUsbPresent && rawIds.length > 0;
+        dportLastUsbPresent = rawIds.length > 0;
+
+        const displayedUsbIds = Array.from(deviceDropdown.options)
+            .map(function(option){
+                try {
+                    const info = JSON.parse(option.value || '{}');
+                    const type = String(info.ConnectionType || info.connectionType || '').toUpperCase();
+                    if (type !== 'USB') return '';
+                    return String(info.Identifier || info.UniqueDeviceID || '');
+                } catch (e) {
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .sort();
+
+        if (rawIds.length > 0) {
+            const sameUsb =
+                rawIds.length === displayedUsbIds.length &&
+                rawIds.every(function(id,index){ return id === displayedUsbIds[index]; });
+
+            if (!sameUsb && Date.now() >= deviceFallbackFullScanNext) {
+                deviceFallbackFullScanNext = Date.now() + 700;
+                await populateDeviceList({
+                    silent: true,
+                    autoDetect: true,
+                    forceFresh: true
+                });
+            }
+
+            // Select USB only on the physical insertion edge. Later polling
+            // never overrides a user's manual WiFi selection.
+            if (usbJustInserted && !isDeviceConnected) {
+                const usbOption = Array.from(deviceDropdown.options).find(function(option) {
+                    try {
+                        const info = JSON.parse(option.value || '{}');
+                        return String(info.ConnectionType || info.connectionType || '').toUpperCase() === 'USB';
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                if (usbOption) {
+                    deviceDropdown.value = usbOption.value;
+                    deviceDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+            return;
+        }
+
+        // USB absent: never clear Network/WiFi options. Refresh only if none
+        // are currently visible.
+        const hasNetworkOption = Array.from(deviceDropdown.options).some(function(option) {
+            try {
+                const info = JSON.parse(option.value || '{}');
+                const type = String(info.ConnectionType || info.connectionType || '').toUpperCase();
+                return type === 'NETWORK' || type === 'WIFI' ||
+                       !!info.wifiAddress || !!info.wifiPort || !!info.wifiTransport;
+            } catch (e) {
+                return false;
+            }
+        });
+
+        if (!hasNetworkOption && Date.now() >= deviceFallbackFullScanNext) {
+            deviceFallbackFullScanNext = Date.now() + 1800;
+            await populateDeviceList({
+                silent: true,
+                autoDetect: true,
+                forceFresh: true
+            });
+        }
+    } catch (e) {
+        if (!e || e.name !== 'AbortError') {
+            console.debug('自動偵測 USB/WiFi 裝置略過一次:', e);
+        }
+    } finally {
+        deviceAutoDetectBusy = false;
+    }
+}
+
+'''
+page = page[:ad_start] + auto_fix + page[ad_end:]
 
     # Timeout modal must close in place, not reload the whole page.
     old_modal = """<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = '/'">關閉</button>"""
