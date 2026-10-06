@@ -180,7 +180,7 @@ def build_source():
     # succeeds. Keeping this build focused prevents UI changes from masking backend errors.
 
     # Timeout modal must close in place, not reload the whole page.
-    old_modal = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = '/'">關閉</button>'
+    old_modal = """<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = '/'">關閉</button>"""
     new_modal = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>'
     if old_modal not in page: raise RuntimeError("Timeout modal close button not found")
     page = page.replace(old_modal,new_modal,1)
