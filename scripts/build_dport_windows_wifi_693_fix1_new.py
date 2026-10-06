@@ -301,11 +301,7 @@ async function checkDeviceAutoDetect() {
 '''
 page = page[:ad_start] + auto_fix + page[ad_end:]
 
-    # Timeout modal must close in place, not reload the whole page.
-    old_modal = """<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="window.location.href = '/'">關閉</button>"""
-    new_modal = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>'
-    if old_modal not in page: raise RuntimeError("Timeout modal close button not found")
-    page = page.replace(old_modal,new_modal,1)
+    # Timeout modal is left unchanged in this build; WiFi discovery/selection is the focus.
 
     MAIN.write_text(main,encoding="utf-8")
     MAP.write_text(page,encoding="utf-8")
