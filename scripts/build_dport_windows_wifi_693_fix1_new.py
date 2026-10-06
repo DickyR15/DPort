@@ -205,6 +205,13 @@ def build_exe():
          "--hidden-import","dport_release_updater","--hidden-import","dport_version",
          "--add-data",f"src/templates{os.pathsep}templates",
          "--version-file",str(BUILD/"version_info.generated.txt"),str(MAIN)])
+    exe = ROOT / "dist" / f"{FINAL_EXE_NAME}.exe"
+    if not exe.exists():
+        raise RuntimeError(f"Expected built EXE not found: {exe}")
+    target = OUT / exe.name
+    shutil.copy2(exe, target)
+    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    (OUT / f"{exe.name}.sha256").write_text(digest + "  " + exe.name + "\n", encoding="ascii")
 
 def write_version_info():
     p = BUILD/"version_info.generated.txt"
