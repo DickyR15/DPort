@@ -1,0 +1,44 @@
+name: DPort Windows WiFi Test 6.9.3
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test/wifi-6.9.3
+    paths:
+      - 'scripts/build_dport_windows_wifi_693_fix1.py'
+      - '.github/workflows/dport-windows-wifi-693-test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build DPort 6.9.3 WiFi FIX1
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: test/wifi-6.9.3
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.8'
+
+      - name: Build from clean v6.9.3 release source
+        shell: pwsh
+        run: |
+          python .\scripts\build_dport_windows_wifi_693_fix1.py
+
+      - name: Upload clean test files
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPort-WiFi-Test-6.9.3-FIX1
+          path: DPort-WiFi-Test-6.9.3
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
