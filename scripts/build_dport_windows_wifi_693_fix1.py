@@ -1670,3 +1670,5 @@ if __name__ == "__main__":
     build_source()
     build_exe()
     print(f"BUILD SUCCESS: {OUT / (FINAL_EXE_NAME + '.exe')}")
+
+# Rebuild trigger after 6.9.3 function-layout fix.
