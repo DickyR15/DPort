@@ -183,23 +183,22 @@ def build_source():
     if "var dportLastUsbPresent = false;" not in page:
         page = page.replace(marker, insertion + marker, 1)
 
-    raw_anchor = '''        var rawIds = usbDevices
-            .map(function(device) {
-                return String(device.Identifier || '');
-            })
+    raw_anchor = '''        const rawIds = usbDevices
+            .map(function(device){ return String(device.Identifier || ''); })
             .filter(Boolean)
             .sort();
+
+        const usbJustInserted = !dportLastUsbPresent && rawIds.length > 0;
+        dportLastUsbPresent = rawIds.length > 0;
 
         if (rawIds.length > 0) {
 '''
-    replacement = '''        var rawIds = usbDevices
-            .map(function(device) {
-                return String(device.Identifier || '');
-            })
+    replacement = '''        const rawIds = usbDevices
+            .map(function(device){ return String(device.Identifier || ''); })
             .filter(Boolean)
             .sort();
 
-        var usbJustInserted = !dportLastUsbPresent && rawIds.length > 0;
+        const usbJustInserted = !dportLastUsbPresent && rawIds.length > 0;
         dportLastUsbPresent = rawIds.length > 0;
 
         if (rawIds.length > 0) {
@@ -217,6 +216,24 @@ def build_source():
                     usbRetry: 1,
                     forceFresh: true
                 });
+            }
+
+            // On a physical USB insertion transition, automatically select USB.
+            if (usbJustInserted && !isDeviceConnected) {
+                var insertedUsb = Array.from(deviceDropdown.options).find(function(option) {
+                    try {
+                        var info = JSON.parse(option.value || '{}');
+                        return String(
+                            info.ConnectionType || info.connectionType || ''
+                        ).toUpperCase() === 'USB';
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                if (insertedUsb) {
+                    deviceDropdown.value = insertedUsb.value;
+                    deviceDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+                }
             }
 
             // USB is only the automatic fallback.
