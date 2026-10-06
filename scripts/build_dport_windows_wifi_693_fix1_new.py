@@ -95,10 +95,13 @@ def build_source():
 
                     for device in usb_devices:
                         try:
-                            client = await create_using_usbmux(
-                                serial=device.serial,
-                                connection_type=device.connection_type,
-                                autopair=True,
+                            client = await asyncio.wait_for(
+                                create_using_usbmux(
+                                    serial=device.serial,
+                                    connection_type=device.connection_type,
+                                    autopair=True,
+                                ),
+                                timeout=4.0,
                             )
                             try:
                                 info = dict(client.short_info)
@@ -130,6 +133,7 @@ def build_source():
                                         "DeviceName": "Apple 裝置",
                                         "DeviceClass": "Apple 裝置",
                                         "ProductVersion": "?",
+                                        "MetadataPending": True,
                                         "wifiAddress": None,
                                         "wifiPort": None,
                                         "wifiState": False,
@@ -146,7 +150,7 @@ def build_source():
                         udid=None,
                         pair_records=get_home_folder(),
                         only_paired=True,
-                        timeout=timeout,
+                        timeout=min(float(timeout), 3.0),
                     ):
                         try:
                             info = dict(network_device.short_info)
@@ -282,7 +286,7 @@ async function checkDeviceAutoDetect() {
         });
 
         if (!hasNetworkOption && Date.now() >= deviceFallbackFullScanNext) {
-            deviceFallbackFullScanNext = Date.now() + 1800;
+            deviceFallbackFullScanNext = Date.now() + 3500;
             await populateDeviceList({
                 silent: true,
                 autoDetect: true,
