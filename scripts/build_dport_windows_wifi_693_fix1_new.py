@@ -51,65 +51,131 @@ def build_source():
     if gate not in main: raise RuntimeError("6.9.3 USB-only gate not found")
     main = main.replace(gate, "", 1)
 
-    # 6.9.3 discovery currently has a paired-variable scope bug and also disables
-    # Network rows in /list_devices. Fix both without replacing the surrounding function.
+    # 6.9.3 Wi-Fi discovery: replace only the nested collect_devices()
+    # function with a concurrent USB + mobdev2 implementation. This avoids the
+    # slow sequential Wi-Fi scan while preserving the clean 6.9.3 source.
+    collect_start = main.find("        async def collect_devices():")
+    collect_end = main.find("        asyncio.run(collect_devices())", collect_start)
+    if collect_start < 0 or collect_end < 0:
+        raise RuntimeError("6.9.3 collect_devices markers not found")
+    collect_end += len("        asyncio.run(collect_devices())")
+    collect_function = '''        async def collect_devices():
+            async def collect_usb_devices():
+                try:
+                    usb_devices = []
+                    attempts = 6 if force_refresh else 1
+                    for attempt in range(attempts):
+                        try:
+                            usb_devices = await list_devices()
+                        except Exception as exc:
+                            logger.warning(f"USB enumeration attempt {attempt + 1}/{attempts} failed: {exc}")
+                            usb_devices = []
+                        if usb_devices:
+                            break
+                        if attempt + 1 < attempts:
+                            await asyncio.sleep(0.35)
+
+                    for device in usb_devices:
+                        try:
+                            client = await create_using_usbmux(
+                                serial=device.serial,
+                                connection_type=device.connection_type,
+                                autopair=True,
+                            )
+                            try:
+                                info = dict(client.short_info)
+                                info["ConnectionType"] = device.connection_type
+                                info["Identifier"] = info.get("Identifier") or device.serial
+                                info["wifiAddress"] = None
+                                info["wifiPort"] = None
+                                try:
+                                    info["wifiState"] = await client.get_enable_wifi_connections()
+                                except Exception:
+                                    info["wifiState"] = False
+                                try:
+                                    info["userLocale"] = get_user_country()
+                                except Exception:
+                                    info["userLocale"] = None
+                                add_device(device.serial, device.connection_type, info)
+                            finally:
+                                await client.close()
+                        except Exception as exc:
+                            logger.warning(f"USB device info failed: {exc}")
+                            identifier = getattr(device, "serial", None)
+                            if identifier:
+                                add_device(
+                                    identifier,
+                                    getattr(device, "connection_type", "USB") or "USB",
+                                    {
+                                        "Identifier": identifier,
+                                        "ConnectionType": "USB",
+                                        "DeviceName": "Apple 裝置",
+                                        "DeviceClass": "Apple 裝置",
+                                        "ProductVersion": "?",
+                                        "wifiAddress": None,
+                                        "wifiPort": None,
+                                        "wifiState": False,
+                                        "userLocale": None,
+                                    },
+                                )
+                except Exception as exc:
+                    logger.warning(f"USB enumeration failed: {exc}")
+
+            async def collect_wifi_devices():
+                try:
+                    wifi_count = 0
+                    async for ip, network_device in get_mobdev2_lockdowns(
+                        udid=None,
+                        pair_records=get_home_folder(),
+                        only_paired=True,
+                        timeout=timeout,
+                    ):
+                        try:
+                            info = dict(network_device.short_info)
+                            network_udid = (
+                                getattr(network_device, "udid", None)
+                                or info.get("UniqueDeviceID")
+                                or info.get("Identifier")
+                            )
+                            if not network_udid:
+                                continue
+                            info["ConnectionType"] = "Network"
+                            info["Identifier"] = network_udid
+                            info["wifiAddress"] = str(ip)
+                            info["wifiPort"] = 62078
+                            info["wifiState"] = True
+                            info["wifiTransport"] = "mobdev2"
+                            add_device(network_udid, "Network", info)
+                            wifi_count += 1
+                        finally:
+                            try:
+                                await network_device.close()
+                            except Exception:
+                                pass
+                    logger.info(f"WiFi device-list count: {wifi_count}")
+                except Exception as exc:
+                    logger.exception(f"WiFi discovery failed: {exc}")
+
+            await asyncio.gather(
+                collect_usb_devices(),
+                collect_wifi_devices(),
+            )
+'''
+    main = main[:collect_start] + collect_function + main[collect_end:]
+    
+    # Fix the 6.9.3 get_wifi_with_retry scope bug: the paired flag is captured
+    # inside discover(), then read from the returned short-info dictionary.
     main = main.replace(
         'short["_DeviceUDID"] = device.udid or short.get("UniqueDeviceID")',
         'short["_DeviceUDID"] = getattr(device, "udid", None) or short.get("UniqueDeviceID")\n                        short["_Paired"] = bool(getattr(device, "paired", False))',
-        1
+        1,
     )
     main = main.replace(
-        'f"iOS={product}, paired={getattr(device, \'paired\', None)}"',
-        'f"iOS={product}, paired={short.get("_Paired")}"',
-        1
+        'paired={getattr(device, \'paired\', None)}',
+        'paired={short.get("_Paired")}',
+        1,
     )
-    disabled = '''            # USB-ONLY: Wi-Fi / Network discovery intentionally disabled.
-            logger.info("USB-ONLY mode: Wi-Fi/Bonjour/mDNS/RemotePairing discovery skipped")
-'''
-    wifi_block = '''            # Network/Wi-Fi device discovery through Apple mobdev2 Bonjour.
-            try:
-                wifi_count = 0
-                async for ip, network_device in get_mobdev2_lockdowns(
-                    udid=None,
-                    pair_records=get_home_folder(),
-                    only_paired=True,
-                    timeout=timeout,
-                ):
-                    try:
-                        info = dict(network_device.short_info)
-                        network_udid = (
-                            getattr(network_device, "udid", None)
-                            or info.get("UniqueDeviceID")
-                            or info.get("Identifier")
-                        )
-                        if not network_udid:
-                            continue
-                        info["ConnectionType"] = "Network"
-                        info["Identifier"] = network_udid
-                        info["wifiAddress"] = str(ip)
-                        info["wifiPort"] = 62078
-                        info["wifiState"] = True
-                        info["wifiTransport"] = "mobdev2"
-                        add_device(network_udid, "Network", info)
-                        wifi_count += 1
-                    finally:
-                        try:
-                            await network_device.close()
-                        except Exception:
-                            pass
-                logger.info(f"WiFi device-list count: {wifi_count}")
-            except Exception as exc:
-                logger.exception(f"WiFi discovery failed: {exc}")
-'''
-    if disabled not in main: raise RuntimeError("6.9.3 WiFi-disabled list block not found")
-    main = main.replace(disabled, wifi_block, 1)
-
-    # Avoid the redundant second Wi-Fi discovery during connect; the selected
-    # Wi-Fi address is already known. Keep the existing tunnel implementation,
-    # but make its discovery use the known UDID and selected host.
-    old_pair = 'pair_records=get_home_folder(),\n            only_paired=True,'
-    # start_wifi_tcp_tunnel already has the correct loop; do not alter it further.
-
+    
     # Frontend: auto-switch to USB on a physical USB insertion transition.
     marker = 'async function checkDeviceAutoDetect() {'
     if marker not in page: raise RuntimeError("checkDeviceAutoDetect not found")
