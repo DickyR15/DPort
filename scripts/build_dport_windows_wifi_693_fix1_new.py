@@ -5,7 +5,7 @@ from pathlib import Path
 
 TAG = "v6.9.3"
 VERSION = "6.9.3"
-FINAL_EXE_NAME = "DPort-WiFi-Test-6.9.3-FIX2"
+FINAL_EXE_NAME = "DPort-WiFi-Test-6.9.3-FIX3"
 ROOT = Path.cwd()
 WORK = Path(tempfile.gettempdir()) / "DPort-WiFi-693-FIX1"
 SOURCE = WORK / "source"
@@ -393,9 +393,9 @@ VSVersionInfo(
     StringStruct('CompanyName','Dicky'),
     StringStruct('FileDescription','DPort WiFi Test'),
     StringStruct('FileVersion','6.9.3'),
-    StringStruct('InternalName','DPort-WiFi-Test-6.9.3-FIX2'),
+    StringStruct('InternalName','DPort-WiFi-Test-6.9.3-FIX3'),
     StringStruct('LegalCopyright','Dicky'),
-    StringStruct('OriginalFilename','DPort-WiFi-Test-6.9.3-FIX2.exe'),
+    StringStruct('OriginalFilename','DPort-WiFi-Test-6.9.3-FIX3.exe'),
     StringStruct('ProductName','DPort'),
     StringStruct('ProductVersion','6.9.3'),
     StringStruct('Comments','WiFi Test')
