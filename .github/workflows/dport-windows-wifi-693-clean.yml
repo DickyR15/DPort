@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    name: Build DPort 6.9.3 WiFi FIX1
+    name: Build DPort 6.9.3 WiFi FIX3
     runs-on: windows-latest
     steps:
       - name: Checkout test branch
@@ -37,7 +37,7 @@ jobs:
       - name: Upload WiFi test artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DPort-WiFi-Test-6.9.3-FIX1
+          name: DPort-WiFi-Test-6.9.3-FIX3
           path: DPort-WiFi-Test-6.9.3
           if-no-files-found: error
           compression-level: 0
