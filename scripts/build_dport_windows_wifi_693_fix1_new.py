@@ -69,6 +69,53 @@ def build_source():
         1,
     )
 
+    # Resolve iOS version only when the user clicks Connect. The device list
+    # remains fast by using raw usbmux presence rows.
+    hydrate_marker = "    developer_mode_state = check_developer_mode(udid, connection_type)"
+    hydrate_code = """    # Raw USB rows intentionally omit Lockdown metadata. Hydrate it on connect.
+    if connection_type == "USB" and (
+        data.get("ios_version") is None
+        or str(data.get("ios_version")).strip() in ("", "?")
+    ):
+        try:
+            async def _hydrate_usb_info():
+                client = await create_using_usbmux(
+                    serial=udid,
+                    connection_type="USB",
+                    autopair=True,
+                )
+                try:
+                    return dict(client.short_info)
+                finally:
+                    try:
+                        await client.close()
+                    except Exception:
+                        pass
+
+            usb_info = asyncio.run(
+                asyncio.wait_for(_hydrate_usb_info(), timeout=8.0)
+            )
+            ios_version = (
+                usb_info.get("ProductVersion")
+                or usb_info.get("ProductVersionString")
+            )
+            logger.info(f"Hydrated USB iOS version: {ios_version}")
+        except Exception as exc:
+            logger.warning(f"USB metadata hydration failed: {exc}")
+            return jsonify({
+                "error": "USB 裝置資訊尚未就緒，請再按一次「連接裝置」。",
+                "connection_retryable": True,
+            }), 503
+
+"""
+    if hydrate_marker not in main:
+        raise RuntimeError("6.9.3 developer mode marker not found")
+    main = main.replace(
+        hydrate_marker,
+        hydrate_code + hydrate_marker,
+        1,
+    )
+
     # 6.9.3 Wi-Fi discovery: replace only the nested collect_devices()
     # function with a concurrent USB + mobdev2 implementation. This avoids the
     # slow sequential Wi-Fi scan while preserving the clean 6.9.3 source.
@@ -80,13 +127,17 @@ def build_source():
     collect_function = '''        async def collect_devices():
             async def collect_usb_devices():
                 try:
+                    # Raw usbmux enumeration is fast and does not open Lockdown.
+                    # Do not block /list_devices on slow metadata after a replug.
                     usb_devices = []
                     attempts = 6 if force_refresh else 1
                     for attempt in range(attempts):
                         try:
                             usb_devices = await list_devices()
                         except Exception as exc:
-                            logger.warning(f"USB enumeration attempt {attempt + 1}/{attempts} failed: {exc}")
+                            logger.warning(
+                                f"USB enumeration attempt {attempt + 1}/{attempts} failed: {exc}"
+                            )
                             usb_devices = []
                         if usb_devices:
                             break
@@ -94,52 +145,25 @@ def build_source():
                             await asyncio.sleep(0.35)
 
                     for device in usb_devices:
-                        try:
-                            client = await asyncio.wait_for(
-                                create_using_usbmux(
-                                    serial=device.serial,
-                                    connection_type=device.connection_type,
-                                    autopair=True,
-                                ),
-                                timeout=4.0,
-                            )
-                            try:
-                                info = dict(client.short_info)
-                                info["ConnectionType"] = device.connection_type
-                                info["Identifier"] = info.get("Identifier") or device.serial
-                                info["wifiAddress"] = None
-                                info["wifiPort"] = None
-                                try:
-                                    info["wifiState"] = await client.get_enable_wifi_connections()
-                                except Exception:
-                                    info["wifiState"] = False
-                                try:
-                                    info["userLocale"] = get_user_country()
-                                except Exception:
-                                    info["userLocale"] = None
-                                add_device(device.serial, device.connection_type, info)
-                            finally:
-                                await client.close()
-                        except Exception as exc:
-                            logger.warning(f"USB device info failed: {exc}")
-                            identifier = getattr(device, "serial", None)
-                            if identifier:
-                                add_device(
-                                    identifier,
-                                    getattr(device, "connection_type", "USB") or "USB",
-                                    {
-                                        "Identifier": identifier,
-                                        "ConnectionType": "USB",
-                                        "DeviceName": "Apple 裝置",
-                                        "DeviceClass": "Apple 裝置",
-                                        "ProductVersion": "?",
-                                        "MetadataPending": True,
-                                        "wifiAddress": None,
-                                        "wifiPort": None,
-                                        "wifiState": False,
-                                        "userLocale": None,
-                                    },
-                                )
+                        identifier = getattr(device, "serial", None)
+                        if not identifier:
+                            continue
+                        add_device(
+                            identifier,
+                            getattr(device, "connection_type", "USB") or "USB",
+                            {
+                                "Identifier": identifier,
+                                "ConnectionType": "USB",
+                                "DeviceName": "Apple 裝置",
+                                "DeviceClass": "Apple 裝置",
+                                "ProductVersion": "?",
+                                "MetadataPending": True,
+                                "wifiAddress": None,
+                                "wifiPort": None,
+                                "wifiState": False,
+                                "userLocale": None,
+                            },
+                        )
                 except Exception as exc:
                     logger.warning(f"USB enumeration failed: {exc}")
 
@@ -150,7 +174,7 @@ def build_source():
                         udid=None,
                         pair_records=get_home_folder(),
                         only_paired=True,
-                        timeout=min(float(timeout), 3.0),
+                        timeout=min(float(timeout), 2.5),
                     ):
                         try:
                             info = dict(network_device.short_info)
@@ -183,6 +207,7 @@ def build_source():
                 collect_wifi_devices(),
             )
 '''
+
     main = main[:collect_start] + collect_function + main[collect_end:]
     
     # Fix the 6.9.3 get_wifi_with_retry scope bug: the paired flag is captured
@@ -305,6 +330,16 @@ async function checkDeviceAutoDetect() {
 '''
     page = page[:ad_start] + auto_fix + page[ad_end:]
 
+    # Never ship the old disabled USB pending placeholder.
+    page = page.replace(
+        "USB：Apple 裝置－（正在重新連線與讀取裝置資訊…）",
+        "USB：Apple 裝置－（已偵測，資訊將於連線時讀取）",
+    )
+    if "正在重新連線與讀取裝置資訊" in page:
+        raise RuntimeError("Stale USB pending placeholder remains")
+    if "usbJustInserted" not in page:
+        raise RuntimeError("USB insertion auto-switch missing")
+
     # Timeout modal is left unchanged in this build; WiFi discovery/selection is the focus.
 
     MAIN.write_text(main,encoding="utf-8")
@@ -330,6 +365,8 @@ def build_exe():
     exe = ROOT / "dist" / f"{FINAL_EXE_NAME}.exe"
     if not exe.exists():
         raise RuntimeError(f"Expected built EXE not found: {exe}")
+    if "正在重新連線與讀取裝置資訊" in MAP.read_text(encoding="utf-8-sig"):
+        raise RuntimeError("Stale USB pending placeholder remains in final artifact")
     target = OUT / exe.name
     shutil.copy2(exe, target)
     digest = hashlib.sha256(target.read_bytes()).hexdigest()
