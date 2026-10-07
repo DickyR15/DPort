@@ -5,7 +5,7 @@ from pathlib import Path
 
 TAG = "v6.9.3"
 VERSION = "6.9.3"
-FINAL_EXE_NAME = "DPort-WiFi-Test-6.9.3-FIX1"
+FINAL_EXE_NAME = "DPort-WiFi-Test-6.9.3-FIX2"
 ROOT = Path.cwd()
 WORK = Path(tempfile.gettempdir()) / "DPort-WiFi-693-FIX1"
 SOURCE = WORK / "source"
@@ -202,10 +202,19 @@ def build_source():
                 except Exception as exc:
                     logger.exception(f"WiFi discovery failed: {exc}")
 
-            await asyncio.gather(
-                collect_usb_devices(),
-                collect_wifi_devices(),
-            )
+            usb_task = asyncio.create_task(collect_usb_devices())
+            wifi_task = asyncio.create_task(collect_wifi_devices())
+            usb_result = await usb_task
+            for serial, conn_type, info in usb_result:
+                add_device(serial, conn_type, info)
+            try:
+                wifi_result = await asyncio.wait_for(wifi_task, timeout=1.25)
+            except asyncio.TimeoutError:
+                logger.info("WiFi discovery slow; returning USB list without waiting.")
+                wifi_task.cancel()
+                wifi_result = []
+            for serial, conn_type, info in wifi_result:
+                add_device(serial, conn_type, info)
 '''
 
     main = main[:collect_start] + collect_function + main[collect_end:]
@@ -330,16 +339,15 @@ async function checkDeviceAutoDetect() {
 '''
     page = page[:ad_start] + auto_fix + page[ad_end:]
 
-    # Never ship the old disabled USB pending placeholder.
+    # Remove the old disabled USB pending placeholder.
     page = page.replace(
         "USB：Apple 裝置－（正在重新連線與讀取裝置資訊…）",
-        "USB：Apple 裝置－（已偵測，資訊將於連線時讀取）",
+        "USB: Apple 裝置 - (已偵測，連線時讀取資訊)",
     )
-    if "正在重新連線與讀取裝置資訊" in page:
+    if "正在重新連線與讀取裝置資訊…" in page:
         raise RuntimeError("Stale USB pending placeholder remains")
     if "usbJustInserted" not in page:
         raise RuntimeError("USB insertion auto-switch missing")
-
     # Timeout modal is left unchanged in this build; WiFi discovery/selection is the focus.
 
     MAIN.write_text(main,encoding="utf-8")
@@ -385,9 +393,9 @@ VSVersionInfo(
     StringStruct('CompanyName','Dicky'),
     StringStruct('FileDescription','DPort WiFi Test'),
     StringStruct('FileVersion','6.9.3'),
-    StringStruct('InternalName','DPort-WiFi-Test-6.9.3-FIX1'),
+    StringStruct('InternalName','DPort-WiFi-Test-6.9.3-FIX2'),
     StringStruct('LegalCopyright','Dicky'),
-    StringStruct('OriginalFilename','DPort-WiFi-Test-6.9.3-FIX1.exe'),
+    StringStruct('OriginalFilename','DPort-WiFi-Test-6.9.3-FIX2.exe'),
     StringStruct('ProductName','DPort'),
     StringStruct('ProductVersion','6.9.3'),
     StringStruct('Comments','WiFi Test')
