@@ -1,3 +1,12 @@
+DPort 6.9.4
+
+- Python 建置環境維持 3.14.8。
+- pymobiledevice3 更新至 11.26.0。
+- 修正獨立更新器的清理錯誤處理：即使無法啟動背景清理程序，也不會因 LOGGER 未定義而再觸發 NameError。
+- 修正 Source Audit 查詢 GitHub Release 時的 API 驗證方式，避免未驗證請求觸發 API rate limit。
+- Source Audit、Windows Build Validation 與更新器建置／啟動驗證均已納入本次發布前檢查。
+- 不納入 Wi-Fi 研究版功能，正式主版仍以 USB 為主。
+
 DPort 6.9.3
 
 - Python 建置環境維持 3.14.8。
