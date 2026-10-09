@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing release tag to build, e.g. vX.Y.Z'
+        description: 'Release tag to create or build, e.g. v6.9.4 (run on main for a new release)'
         required: true
         type: string
 
@@ -16,18 +16,57 @@ permissions:
   contents: write
 
 concurrency:
-  group: dport-release-${{ github.ref_name || inputs.tag }}
+  group: dport-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      skip_build: ${{ steps.check.outputs.skip_build }}
+    steps:
+      - name: Skip duplicate tag run when the release is already complete
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          if [[ "$EVENT_NAME" != "push" ]]; then
+            echo "skip_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          release_json="$(gh api "repos/${REPOSITORY}/releases/tags/${RELEASE_TAG}" 2>/dev/null || true)"
+          if [[ -z "$release_json" ]]; then
+            echo "skip_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          expected_exe="DPort-${RELEASE_TAG#v}.exe"
+          if jq -e --arg exe "$expected_exe" '
+            .draft == false and
+            ([.assets[].name] as $names |
+              [$exe, "\($exe).sha256", "DPort-Updater.exe", "DPort-Updater.exe.sha256"] as $expected |
+              all($expected[]; . as $name | ($names | index($name)) != null))
+          ' <<< "$release_json" >/dev/null; then
+            echo "skip_build=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${RELEASE_TAG} is already published with all required assets; skipping duplicate tag-triggered build."
+          else
+            echo "skip_build=false" >> "$GITHUB_OUTPUT"
+          fi
   build-windows:
+    needs: preflight
+    if: needs.preflight.outputs.skip_build != 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.ref }}
 
       - name: Resolve release tag and version
         id: version
@@ -210,16 +249,20 @@ jobs:
         run: |
           $tag = '${{ steps.version.outputs.tag }}'
           $v = '${{ steps.version.outputs.version }}'
-          gh release view $tag --repo '${{ github.repository }}' *> $null
-          $exists = ($LASTEXITCODE -eq 0)
-          if (-not $exists) {
-            gh release create $tag "dist/DPort-$v.exe" "dist/DPort-$v.exe.sha256" 'dist/DPort-Updater.exe' 'dist/DPort-Updater.exe.sha256' --repo '${{ github.repository }}' --title "DPort v$v" --generate-notes
-            if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag." }
+          $repository = '${{ github.repository }}'
+          $tagRefPath = "repos/$repository/git/ref/tags/$tag"
+          $tagRefJson = gh api $tagRefPath 2>$null
+          $tagLookupExit = $LASTEXITCODE
+          if ($tagLookupExit -eq 0) {
+            $existingRef = $tagRefJson | ConvertFrom-Json
+            if ('${{ github.event_name }}' -eq 'workflow_dispatch' -and $existingRef.object.type -eq 'commit' -and $existingRef.object.sha -ne '${{ github.sha }}') {
+              throw "Tag $tag already points to a different commit; refusing to publish a different source as the same version."
+            }
           } else {
-            gh release upload $tag "dist/DPort-$v.exe" "dist/DPort-$v.exe.sha256" 'dist/DPort-Updater.exe' 'dist/DPort-Updater.exe.sha256' --repo '${{ github.repository }}' --clobber
-            if ($LASTEXITCODE -ne 0) { throw "Failed to update release $tag." }
+            if ('${{ github.event_name }}' -ne 'workflow_dispatch') { throw "Tag $tag does not exist for a tag-triggered build." }
+            gh api --method POST "repos/$repository/git/refs" -f "ref=refs/tags/$tag" -f "sha=${{ github.sha }}" | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create tag $tag at the exact source commit used for this build." }
           }
-
           # Write one clean, stable release-notes layout.
           # Do not append to the existing body, otherwise reruns would duplicate sections.
           $notes = @"
@@ -239,8 +282,9 @@ jobs:
 
           - Python 建置環境：${{ steps.version.outputs.python_version }}
           - pymobiledevice3：${{ steps.version.outputs.pm3_version }}
-          - 完成舊 Fuel、obsolete API、dead map function、舊裝置狀態 helper 與未使用 map state 的清理
-          - 強化 Source Audit、Windows Build Validation 與 Release Tag 驗證流程
+          - 修正獨立更新器的清理錯誤處理，避免 LOGGER 未定義造成二次例外
+          - 修正 Source Audit 的 GitHub API 認證與限流處理
+          - 強化 Source Audit、Windows Build Validation 與自動發布流程
           - 保留 USB、定位、GPX 與 Windows 自動更新功能
 
           ## 📦 下載
@@ -295,17 +339,63 @@ jobs:
           $notesPath = Join-Path $PWD 'dport-release-notes.md'
           Set-Content -LiteralPath $notesPath -Value $notes.Trim() -Encoding utf8
 
-          gh release edit $tag --repo '${{ github.repository }}' --title "DPort v$v" --notes-file $notesPath
-          if ($LASTEXITCODE -ne 0) { throw "Failed to apply standardized release notes to $tag." }
+          # Find a draft by listing releases, because the tag is created only after the build succeeds.
+          $releaseList = gh api --paginate "repos/$repository/releases?per_page=100" | ConvertFrom-Json
+          $release = @($releaseList | Where-Object { $_.tag_name -eq $tag } | Select-Object -First 1) | Select-Object -First 1
+          $assetFiles = @(
+            [pscustomobject]@{ Name = "DPort-$v.exe"; Path = (Join-Path $PWD "dist\DPort-$v.exe") },
+            [pscustomobject]@{ Name = "DPort-$v.exe.sha256"; Path = (Join-Path $PWD "dist\DPort-$v.exe.sha256") },
+            [pscustomobject]@{ Name = 'DPort-Updater.exe'; Path = (Join-Path $PWD 'dist\DPort-Updater.exe') },
+            [pscustomobject]@{ Name = 'DPort-Updater.exe.sha256'; Path = (Join-Path $PWD 'dist\DPort-Updater.exe.sha256') }
+          )
 
-          # If the release was created as a draft in the GitHub web UI,
-          # publish it only after the built executables and final notes are attached.
-          $draftState = gh release view $tag --repo '${{ github.repository }}' --json isDraft --jq '.isDraft'
-          if ($LASTEXITCODE -ne 0) { throw "Failed to check draft status for $tag." }
-          if ($draftState.Trim().ToLowerInvariant() -eq 'true') {
-            gh release edit $tag --repo '${{ github.repository }}' --draft=false
-            if ($LASTEXITCODE -ne 0) { throw "Failed to publish release $tag after uploading assets." }
+          if ($null -eq $release) {
+            # gh release create publishes only after its assets have been uploaded.
+            gh release create $tag $assetFiles.Path --repo $repository --title "DPort v$v" --notes-file $notesPath --target '${{ github.sha }}'
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag with all assets." }
+          } elseif (-not $release.draft) {
+            # A pre-published release is updated in place; new-release flow should use Save draft + Run workflow instead.
+            gh release upload $tag $assetFiles.Path --repo $repository --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upload release assets for $tag." }
+            gh release edit $tag --repo $repository --title "DPort v$v" --notes-file $notesPath
+            if ($LASTEXITCODE -ne 0) { throw "Failed to update published release notes for $tag." }
+          } else {
+            # Keep the web-created draft private until every binary and checksum has been uploaded.
+            $releaseId = [string]$release.id
+            $existingAssets = gh api "repos/$repository/releases/$releaseId/assets?per_page=100" | ConvertFrom-Json
+            foreach ($assetFile in $assetFiles) {
+              foreach ($oldAsset in @($existingAssets | Where-Object { $_.name -eq $assetFile.Name })) {
+                gh api --method DELETE "repos/$repository/releases/assets/$($oldAsset.id)" | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "Failed to replace existing asset $($assetFile.Name)." }
+              }
+              $assetUri = "https://uploads.github.com/repos/$repository/releases/$releaseId/assets?name=$([uri]::EscapeDataString($assetFile.Name))"
+              $assetPath = (Resolve-Path -LiteralPath $assetFile.Path).Path
+              Invoke-RestMethod -Uri $assetUri -Method Post -Headers @{
+                Authorization = "Bearer $env:GH_TOKEN"
+                Accept = 'application/vnd.github+json'
+                'X-GitHub-Api-Version' = '2022-11-28'
+              } -ContentType 'application/octet-stream' -InFile $assetPath | Out-Null
+            }
+
+            $uploadedAssets = gh api "repos/$repository/releases/$releaseId/assets?per_page=100" | ConvertFrom-Json
+            foreach ($assetFile in $assetFiles) {
+              if (-not (@($uploadedAssets | Where-Object { $_.name -eq $assetFile.Name }).Count -gt 0)) {
+                throw "Release asset missing after upload: $($assetFile.Name)"
+              }
+            }
+
+            $releasePayloadPath = Join-Path $PWD 'dport-release-update.json'
+            [ordered]@{
+              name = "DPort v$v"
+              body = $notes.Trim()
+              draft = $false
+              prerelease = $false
+              target_commitish = '${{ github.sha }}'
+            } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $releasePayloadPath -Encoding utf8NoBOM
+            gh api --method PATCH "repos/$repository/releases/$releaseId" --input $releasePayloadPath | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Failed to publish release $tag after all assets were verified." }
           }
+
           $releases = gh api --paginate "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json
           $stable = @(
             $releases | Where-Object {
