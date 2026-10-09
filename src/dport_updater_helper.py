@@ -3,11 +3,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import os
 import subprocess
 import time
 import urllib.request
 from pathlib import Path
+
+LOGGER = logging.getLogger("DPort-Updater")
 
 
 def _download(url: str, target: Path) -> str:
