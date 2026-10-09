@@ -298,6 +298,14 @@ jobs:
           gh release edit $tag --repo '${{ github.repository }}' --title "DPort v$v" --notes-file $notesPath
           if ($LASTEXITCODE -ne 0) { throw "Failed to apply standardized release notes to $tag." }
 
+          # If the release was created as a draft in the GitHub web UI,
+          # publish it only after the built executables and final notes are attached.
+          $draftState = gh release view $tag --repo '${{ github.repository }}' --json isDraft --jq '.isDraft'
+          if ($LASTEXITCODE -ne 0) { throw "Failed to check draft status for $tag." }
+          if ($draftState.Trim().ToLowerInvariant() -eq 'true') {
+            gh release edit $tag --repo '${{ github.repository }}' --draft=false
+            if ($LASTEXITCODE -ne 0) { throw "Failed to publish release $tag after uploading assets." }
+          }
           $releases = gh api --paginate "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json
           $stable = @(
             $releases | Where-Object {
