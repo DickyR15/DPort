@@ -278,12 +278,10 @@ def audit_current_source() -> list[str]:
 def audit_live_releases(tags: list[str]) -> list[str]:
     failures: list[str] = []
     url = "https://api.github.com/repos/DickyR15/DPort/releases?per_page=100"
-    request = urllib.request.Request(
-        url,
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "DPort-Full-Audit"},
-    )
-    with urllib.request.urlopen(request, timeout=20) as response:
-        releases = json.load(response)
+    # Reuse the shared GitHub API helper so this request also sends GITHUB_TOKEN.
+    # Without authentication, this second release-list request can hit the lower
+    # unauthenticated rate limit even when stable-tag discovery succeeded.
+    releases = github_request(url)
 
     stable = [
         r
