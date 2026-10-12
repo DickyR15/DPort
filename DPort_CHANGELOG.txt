@@ -1,3 +1,12 @@
+DPort 6.9.5
+
+- Windows 建置依賴更新至 pymobiledevice3 11.28.2。
+- 納入上游連線錯誤處理改善，包括部分 iOS 17+ RemoteXPC、RemotePairing 與 tunnel 連線中斷的統一錯誤辨識。
+- 更新 DVT / oslog 相關解析，包含訊息格式與時間戳處理改善，以及記錄解析效能提升。
+- 更新部分通知逾時及連線錯誤處理。
+- 保留 DPort USB 定位、GPX 與 Windows 自動更新功能；不加入 Wi-Fi 研究版功能。
+- 正式發布前執行 Windows 建置、GUI 執行檔檢查、啟動 Smoke Test 及 SHA-256 校驗。
+
 DPort 6.9.4
 
 - Python 建置環境維持 3.14.8。
