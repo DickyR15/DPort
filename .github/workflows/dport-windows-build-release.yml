@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to create or build, e.g. v6.9.4 (run on main for a new release)'
+        description: 'Release tag to create or build, e.g. vX.Y.Z (run on main for a new release)'
         required: true
         type: string
 
@@ -250,6 +250,12 @@ jobs:
           $tag = '${{ steps.version.outputs.tag }}'
           $v = '${{ steps.version.outputs.version }}'
           $repository = '${{ github.repository }}'
+          $changeLogText = Get-Content -LiteralPath 'DPort_CHANGELOG.txt' -Raw
+          $changeLogPattern = "(?ms)^DPort[ 	]+$([regex]::Escape($v))[ 	]*\r?\n(?<body>.*?)(?=^DPort[ 	]+\d+\.\d+\.\d+(?:[ 	]+[^\r\n]*)?[ 	]*$|\z)"
+          $changeLogMatch = [regex]::Match($changeLogText, $changeLogPattern)
+          if (-not $changeLogMatch.Success) { throw "DPort_CHANGELOG.txt has no section for v$v." }
+          $changeLogBody = $changeLogMatch.Groups['body'].Value.Trim()
+          if ([string]::IsNullOrWhiteSpace($changeLogBody)) { throw "DPort_CHANGELOG.txt section for v$v is empty." }
           $tagRefPath = "repos/$repository/git/ref/tags/$tag"
           $tagRefJson = gh api $tagRefPath 2>$null
           $tagLookupExit = $LASTEXITCODE
@@ -282,10 +288,8 @@ jobs:
 
           - Python 建置環境：${{ steps.version.outputs.python_version }}
           - pymobiledevice3：${{ steps.version.outputs.pm3_version }}
-          - 修正獨立更新器的清理錯誤處理，避免 LOGGER 未定義造成二次例外
-          - 修正 Source Audit 的 GitHub API 認證與限流處理
-          - 強化 Source Audit、Windows Build Validation 與自動發布流程
-          - 保留 USB、定位、GPX 與 Windows 自動更新功能
+
+          $changeLogBody
 
           ## 📦 下載
 
