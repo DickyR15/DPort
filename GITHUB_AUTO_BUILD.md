@@ -12,7 +12,7 @@ vX.Y.Z
 
 GitHub Actions 會自動：
 
-1. Windows runner 建立 Python 3.14 建置環境
+1. Windows runner 建立 Python 3.15 建置環境
 2. 安裝 requirements-build.txt
 3. 建置內嵌 DPort-Updater.exe
 4. 建置完整 DPort EXE
