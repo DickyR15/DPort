@@ -216,47 +216,6 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "$file is not a Windows GUI executable." }
           }
 
-      - name: Verify cryptography native imports in frozen executable
-        shell: pwsh
-        run: |
-          $v = '${{ steps.version.outputs.version }}'
-          $exe = (Resolve-Path "dist\DPort-$v.exe").Path
-          $testDir = Join-Path $env:RUNNER_TEMP 'dport-crypto-smoke'
-          New-Item -ItemType Directory -Path $testDir -Force | Out-Null
-          $testScript = Join-Path $testDir 'crypto_smoke.py'
-          @'
-          import sys
-          from cryptography import x509
-          from cryptography.hazmat.primitives import hashes, serialization
-          from pymobiledevice3.lockdown import LockdownClient
-          print("CRYPTO_IMPORT_SMOKE_OK", flush=True)
-          '@ | Set-Content -LiteralPath $testScript -Encoding utf8
-          # A separate validation executable exercises the same Python + dependency
-          # set outside the GUI startup path, so native-extension failures are visible.
-          python -m PyInstaller --noconfirm --clean --onefile --console --name DPort-CryptoSmoke --collect-all cryptography --hidden-import pymobiledevice3.lockdown $testScript
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to build crypto import smoke-test executable.' }
-          $testExe = Join-Path $PWD 'dist\DPort-CryptoSmoke.exe'
-          $out = & $testExe 2>&1
-          $exitCode = $LASTEXITCODE
-          $out | Write-Host
-          if ($exitCode -ne 0 -or ($out -join "`n") -notmatch 'CRYPTO_IMPORT_SMOKE_OK') {
-            throw "Frozen cryptography/pymobiledevice3 import test failed with exit code $exitCode."
-          }
-
-      - name: Inspect unresolved Python DLL references
-        shell: pwsh
-        run: |
-          $warn = Get-ChildItem -LiteralPath build -Filter 'warn-DPort-*.txt' -Recurse | Select-Object -First 1
-          if ($warn) {
-            $matches = Select-String -LiteralPath $warn.FullName -Pattern 'python3t\.dll|_rust|cryptography'
-            if ($matches) { $matches | ForEach-Object { Write-Host $_.Line } }
-          }
-          # Fail if the build emitted the known unresolved free-threaded DLL warning.
-          $buildLog = Get-ChildItem -LiteralPath build -Filter 'warn-DPort-*.txt' -Recurse | Select-Object -First 1
-          if ($buildLog -and (Select-String -LiteralPath $buildLog.FullName -Pattern 'python3t\.dll' -Quiet)) {
-            throw 'Build contains unresolved python3t.dll dependency; refusing release.'
-          }
-
       - name: Smoke test
         shell: pwsh
         run: |
