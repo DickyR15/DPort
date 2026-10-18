@@ -82,7 +82,7 @@ jobs:
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           $pythonBuildVersion = (Get-Content -LiteralPath '.github\python-version.txt' -Raw).Trim()
-          if ($pythonBuildVersion -notmatch '^3\.15\.\d+$') { throw "Invalid Python build version: $pythonBuildVersion" }
+          if ($pythonBuildVersion -ne '3.14.8') { throw "DPort releases currently require the validated Python build version 3.14.8; got $pythonBuildVersion" }
           $pm3Line = Get-Content -LiteralPath 'requirements-build.txt' | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1
           if (-not $pm3Line) { throw 'pymobiledevice3 pin missing from requirements-build.txt.' }
           $pm3Version = $pm3Line.Trim().Substring('pymobiledevice3=='.Length).Trim()
