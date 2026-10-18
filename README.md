@@ -2,7 +2,7 @@
 
 **DPort** — Windows 版 iPhone 定位、位置模擬與 GPX 工具。
 
-目前版本：**DPort 6.9.5**。
+目前版本：**DPort 6.9.6**。
 
 DPort 是一個以 Windows 為主要使用環境的 iPhone 裝置工具，提供透過 USB 與 iPhone 連線、定位控制、位置模擬及 GPX 相關功能。正式發行版本以單一可執行檔為主要使用方式，一般使用者不需要另外安裝 Python、pip、PyInstaller 或 pymobiledevice3。
 
@@ -49,7 +49,7 @@ DPort 是一個以 Windows 為主要使用環境的 iPhone 裝置工具，提供
 主要流程包含：
 
 1. 使用 Windows Runner 建置。
-2. 安裝 `.github/python-version.txt` 指定的 Python 建置版本（目前為 3.14.8）。
+2. 安裝 `.github/python-version.txt` 指定的 Python 建置版本（目前為 3.15.0）。
 3. 安裝固定版本的 Python 相依套件。
 4. 建置 DPort 及其更新元件。
 5. 產生 SHA-256 校驗值。
