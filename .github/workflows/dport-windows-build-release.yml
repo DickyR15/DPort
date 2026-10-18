@@ -216,10 +216,28 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "$file is not a Windows GUI executable." }
           }
 
-      - name: Smoke test
+      - name: Smoke test GUI process and required native imports
         shell: pwsh
         run: |
           $v = '${{ steps.version.outputs.version }}'
+          $testDir = Join-Path $env:RUNNER_TEMP 'dport-import-smoke'
+          New-Item -ItemType Directory -Path $testDir -Force | Out-Null
+          $testScript = Join-Path $testDir 'dport_import_smoke.py'
+          @'
+          from cryptography import x509
+          from cryptography.hazmat.primitives import hashes, serialization
+          from pymobiledevice3.lockdown import LockdownClient
+          print("DPORT_NATIVE_IMPORT_SMOKE_OK", flush=True)
+          '@ | Set-Content -LiteralPath $testScript -Encoding utf8
+          python -m PyInstaller --noconfirm --clean --onefile --console --name DPort-Import-Smoke --collect-all cryptography --hidden-import pymobiledevice3.lockdown $testScript
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to build native-import smoke-test executable.' }
+          $smokeExe = Join-Path $PWD 'dist\DPort-Import-Smoke.exe'
+          $smokeOutput = & $smokeExe 2>&1
+          $smokeExit = $LASTEXITCODE
+          $smokeOutput | Write-Host
+          if ($smokeExit -ne 0 -or ($smokeOutput -join "`n") -notmatch 'DPORT_NATIVE_IMPORT_SMOKE_OK') {
+            throw "Native import smoke test failed with exit code $smokeExit."
+          }
           $p = Start-Process -FilePath "dist\DPort-$v.exe" -PassThru -WindowStyle Hidden
           Start-Sleep -Seconds 15
           if ($p.HasExited -and $p.ExitCode -ne 0) { throw "DPort-$v.exe exited with code $($p.ExitCode)" }
