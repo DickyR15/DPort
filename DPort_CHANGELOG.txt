@@ -1,3 +1,10 @@
+DPort 6.9.7
+
+- Windows 建置環境改用已通過 Windows Build Validation 原生匯入測試的 Python 3.14.8，避開 Python 3.15 free-threaded ABI 與 cryptography 原生模組的打包相容性風險。
+- 發行前 Smoke Test 會實際啟動凍結後的測試執行檔，確認 cryptography 與 pymobiledevice3.lockdown 可正常載入。
+- pymobiledevice3 維持 11.34.1。
+- 保留 DPort 正式版 USB、定位、GPX 與 Windows 自動更新功能；不加入 Wi-Fi 研究版功能。
+
 DPort 6.9.6
 
 - Windows 建置環境升級至 Python 3.15.0；建置與自動更新規則先在 Python 3.15 系列內維護，跨主版本變更採人工檢查。
