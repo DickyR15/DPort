@@ -1,3 +1,11 @@
+DPort 6.9.6
+
+- Windows 建置環境升級至 Python 3.15.0；建置與自動更新規則先在 Python 3.15 系列內維護，跨主版本變更採人工檢查。
+- pymobiledevice3 更新至 11.34.1。
+- 納入上游二進位解析功能移至 bytestruct 的更新，並採用不再依賴 construct 的上游解析相依套件。
+- 依更新後的相依套件重新執行 Windows 安裝、原始碼檢查、PyInstaller 打包、GUI 執行檔驗證、Smoke Test 與 SHA-256 校驗。
+- 保留 DPort 正式版的 USB、定位、GPX 及 Windows 自動更新功能；不加入 Wi-Fi 研究版功能。
+
 DPort 6.9.5
 
 - Windows 建置依賴更新至 pymobiledevice3 11.28.2。
