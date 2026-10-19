@@ -21,7 +21,8 @@ concurrency:
 
 jobs:
   preflight:
-    runs-on: ubuntu-latest
+    # Pin the runner OS to avoid ubuntu-latest silently migrating the release preflight environment.
+    runs-on: ubuntu-22.04
     outputs:
       skip_build: ${{ steps.check.outputs.skip_build }}
     steps:
