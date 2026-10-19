@@ -64,7 +64,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout tagged source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.ref }}
@@ -252,7 +252,7 @@ jobs:
           (Get-FileHash 'dist\DPort-Updater.exe' -Algorithm SHA256).Hash.ToLower() | Set-Content 'dist\DPort-Updater.exe.sha256' -Encoding ascii
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: DPort-${{ steps.version.outputs.version }}-windows
           path: |
