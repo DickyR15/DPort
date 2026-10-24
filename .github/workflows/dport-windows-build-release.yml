@@ -3,6 +3,8 @@ name: "DPort Windows Build & Release"
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -16,7 +18,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: dport-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: dport-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || (github.ref_type == 'tag' && github.ref_name || github.sha) }}
   cancel-in-progress: false
 
 jobs:
@@ -26,18 +28,50 @@ jobs:
     outputs:
       skip_build: ${{ steps.check.outputs.skip_build }}
     steps:
-      - name: Skip duplicate tag run when the release is already complete
+      - name: Checkout source for version-aware push preflight
+        if: github.event_name == 'push' && github.ref_type == 'branch'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Skip duplicate completed release
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
           REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
           if [[ "$EVENT_NAME" != "push" ]]; then
             echo "skip_build=false" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+
+          # A main-branch push publishes only when its source version has no complete release yet.
+          if [[ "$REF_TYPE" == "branch" ]]; then
+            if [[ "$REF_NAME" != "main" ]]; then
+              echo "skip_build=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            source_version="$(python - <<'PY'
+          import pathlib
+          import re
+          import sys
+          source = pathlib.Path("src/dport_version.py").read_text(encoding="utf-8")
+          match = re.search(r"""DPORT_VERSION\s*=\s*['"]([^'"]+)['"]""", source)
+          if not match:
+              sys.exit("DPORT_VERSION not found in src/dport_version.py")
+          print(match.group(1))
+          PY
+          )"
+            if [[ ! "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Invalid DPort source version: $source_version" >&2
+              exit 1
+            fi
+            RELEASE_TAG="v$source_version"
           fi
 
           release_json="$(gh api "repos/${REPOSITORY}/releases/tags/${RELEASE_TAG}" 2>/dev/null || true)"
@@ -54,7 +88,7 @@ jobs:
               all($expected[]; . as $name | ($names | index($name)) != null))
           ' <<< "$release_json" >/dev/null; then
             echo "skip_build=true" >> "$GITHUB_OUTPUT"
-            echo "Release ${RELEASE_TAG} is already published with all required assets; skipping duplicate tag-triggered build."
+            echo "Release ${RELEASE_TAG} is already published with all required assets; skipping duplicate release build."
           else
             echo "skip_build=false" >> "$GITHUB_OUTPUT"
           fi
@@ -63,22 +97,399 @@ jobs:
     if: needs.preflight.outputs.skip_build != 'true'
     runs-on: windows-latest
     steps:
-      - name: Checkout tagged source
+      - name: Checkout exact event source
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.ref }}
+          ref: ${{ github.sha }}
 
       - name: Resolve release tag and version
         id: version
         shell: pwsh
         run: |
-          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.tag }}'.Trim() } else { '${{ github.ref_name }}'.Trim() }
-          if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw "Invalid release tag: $tag" }
-          $version = $tag.Substring(1)
           $raw = Get-Content -LiteralPath 'src\dport_version.py' -Raw
           if ($raw -notmatch 'DPORT_VERSION\s*=\s*["'']([^"'']+)["'']') { throw 'DPORT_VERSION not found.' }
           $sourceVersion = $Matches[1]
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $tag = '${{ inputs.tag }}'.Trim()
+          } elseif ('${{ github.ref_type }}' -eq 'tag') {
+            $tag = '${{ github.ref_name }}'.Trim()
+          } else {
+            $tag = "v$sourceVersion"
+          }
+          if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          $pythonBuildVersion = (Get-Content -LiteralPath '.github\python-version.txt' -Raw).Trim()
+          if ($pythonBuildVersion -ne '3.14.8') { throw "DPort releases currently require the validated Python build version 3.14.8; got $pythonBuildVersion" }
+          $pm3Line = Get-Content -LiteralPath 'requirements-build.txt' | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1
+          if (-not $pm3Line) { throw 'pymobiledevice3 pin missing from requirements-build.txt.' }
+          $pm3Version = $pm3Line.Trim().Substring('pymobiledevice3=='.Length).Trim()
+          if ($pm3Version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid pymobiledevice3 version: $pm3Version" }
+          "python_version=$pythonBuildVersion" >> $env:GITHUB_OUTPUT
+          "pm3_version=$pm3Version" >> $env:GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: '.github/python-version.txt'
+ 
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements-build.txt
+          python -m pip install lzfse==0.4.2
+          $pm3 = python -c "from importlib.metadata import version; print(version('pymobiledevice3'))"
+          $expected = (Get-Content requirements-build.txt | Where-Object { $_.Trim().StartsWith('pymobiledevice3==') } | Select-Object -First 1).Trim().Substring('pymobiledevice3=='.Length).Trim()
+          if ($pm3 -ne $expected) { throw "Expected pymobiledevice3 $expected, got $pm3" }
+
+      - name: Validate tagged source
+        shell: pwsh
+        run: |
+          foreach ($required in @('src\main.py','src\dport_version.py','src\dport_release_updater.py','src\dport_updater_helper.py','requirements-build.txt','src\templates\map.html')) {
+            if (-not (Test-Path $required)) { throw "Tagged source is missing: $required" }
+          }
+          python -m py_compile src/main.py
+          python -m py_compile src/dport_version.py
+          python -m py_compile src/dport_release_updater.py
+          python -m py_compile src/dport_updater_helper.py
+          python -m compileall -q src scripts
+
+      - name: Validate embedded JavaScript
+        shell: pwsh
+        run: |
+          $html = Get-Content -LiteralPath 'src\templates\map.html' -Raw
+          $matches = [regex]::Matches($html, '<script\b([^>]*)>([\s\S]*?)</script>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+          $checked = 0
+          $index = 0
+          foreach ($match in $matches) {
+            $attrs = $match.Groups[1].Value
+            if ($attrs -match 'type\s*=\s*["''](?!text/javascript|application/javascript)["'']') { continue }
+            $code = $match.Groups[2].Value
+            if ([string]::IsNullOrWhiteSpace($code)) { continue }
+            $tmp = Join-Path $env:RUNNER_TEMP ("dport-inline-$index.js")
+            Set-Content -LiteralPath $tmp -Value $code -Encoding utf8
+            node --check $tmp
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: block $index" }
+            $checked++
+            $index++
+          }
+          if ($checked -lt 1) { throw 'No JavaScript blocks were checked.' }
+
+      - name: Check duplicate injected block IDs
+        shell: pwsh
+        run: |
+          $html = Get-Content -LiteralPath 'src\templates\map.html' -Raw
+          $ids = @('dport-final-ui-polish-v8','dport-final-favorites-render-v8','dport-map-status-overlay-script','dport-header-brand-version-final','dport-exact-copy-button-appearance','dport-copy-button-style-sync','dport-usb-manual-refresh-status','dport-usb-manual-refresh-only','dport-unified-status-final','dport-unified-status-final-script','dport-location-gpx-interaction-final','dport-location-gpx-interaction-final-script','dport-definitive-location-gpx-fix','dport-definitive-location-gpx-fix-script')
+          foreach ($id in $ids) {
+            $pattern = 'id=["'']' + [regex]::Escape($id) + '["'']'
+            $count = ([regex]::Matches($html, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count
+            if ($count -ne 1) { throw "Injected block ID '$id' appears $count times; expected exactly once." }
+          }
+
+      - name: Resolve DPort icon
+        id: icon
+        shell: pwsh
+        run: |
+          $icons = @(Get-ChildItem -LiteralPath $PWD -Filter 'DPort-*.ico' -File)
+          if ($icons.Count -ne 1) { throw "Expected exactly one DPort icon, found $($icons.Count)." }
+          "path=$($icons[0].FullName)" >> $env:GITHUB_OUTPUT
+          Write-Host "Using icon: $($icons[0].FullName)"
+
+      - name: Build standalone updater
+        shell: pwsh
+        run: |
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name DPort-Updater --icon "${{ steps.icon.outputs.path }}" --collect-all certifi --hidden-import importlib.metadata src/dport_updater_helper.py
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to build DPort-Updater.exe.' }
+          if (-not (Test-Path 'dist\DPort-Updater.exe')) { throw 'DPort-Updater.exe missing.' }
+
+      - name: Generate Windows version metadata
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $p = $v.Split('.') | ForEach-Object { [int]$_ }
+          @(
+            '# UTF-8',
+            'VSVersionInfo(',
+            '  ffi=FixedFileInfo(',
+            "    filevers=($($p[0]),$($p[1]),$($p[2]),0),",
+            "    prodvers=($($p[0]),$($p[1]),$($p[2]),0),",
+            '    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)',
+            '  ),',
+            "  kids=[StringFileInfo([StringTable('040404B0',[",
+            "    StringStruct('CompanyName','Dicky'),",
+            "    StringStruct('FileDescription','DPort'),",
+            "    StringStruct('FileVersion','$v'),",
+            "    StringStruct('InternalName','DPort-$v'),",
+            "    StringStruct('LegalCopyright','Dicky'),",
+            "    StringStruct('OriginalFilename','DPort-$v.exe'),",
+            "    StringStruct('ProductName','DPort'),",
+            "    StringStruct('ProductVersion','$v'),",
+            "    StringStruct('Comments','Dicky')])]),",
+            '    VarFileInfo([VarStruct(''Translation'',[0x0404,1200])])]',
+            ')'
+          ) -join [Environment]::NewLine | Set-Content version_info.generated.txt -Encoding utf8
+
+      - name: Build DPort
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          if (Test-Path dist\DPort-$v.exe) { Remove-Item dist\DPort-$v.exe -Force }
+          $args = @('--noconfirm','--clean','--onefile','--windowed','--name',("DPort-$v"),'--icon',"${{ steps.icon.outputs.path }}",'--collect-all','pymobiledevice3','--collect-all','pytun_pmd3','--collect-all','pyimg4','--collect-all','inquirer3','--copy-metadata','pymobiledevice3','--copy-metadata','pyimg4','--copy-metadata','readchar','--hidden-import','pymobiledevice3.remote.userspace_tunnel','--hidden-import','pymobiledevice3.services.dvt.instruments.dvt_provider','--hidden-import','pymobiledevice3.services.dvt.instruments.location_simulation','--hidden-import','pymobiledevice3.usbmux','--hidden-import','dport_release_updater','--hidden-import','dport_version','--add-data','src/templates;templates','--add-binary','dist/DPort-Updater.exe;dport_updater','--version-file','version_info.generated.txt','src/main.py')
+          python -m PyInstaller @args
+          if ($LASTEXITCODE -ne 0) { throw "Failed to build DPort-$v.exe." }
+          if (-not (Test-Path "dist\DPort-$v.exe")) { throw "DPort-$v.exe missing." }
+
+      - name: Verify Windows GUI executables
+        shell: pwsh
+        run: |
+          python -m pip install pefile
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install pefile.' }
+          foreach ($file in @('dist\DPort-Updater.exe',"dist\DPort-${{ steps.version.outputs.version }}.exe")) {
+            if (-not (Test-Path $file)) { throw "Missing executable: $file" }
+            python -c "import pefile,sys; p=pefile.PE(sys.argv[1]); sys.exit(0 if p.OPTIONAL_HEADER.Subsystem==2 else 1)" $file
+            if ($LASTEXITCODE -ne 0) { throw "$file is not a Windows GUI executable." }
+          }
+
+      - name: Smoke test GUI process and required native imports
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $testDir = Join-Path $env:RUNNER_TEMP 'dport-import-smoke'
+          New-Item -ItemType Directory -Path $testDir -Force | Out-Null
+          $testScript = Join-Path $testDir 'dport_import_smoke.py'
+          @'
+          from cryptography import x509
+          from cryptography.hazmat.primitives import hashes, serialization
+          from pymobiledevice3.lockdown import LockdownClient
+          print("DPORT_NATIVE_IMPORT_SMOKE_OK", flush=True)
+          '@ | Set-Content -LiteralPath $testScript -Encoding utf8
+          python -m PyInstaller --noconfirm --clean --onefile --console --name DPort-Import-Smoke --collect-all cryptography --hidden-import pymobiledevice3.lockdown $testScript
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to build native-import smoke-test executable.' }
+          $smokeExe = Join-Path $PWD 'dist\DPort-Import-Smoke.exe'
+          $smokeOutput = & $smokeExe 2>&1
+          $smokeExit = $LASTEXITCODE
+          $smokeOutput | Write-Host
+          if ($smokeExit -ne 0 -or ($smokeOutput -join "`n") -notmatch 'DPORT_NATIVE_IMPORT_SMOKE_OK') {
+            throw "Native import smoke test failed with exit code $smokeExit."
+          }
+          $p = Start-Process -FilePath "dist\DPort-$v.exe" -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 15
+          if ($p.HasExited -and $p.ExitCode -ne 0) { throw "DPort-$v.exe exited with code $($p.ExitCode)" }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+
+      - name: Generate SHA-256
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          (Get-FileHash "dist\DPort-$v.exe" -Algorithm SHA256).Hash.ToLower() | Set-Content "dist\DPort-$v.exe.sha256" -Encoding ascii
+          (Get-FileHash 'dist\DPort-Updater.exe' -Algorithm SHA256).Hash.ToLower() | Set-Content 'dist\DPort-Updater.exe.sha256' -Encoding ascii
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: DPort-${{ steps.version.outputs.version }}-windows
+          path: |
+            dist/DPort-${{ steps.version.outputs.version }}.exe
+            dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
+            dist/DPort-Updater.exe
+            dist/DPort-Updater.exe.sha256
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
+          $v = '${{ steps.version.outputs.version }}'
+          $repository = '${{ github.repository }}'
+          $changeLogText = Get-Content -LiteralPath 'DPort_CHANGELOG.txt' -Raw
+          $changeLogPattern = "(?ms)^DPort[ 	]+$([regex]::Escape($v))[ 	]*\r?\n(?<body>.*?)(?=^DPort[ 	]+\d+\.\d+\.\d+(?:[ 	]+[^\r\n]*)?[ 	]*$|\z)"
+          $changeLogMatch = [regex]::Match($changeLogText, $changeLogPattern)
+          if (-not $changeLogMatch.Success) { throw "DPort_CHANGELOG.txt has no section for v$v." }
+          $changeLogBody = $changeLogMatch.Groups['body'].Value.Trim()
+          if ([string]::IsNullOrWhiteSpace($changeLogBody)) { throw "DPort_CHANGELOG.txt section for v$v is empty." }
+          $tagRefPath = "repos/$repository/git/ref/tags/$tag"
+          $tagRefJson = gh api $tagRefPath 2>$null
+          $tagLookupExit = $LASTEXITCODE
+          if ($tagLookupExit -eq 0) {
+            $existingRef = $tagRefJson | ConvertFrom-Json
+            $requireExactSource = ('${{ github.event_name }}' -eq 'workflow_dispatch') -or ('${{ github.event_name }}' -eq 'push' -and '${{ github.ref_type }}' -eq 'branch')
+            if ($requireExactSource -and $existingRef.object.type -eq 'commit' -and $existingRef.object.sha -ne '${{ github.sha }}') {
+              throw "Tag $tag already points to a different commit; refusing to publish a different source as the same version."
+            }
+          } else {
+            if ('${{ github.event_name }}' -eq 'push' -and '${{ github.ref_type }}' -eq 'tag') { throw "Tag $tag does not exist for a tag-triggered build." }
+            gh api --method POST "repos/$repository/git/refs" -f "ref=refs/tags/$tag" -f "sha=${{ github.sha }}" | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create tag $tag at the exact source commit used for this build." }
+          }
+          # Write one clean, stable release-notes layout.
+          # Do not append to the existing body, otherwise reruns would duplicate sections.
+          $notes = @"
+
+          ## ✨ 版本內容
+
+          - DPort Windows
+          - iPhone GPS 位置模擬與定位更新
+          - USB 裝置連線與裝置狀態管理
+          - 地圖定位與座標操作
+          - 附近地點搜尋
+          - 我的最愛與最近使用位置
+          - GPX 軌跡匯入、播放與速度調整
+          - Windows 自動更新機制
+          - SHA-256 完整性驗證
+          ## 🔧 本版本更新
+
+          - Python 建置環境：${{ steps.version.outputs.python_version }}
+          - pymobiledevice3：${{ steps.version.outputs.pm3_version }}
+
+          $changeLogBody
+
+          ## 📦 下載
+
+          - `DPort-$v.exe`
+          - `DPort-$v.exe.sha256`
+          - `DPort-Updater.exe`
+          - `DPort-Updater.exe.sha256`
+
+          ## 📚 原始碼
+
+          本 Release 的 Windows 執行檔對應本次發布的 Git Tag。
+
+          GitHub Repository：
+
+          https://github.com/DickyR15/DPort
+
+          GitHub 同時提供此 Tag 對應的 Source Code ZIP / TAR.GZ。
+
+          ## 🧩 上游與第三方元件
+
+          DPort Windows 基於開源專案 **GeoPort** 進行修改與再開發。
+
+          GeoPort：
+          https://github.com/davesc63/GeoPort
+
+          完整第三方授權與來源：
+
+          https://github.com/DickyR15/DPort/blob/$tag/THIRD_PARTY_NOTICES.md
+
+          ## ⚖️ 授權
+
+          DPort Windows 使用 **GNU General Public License v3.0 (GPL-3.0)**。
+
+          完整授權：
+
+          https://github.com/DickyR15/DPort/blob/$tag/LICENSE
+
+          ## 🏷️ 商標與 Apple 聲明
+
+          DPort 並非 Apple 官方產品，也不表示 Apple 背書、贊助、認證或官方合作。
+
+          Apple、iPhone、iPad、iOS、iPadOS 及相關商標屬 Apple Inc. 或相關權利人所有。
+
+          ## ⚠️ 免責聲明
+
+          DPort 依「現況」提供，不保證所有 Windows、iOS 版本、裝置型號或第三方服務均可正常運作。
+
+          © 2026 DickyR15 / DPort
+          "@
+
+          $notesPath = Join-Path $PWD 'dport-release-notes.md'
+          Set-Content -LiteralPath $notesPath -Value $notes.Trim() -Encoding utf8
+
+          # Find a draft by listing releases, because the tag is created only after the build succeeds.
+          $releaseList = gh api --paginate "repos/$repository/releases?per_page=100" | ConvertFrom-Json
+          $release = @($releaseList | Where-Object { $_.tag_name -eq $tag } | Select-Object -First 1) | Select-Object -First 1
+          $assetFiles = @(
+            [pscustomobject]@{ Name = "DPort-$v.exe"; Path = (Join-Path $PWD "dist\DPort-$v.exe") },
+            [pscustomobject]@{ Name = "DPort-$v.exe.sha256"; Path = (Join-Path $PWD "dist\DPort-$v.exe.sha256") },
+            [pscustomobject]@{ Name = 'DPort-Updater.exe'; Path = (Join-Path $PWD 'dist\DPort-Updater.exe') },
+            [pscustomobject]@{ Name = 'DPort-Updater.exe.sha256'; Path = (Join-Path $PWD 'dist\DPort-Updater.exe.sha256') }
+          )
+
+          if ($null -eq $release) {
+            # gh release create publishes only after its assets have been uploaded.
+            gh release create $tag $assetFiles.Path --repo $repository --title "DPort v$v" --notes-file $notesPath --target '${{ github.sha }}'
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag with all assets." }
+          } elseif (-not $release.draft) {
+            # A pre-published release is updated in place; new-release flow should use Save draft + Run workflow instead.
+            gh release upload $tag $assetFiles.Path --repo $repository --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upload release assets for $tag." }
+            gh release edit $tag --repo $repository --title "DPort v$v" --notes-file $notesPath
+            if ($LASTEXITCODE -ne 0) { throw "Failed to update published release notes for $tag." }
+          } else {
+            # Keep the web-created draft private until every binary and checksum has been uploaded.
+            $releaseId = [string]$release.id
+            $existingAssets = gh api "repos/$repository/releases/$releaseId/assets?per_page=100" | ConvertFrom-Json
+            foreach ($assetFile in $assetFiles) {
+              foreach ($oldAsset in @($existingAssets | Where-Object { $_.name -eq $assetFile.Name })) {
+                gh api --method DELETE "repos/$repository/releases/assets/$($oldAsset.id)" | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "Failed to replace existing asset $($assetFile.Name)." }
+              }
+              $assetUri = "https://uploads.github.com/repos/$repository/releases/$releaseId/assets?name=$([uri]::EscapeDataString($assetFile.Name))"
+              $assetPath = (Resolve-Path -LiteralPath $assetFile.Path).Path
+              Invoke-RestMethod -Uri $assetUri -Method Post -Headers @{
+                Authorization = "Bearer $env:GH_TOKEN"
+                Accept = 'application/vnd.github+json'
+                'X-GitHub-Api-Version' = '2022-11-28'
+              } -ContentType 'application/octet-stream' -InFile $assetPath | Out-Null
+            }
+
+            $uploadedAssets = gh api "repos/$repository/releases/$releaseId/assets?per_page=100" | ConvertFrom-Json
+            foreach ($assetFile in $assetFiles) {
+              if (-not (@($uploadedAssets | Where-Object { $_.name -eq $assetFile.Name }).Count -gt 0)) {
+                throw "Release asset missing after upload: $($assetFile.Name)"
+              }
+            }
+
+            $releasePayloadPath = Join-Path $PWD 'dport-release-update.json'
+            [ordered]@{
+              name = "DPort v$v"
+              body = $notes.Trim()
+              draft = $false
+              prerelease = $false
+              target_commitish = '${{ github.sha }}'
+            } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $releasePayloadPath -Encoding utf8NoBOM
+            gh api --method PATCH "repos/$repository/releases/$releaseId" --input $releasePayloadPath | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Failed to publish release $tag after all assets were verified." }
+          }
+
+          $releases = gh api --paginate "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json
+          $stable = @(
+            $releases | Where-Object {
+              -not $_.draft -and -not $_.prerelease -and $_.tag_name -match '^v[0-9]+\.[0-9]+\.[0-9]+$'
+            } | ForEach-Object {
+              $parts = $_.tag_name.Substring(1).Split('.')
+              [pscustomobject]@{
+                Tag = $_.tag_name
+                Id = $_.id
+                Version = [version]::Parse("$($parts[0]).$($parts[1]).$($parts[2])")
+              }
+            }
+          )
+          $latestStable = $stable | Sort-Object Version -Descending | Select-Object -First 1
+          $currentRelease = $stable | Where-Object { $_.Tag -eq $tag } | Select-Object -First 1
+          if ($null -eq $currentRelease -or $null -eq $latestStable) {
+            throw "Unable to determine stable release for Latest marker."
+          }
+          $makeLatest = ($latestStable.Tag -eq $tag).ToString().ToLowerInvariant()
+          gh api --method PATCH "repos/${{ github.repository }}/releases/$($currentRelease.Id)" -f "make_latest=$makeLatest" | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to update Latest marker."
+          }
+
+          Write-Host "Published DPort release $tag with clean standardized release notes."
+          # Release policy:
+          # - Release builds run only from version tags or an explicit existing tag.
+          # - The checkout is the exact tag; no generated source package is used.
+          # - GitHub's automatic Source code (zip/tar.gz) is the canonical source distribution.
+          # - Release assets contain only the DPort executable, updater, and SHA-256 files.
+) { throw "Invalid release tag: $tag" }
+          $version = $tag.Substring(1)
           if ($sourceVersion -ne $version) { throw "Tag $tag does not match source version $sourceVersion." }
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
