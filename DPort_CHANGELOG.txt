@@ -1,3 +1,9 @@
+DPort 6.9.8
+
+- 更新建置相依套件 pymobiledevice3 至 11.43.1；合併後的 Source Audit 與 Windows Build Validation 均已通過。
+- 維持已驗證的 Python 3.14.8 建置環境、原生模組 Smoke Test 與 SHA-256 校驗。
+- 保留 DPort 正式版 USB、定位、GPX 與 Windows 自動更新功能；不加入 Wi-Fi 研究版功能。
+
 DPort 6.9.7
 
 - Windows 建置環境改用已通過 Windows Build Validation 原生匯入測試的 Python 3.14.8，避開 Python 3.15 free-threaded ABI 與 cryptography 原生模組的打包相容性風險。
