@@ -2,11 +2,7 @@ name: "DPort Windows Build & Release"
 
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
+  push: {}
   workflow_dispatch:
     inputs:
       tag:
