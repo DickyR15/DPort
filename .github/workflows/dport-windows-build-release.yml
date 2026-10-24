@@ -18,7 +18,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: dport-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || (github.ref_type == 'tag' && github.ref_name || github.sha) }}
+  group: dport-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
       skip_build: ${{ steps.check.outputs.skip_build }}
     steps:
       - name: Checkout source for version-aware push preflight
-        if: github.event_name == 'push' && github.ref_type == 'branch'
+        if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
         uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
@@ -56,17 +56,7 @@ jobs:
               echo "skip_build=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            source_version="$(python - <<'PY'
-          import pathlib
-          import re
-          import sys
-          source = pathlib.Path("src/dport_version.py").read_text(encoding="utf-8")
-          match = re.search(r"""DPORT_VERSION\s*=\s*['"]([^'"]+)['"]""", source)
-          if not match:
-              sys.exit("DPORT_VERSION not found in src/dport_version.py")
-          print(match.group(1))
-          PY
-          )"
+            source_version="$(grep -oE '[0-9]+[.][0-9]+[.][0-9]+' src/dport_version.py | head -n 1)"
             if [[ ! "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "Invalid DPort source version: $source_version" >&2
               exit 1
