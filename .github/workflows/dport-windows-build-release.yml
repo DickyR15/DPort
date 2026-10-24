@@ -117,7 +117,9 @@ jobs:
           } else {
             $tag = "v$sourceVersion"
           }
-          if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+
+          if ($tag -notmatch '^v[0-9]+[.][0-9]+[.][0-9]+$') { throw "Invalid release tag: $tag" }
+          $version = $tag.Substring(1)
+          if ($sourceVersion -ne $version) { throw "Tag $tag does not match source version $sourceVersion." }
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           $pythonBuildVersion = (Get-Content -LiteralPath '.github\python-version.txt' -Raw).Trim()
