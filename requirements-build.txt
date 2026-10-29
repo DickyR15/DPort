@@ -1,4 +1,4 @@
-pymobiledevice3==11.43.1
+pymobiledevice3==11.48.0
 flask
 requests
 pyuac
@@ -9,6 +9,7 @@ inquirer3
 readchar
 pyimg4
 pytun-pmd3
+
 
 
 
