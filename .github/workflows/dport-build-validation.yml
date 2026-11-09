@@ -192,7 +192,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: DPort-${{ steps.version.outputs.version }}-candidate-windows
-          retention-days: 14
+          retention-days: 3
           path: |
             dist/DPort-${{ steps.version.outputs.version }}.exe
             dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
