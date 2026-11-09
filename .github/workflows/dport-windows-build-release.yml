@@ -281,6 +281,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: DPort-${{ steps.version.outputs.version }}-windows
+          retention-days: 3
           path: |
             dist/DPort-${{ steps.version.outputs.version }}.exe
             dist/DPort-${{ steps.version.outputs.version }}.exe.sha256
